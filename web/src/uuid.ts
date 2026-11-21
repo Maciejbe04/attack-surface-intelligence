@@ -1,4 +1,4 @@
-/** Works on insecure HTTP too — `crypto.randomUUID` needs a secure context. */
+/** Works on insecure HTTP too; `crypto.randomUUID` needs a secure context. */
 export function newUuid(): string {
   const c = globalThis.crypto as Crypto | undefined;
   if (c && typeof c.randomUUID === "function") {

@@ -300,6 +300,55 @@ a:hover {
   margin-left: auto;
 }
 
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--aws-border);
+  border-radius: var(--radius);
+  background: var(--aws-btn-bg);
+  color: var(--aws-text);
+  cursor: pointer;
+}
+
+.theme-toggle:hover:not(:disabled) {
+  background: var(--aws-bg);
+}
+
+.theme-toggle__icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.topnav .theme-toggle {
+  border-color: #879596;
+  background: #162333;
+  color: #ffcc00;
+}
+
+.topnav .theme-toggle:hover:not(:disabled) {
+  background: #1f2d40;
+  color: #ffe066;
+}
+
+html.theme-high-contrast .topnav .theme-toggle {
+  border-color: #ffff00;
+  background: #000;
+  color: #ffff00;
+}
+
+html.theme-dark .theme-toggle:not(.topnav__theme) {
+  border-color: var(--aws-border);
+  background: var(--aws-btn-bg);
+  color: var(--brand-yellow);
+}
+
 html.theme-high-contrast {
   --aws-nav: #000000;
   --aws-nav-hover: #111111;
@@ -438,10 +487,35 @@ html.theme-high-contrast a {
   font-size: 12px;
 }
 
-.topnav__system,
 .topnav__contrast {
   height: 28px;
   font-size: 12px;
+}
+
+.topnav__clock {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-height: 28px;
+  padding: 0 6px;
+  color: #fff;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.local-clock__time {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.local-clock__zone {
+  font-size: 10px;
+  opacity: 0.78;
+}
+
+html.theme-high-contrast .topnav__clock {
+  color: #ffff00;
 }
 
 .system-lock-btn {
@@ -1269,6 +1343,13 @@ html.theme-high-contrast .module-tile__drawer {
   white-space: nowrap;
 }
 
+.status-badge--muted {
+  border-color: var(--aws-border);
+  background: var(--aws-table-header);
+  color: var(--aws-text-secondary);
+  font-weight: 600;
+}
+
 .status-badge--queued {
   border-color: var(--aws-border);
   background: var(--aws-table-header);
@@ -1737,6 +1818,34 @@ table.hosts .mono {
 
 .diff-attr-list li + li {
   margin-top: 2px;
+}
+
+.allowlist-add {
+  display: grid;
+  gap: var(--space-s);
+  margin-bottom: var(--space-l);
+  padding-bottom: var(--space-l);
+  border-bottom: 1px solid var(--aws-border-light);
+}
+
+.allowlist-add .form-row {
+  margin-bottom: 0;
+}
+
+.hosts--allowlist th:nth-child(1),
+.hosts--allowlist td:nth-child(1) {
+  width: 55%;
+}
+
+.hosts--allowlist th:nth-child(2),
+.hosts--allowlist td:nth-child(2) {
+  width: 20%;
+}
+
+.hosts--allowlist th:nth-child(3),
+.hosts--allowlist td:nth-child(3) {
+  width: 25%;
+  text-align: right;
 }
 
 .compare-method-groups {

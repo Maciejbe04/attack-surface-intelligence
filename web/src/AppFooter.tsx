@@ -1,6 +1,7 @@
 import { Language, Translate } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
 import { SystemLockButton } from "./SystemPanel";
+import { ThemeToggle } from "./ThemeToggle";
 import { APP_NAME, APP_VERSION } from "./version";
 
 type Props = {
@@ -44,15 +45,7 @@ export function AppFooter({
           onChange={onLanguageChange}
           label={t("Language")}
         />
-        <button
-          type="button"
-          className="btn btn--normal"
-          aria-pressed={darkMode}
-          aria-label={darkMode ? t("Switch to light mode") : t("Switch to dark mode")}
-          onClick={onToggleDarkMode}
-        >
-          {darkMode ? t("Light mode") : t("Dark mode")}
-        </button>
+        <ThemeToggle darkMode={darkMode} onToggle={onToggleDarkMode} t={t} />
         <button
           type="button"
           className="btn btn--normal app-footer__contrast"

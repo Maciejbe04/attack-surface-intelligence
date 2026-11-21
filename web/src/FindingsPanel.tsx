@@ -533,7 +533,7 @@ export function FindingsPanel({
                         <div className="table-wrap">
                           <table className="hosts">
                             <caption className="sr-only">
-                              {t("Scan comparison")} — {methodLabel(group.method)}
+                              {t("Scan comparison")}: {methodLabel(group.method)}
                             </caption>
                             <thead>
                               <tr>

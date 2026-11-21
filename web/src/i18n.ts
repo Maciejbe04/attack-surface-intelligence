@@ -39,8 +39,8 @@ const PL: Record<string, string> = {
   "Switch to dark mode": "Przełącz na tryb ciemny",
   "Switch to light mode": "Przełącz na tryb jasny",
   "Add target": "Dodaj cel",
-  "Not on the target list — press Enter to add.":
-    "Brak na liście celów — Enter dodaje od razu.",
+  "Not on the target list. Press Enter to add.":
+    "Brak na liście celów. Enter dodaje od razu.",
   "No saved host matches. Type a valid IP, CIDR, or hostname.":
     "Brak pasującego hosta. Wpisz poprawne IP, CIDR lub nazwę hosta.",
   "Target added from probe.": "Cel dodany z sondy.",
@@ -132,8 +132,8 @@ const PL: Record<string, string> = {
   "The selected group has no hosts yet.": "Wybrana grupa nie ma jeszcze hostów.",
   "Optional. Assign the new host to a group so it can be scanned with others.":
     "Opcjonalnie. Przypisz nowy host do grupy, aby skanować go razem z innymi.",
-  "Pick a .txt, .csv, or .json file — not a folder.":
-    "Wybierz plik .txt, .csv lub .json — nie folder.",
+  "Pick a .txt, .csv, or .json file, not a folder.":
+    "Wybierz plik .txt, .csv lub .json, nie folder.",
   "Type an address or choose from saved targets.":
     "Wpisz adres lub wybierz jeden z zapisanych celów.",
   "Recent probe jobs": "Ostatnie zadania rozpoznania",
@@ -402,7 +402,7 @@ const PL: Record<string, string> = {
   "Sunday":
     "Niedziela",
   "Group hosts to scan them together, now or on a schedule. A host can belong to several groups.":
-    "Grupuj hosty, aby skanować je razem — od razu albo według harmonogramu. Host może należeć do kilku grup.",
+    "Grupuj hosty, aby skanować je razem, od razu albo według harmonogramu. Host może należeć do kilku grup.",
   "Create group":
     "Utwórz grupę",
   "Name":
@@ -440,13 +440,13 @@ const PL: Record<string, string> = {
   "Rename":
     "Zmień nazwę",
   Allowlist: "Allowlista",
-  Enforced: "Wymuszona",
+  Entries: "Wpisy",
   "Open (empty)": "Otwarta (pusta)",
   "When at least one entry is enabled, scans and new targets must match IP/CIDR/domain. Domains are re-checked after DNS resolution.":
     "Gdy jest co najmniej jeden wpis, nowe cele i skany muszą pasować do IP/CIDR/domeny. Domeny są ponownie sprawdzane po DNS.",
   "Add entry": "Dodaj wpis",
-  "No allowlist entries — all saved targets may be scanned.":
-    "Brak wpisów allowlisty — można skanować wszystkie zapisane cele.",
+  "No allowlist entries. All saved targets may be scanned.":
+    "Brak wpisów allowlisty. Można skanować wszystkie zapisane cele.",
   "Could not load allowlist.": "Nie udało się wczytać allowlisty.",
   "Could not add allowlist entry.": "Nie udało się dodać wpisu allowlisty.",
   "Could not remove allowlist entry.": "Nie udało się usunąć wpisu allowlisty.",

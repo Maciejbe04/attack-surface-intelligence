@@ -1,4 +1,4 @@
-/** Extensible discovery modules — add a new entry here to grow the dashboard. */
+/** Extensible discovery modules; add a new entry here to grow the dashboard. */
 
 export type FilterOption = { value: string; label: string };
 
@@ -55,7 +55,7 @@ export type ModuleRuntimeConfig = {
 
 export type ModuleRegistryState = Record<string, ModuleRuntimeConfig>;
 
-/** Safe discovery-only modules — no exploit / brute / login. */
+/** Safe discovery-only modules; no exploit / brute / login. */
 export const PROBE_MODULES: ProbeModule[] = [
   {
     id: "host-discovery",

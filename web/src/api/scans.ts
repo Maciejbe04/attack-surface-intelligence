@@ -290,7 +290,7 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const message = firstError(body) ?? `Request failed with HTTP ${response.status}.`;
-    // Unauthenticated (lost session cookie) — not a normal RBAC denial.
+    // Unauthenticated (lost session cookie); not a normal RBAC denial.
     if (
       response.status === 401 ||
       (response.status === 403 &&

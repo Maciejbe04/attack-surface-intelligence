@@ -228,7 +228,7 @@ export function HostSearch({
                 <span className="host-search__address mono">{trimmed}</span>
                 <span className="host-search__type">{t("Add target")}</span>
                 <span className="host-search__comment">
-                  {t("Not on the target list — press Enter to add.")}
+                  {t("Not on the target list. Press Enter to add.")}
                 </span>
               </li>
             </ul>

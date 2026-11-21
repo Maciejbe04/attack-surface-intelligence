@@ -110,20 +110,21 @@ export function AllowlistPanel({ active, canManage, t }: Props) {
       )}
 
       <section className="panel">
-        <div className="panel__header">
-          <h2>{t("Allowlist")}</h2>
+        <div className="panel__header panel__header--split">
+          <h2>{t("Entries")}</h2>
           <span
-            className={`status-badge ${enforced ? "status-badge--completed" : "status-badge--cancelled"}`}
+            className={`status-badge ${enforced ? "status-badge--muted" : "status-badge--cancelled"}`}
           >
-            {enforced ? t("Enforced") : t("Open (empty)")}
+            {enforced ? t("Enabled") : t("Open (empty)")}
           </span>
         </div>
         <div className="panel__body">
           {canManage && (
-            <form className="form-row" onSubmit={onAdd}>
-              <label htmlFor="allowlist-value">{t("Add entry")}</label>
-              <div className="scan-actions" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <form className="allowlist-add" onSubmit={onAdd}>
+              <div className="form-row">
+                <label htmlFor="allowlist-type">{t("Type")}</label>
                 <select
+                  id="allowlist-type"
                   className="input input--select"
                   value={allowType}
                   onChange={(e) => setAllowType(e.target.value as AllowlistEntry["type"])}
@@ -133,25 +134,35 @@ export function AllowlistPanel({ active, canManage, t }: Props) {
                   <option value="ip">IP</option>
                   <option value="domain">{t("Domain")}</option>
                 </select>
-                <input
-                  id="allowlist-value"
-                  value={allowValue}
-                  onChange={(e) => setAllowValue(e.target.value)}
-                  placeholder="192.0.2.0/24 or lab.example"
-                  disabled={busy}
-                  required
-                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="allowlist-value">{t("Value")}</label>
+                <div>
+                  <input
+                    id="allowlist-value"
+                    className="input mono"
+                    value={allowValue}
+                    onChange={(e) => setAllowValue(e.target.value)}
+                    placeholder="192.0.2.0/24 or lab.example"
+                    disabled={busy}
+                    required
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </div>
+              </div>
+              <div className="actions">
                 <button type="submit" className="btn btn--primary" disabled={busy || !allowValue.trim()}>
-                  {t("Add")}
+                  {busy ? t("Adding…") : t("Add")}
                 </button>
               </div>
             </form>
           )}
           {allowlist.length === 0 ? (
-            <p className="field-help">{t("No allowlist entries — all saved targets may be scanned.")}</p>
+            <p className="field-help">{t("No allowlist entries. All saved targets may be scanned.")}</p>
           ) : (
             <div className="table-wrap">
-              <table className="hosts">
+              <table className="hosts hosts--allowlist">
                 <caption className="sr-only">{t("Allowlist")}</caption>
                 <thead>
                   <tr>

@@ -48,8 +48,10 @@ import {
 } from "./modules";
 import { ScanConsole } from "./ScanConsole";
 import { AllowlistPanel } from "./AllowlistPanel";
-import { SystemLockButton, SystemPanel } from "./SystemPanel";
+import { SystemPanel } from "./SystemPanel";
 import { UsersPanel } from "./UsersPanel";
+import { LocalClock } from "./LocalClock";
+import { ThemeToggle } from "./ThemeToggle";
 import { useDarkMode } from "./useDarkMode";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
@@ -767,7 +769,7 @@ export function App() {
   }, []);
 
   function completeAuthentication(authenticatedUser: AuthUser) {
-    // Enter the app immediately — the old 300ms loader caused a visible jump
+    // Enter the app immediately; the old 300ms loader caused a visible jump
     // and raced with the first data polls.
     setUser(authenticatedUser);
   }
@@ -780,7 +782,7 @@ export function App() {
     const clearIfAnonymous = opts.clearIfAnonymous ?? true;
     return apiFetch("/api/auth/me/")
       .then(async (r) => {
-        // Network/gateway blip — keep the current UI session.
+        // Network/gateway blip; keep the current UI session.
         if (!r.ok) return;
         return r.json();
       })
@@ -1688,15 +1690,12 @@ export function App() {
         <a className="topnav__brand" href="/" aria-label={`${APP_NAME} home`}>
           <Logo />
         </a>
-        <button
-          type="button"
-          className="btn btn--normal topnav__theme"
-          aria-pressed={darkMode}
-          aria-label={darkMode ? t("Switch to light mode") : t("Switch to dark mode")}
-          onClick={toggleDarkMode}
-        >
-          {darkMode ? t("Light mode") : t("Dark mode")}
-        </button>
+        <ThemeToggle
+          darkMode={darkMode}
+          onToggle={toggleDarkMode}
+          t={t}
+          className="topnav__theme"
+        />
         <button
           type="button"
           className="btn btn--normal topnav__contrast"
@@ -1705,11 +1704,7 @@ export function App() {
         >
           {highContrast ? t("Standard contrast") : t("High contrast")}
         </button>
-        <SystemLockButton
-          className="topnav__system"
-          onClick={() => setNav("system")}
-          t={t}
-        />
+        <LocalClock className="topnav__clock" />
         <LanguageSelect
           language={language}
           onChange={setLanguage}
@@ -2066,7 +2061,7 @@ export function App() {
                               pushToast(
                                 "error",
                                 t("Import failed"),
-                                t("Pick a .txt, .csv, or .json file — not a folder."),
+                                t("Pick a .txt, .csv, or .json file, not a folder."),
                               );
                               e.target.value = "";
                               return;
