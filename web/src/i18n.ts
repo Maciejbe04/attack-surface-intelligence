@@ -700,6 +700,10 @@ const PL: Record<string, string> = {
   "Off (no deadline)": "Wyłączone (bez deadline)",
   "Optional deadline; unfinished batches pause and can be resumed.":
     "Opcjonalny deadline; niedokończone batche przechodzą w pause i można je wznowić.",
+  "Required deadline for every scan; unfinished batches pause and can be resumed.":
+    "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić.",
+  "Open a probe to view the activity log and findings on the Scans page.":
+    "Otwórz sondę, aby zobaczyć log i findings na stronie Skany.",
   "Signatures pack": "Pakiet sygnatur",
   "Pack version": "Wersja pakietu",
   IDs: "ID",

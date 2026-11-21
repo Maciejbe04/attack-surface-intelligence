@@ -809,14 +809,19 @@ class ScanResumeView(APIView):
                     )
                 )
                 republish.append((batch.pk, str(batch.delivery_id)))
-            # Extend window if provided; otherwise clear deadline for resume.
-            window = request.data.get("window_seconds") if isinstance(request.data, dict) else None
-            if isinstance(window, int) and window > 0:
-                run.window_seconds = window
-                run.deadline_at = timezone.now() + timedelta(seconds=window)
-            else:
-                run.deadline_at = None
-                run.window_seconds = None
+            # Always re-apply a scan window on resume (global safety rail).
+            from .services import resolve_window_seconds
+
+            raw_window = (
+                request.data.get("window_seconds") if isinstance(request.data, dict) else None
+            )
+            try:
+                requested = int(raw_window) if raw_window not in (None, "") else None
+            except (TypeError, ValueError):
+                requested = None
+            window = resolve_window_seconds(requested)
+            run.window_seconds = window
+            run.deadline_at = timezone.now() + timedelta(seconds=window)
             run.status = ScanRun.Status.RUNNING
             run.resume_available = False
             run.finished_at = None

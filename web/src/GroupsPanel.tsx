@@ -139,7 +139,7 @@ export function GroupsPanel({
     }
   }
 
-  const [scanWindowSeconds, setScanWindowSeconds] = useState<number | "">("");
+  const [scanWindowSeconds, setScanWindowSeconds] = useState<number>(3600);
 
   async function onScanNow(group: TargetGroup) {
     const modules = currentModules();
@@ -149,14 +149,12 @@ export function GroupsPanel({
     }
     setBusyId(group.id);
     try {
-      const windowSeconds =
-        scanWindowSeconds === "" ? null : Number(scanWindowSeconds);
       const scan = await scanGroup(
         group.id,
         modules,
         newUuid(),
         undefined,
-        windowSeconds,
+        Number(scanWindowSeconds) || 3600,
       );
       pushToast(
         "ok",
@@ -365,13 +363,10 @@ export function GroupsPanel({
               <span className="field-help">{t("Scan window")}</span>
               <select
                 className="input input--select"
-                value={scanWindowSeconds === "" ? "" : String(scanWindowSeconds)}
-                onChange={(event) =>
-                  setScanWindowSeconds(event.target.value ? Number(event.target.value) : "")
-                }
+                value={String(scanWindowSeconds)}
+                onChange={(event) => setScanWindowSeconds(Number(event.target.value) || 3600)}
                 aria-label={t("Scan window")}
               >
-                <option value="">{t("Off (no deadline)")}</option>
                 <option value="1800">30m</option>
                 <option value="3600">1h</option>
                 <option value="7200">2h</option>

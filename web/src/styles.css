@@ -1353,44 +1353,95 @@ html.theme-high-contrast .module-tile__drawer {
 .status-badge--queued {
   border-color: var(--aws-border);
   background: var(--aws-table-header);
+  color: var(--aws-text-secondary);
 }
 
 .status-badge--running,
 .status-badge--cancel_requested {
   border-color: var(--aws-info-border);
   background: var(--aws-info-bg);
+  color: var(--aws-link);
 }
 
 .status-badge--completed {
   border-color: var(--aws-success);
   background: #f2f8f0;
+  color: #1d8102;
 }
 
 .status-badge--partial {
   border-color: var(--aws-orange);
   background: #fff8ed;
+  color: #8c5a00;
 }
 
 .status-badge--failed,
 .status-badge--cancelled {
   border-color: var(--aws-danger);
   background: #fdf2f1;
+  color: #d13212;
 }
 
 .status-badge--dd-pending,
 .status-badge--dd-sending {
   border-color: var(--aws-info-border);
   background: var(--aws-info-bg);
+  color: var(--aws-link);
 }
 
 .status-badge--dd-sent {
   border-color: var(--aws-success);
   background: #f2f8f0;
+  color: #1d8102;
 }
 
 .status-badge--dd-failed {
   border-color: var(--aws-danger);
   background: #fdf2f1;
+  color: #d13212;
+}
+
+html.theme-dark .status-badge--queued {
+  border-color: #484f58;
+  background: #21262d;
+  color: #c9d1d9;
+}
+
+html.theme-dark .status-badge--running,
+html.theme-dark .status-badge--cancel_requested,
+html.theme-dark .status-badge--dd-pending,
+html.theme-dark .status-badge--dd-sending {
+  border-color: #1f6feb;
+  background: #0d419d;
+  color: #79c0ff;
+}
+
+html.theme-dark .status-badge--completed,
+html.theme-dark .status-badge--dd-sent {
+  border-color: #238636;
+  background: #0f2d1a;
+  color: #3fb950;
+}
+
+html.theme-dark .status-badge--partial,
+html.theme-dark .status-badge--paused {
+  border-color: #9e6a03;
+  background: #3d2c0a;
+  color: #e3b341;
+}
+
+html.theme-dark .status-badge--failed,
+html.theme-dark .status-badge--cancelled,
+html.theme-dark .status-badge--dd-failed {
+  border-color: #da3633;
+  background: #3d1214;
+  color: #ff7b72;
+}
+
+html.theme-dark .status-badge--muted {
+  border-color: #484f58;
+  background: #21262d;
+  color: #8b949e;
 }
 
 .scan-status-cell {
@@ -1782,6 +1833,37 @@ table.hosts .mono {
   border-color: #f0d59a;
 }
 
+html.theme-dark .lifecycle-badge--NEW {
+  color: #3fb950;
+  background: #0f2d1a;
+  border-color: #238636;
+}
+
+html.theme-dark .lifecycle-badge--CHANGED {
+  color: #e3b341;
+  background: #3d2c0a;
+  border-color: #9e6a03;
+}
+
+html.theme-dark .lifecycle-badge--MISSING,
+html.theme-dark .lifecycle-badge--FLAKY {
+  color: #ffa657;
+  background: #3d2c0a;
+  border-color: #9e6a03;
+}
+
+html.theme-dark .lifecycle-badge--GONE {
+  color: #ff7b72;
+  background: #3d1214;
+  border-color: #da3633;
+}
+
+html.theme-dark .lifecycle-badge--UNCHANGED {
+  color: #8b949e;
+  background: #21262d;
+  border-color: #484f58;
+}
+
 .role-permissions {
   display: grid;
   gap: 14px;
@@ -2118,4 +2200,88 @@ html.theme-dark .curiosity-badge--info {
   color: #375a7f;
   background: #eef5fc;
   border-color: #b7d4f0;
+}
+
+/* === dark-mode status contrast (cascade lock) === */
+html.theme-dark .status-badge {
+  color: #e6edf3;
+}
+html.theme-dark .status-badge--queued,
+html.theme-dark .status-badge--muted {
+  border-color: #484f58;
+  background: #21262d;
+  color: #c9d1d9;
+}
+html.theme-dark .status-badge--running,
+html.theme-dark .status-badge--cancel_requested,
+html.theme-dark .status-badge--dd-pending,
+html.theme-dark .status-badge--dd-sending {
+  border-color: #388bfd;
+  background: #0d419d;
+  color: #79c0ff;
+}
+html.theme-dark .status-badge--completed,
+html.theme-dark .status-badge--dd-sent {
+  border-color: #3fb950;
+  background: #0f2d1a;
+  color: #56d364;
+}
+html.theme-dark .status-badge--partial,
+html.theme-dark .status-badge--paused {
+  border-color: #d29922;
+  background: #3d2c0a;
+  color: #e3b341;
+}
+html.theme-dark .status-badge--failed,
+html.theme-dark .status-badge--cancelled,
+html.theme-dark .status-badge--dd-failed {
+  border-color: #f85149;
+  background: #3d1214;
+  color: #ff7b72;
+}
+html.theme-dark .curiosity-badge--high {
+  color: #ffb4b4;
+  background: #3d1515;
+  border-color: #7a3030;
+}
+html.theme-dark .curiosity-badge--medium {
+  color: #ffd48a;
+  background: #3a2a0e;
+  border-color: #7a5a20;
+}
+html.theme-dark .curiosity-badge--low {
+  color: #c5db8a;
+  background: #1f2a14;
+  border-color: #4a5e2a;
+}
+html.theme-dark .curiosity-badge--info {
+  color: #9ecbff;
+  background: #152033;
+  border-color: #2f4f72;
+}
+html.theme-dark .lifecycle-badge--NEW {
+  color: #56d364;
+  background: #0f2d1a;
+  border-color: #238636;
+}
+html.theme-dark .lifecycle-badge--CHANGED {
+  color: #e3b341;
+  background: #3d2c0a;
+  border-color: #9e6a03;
+}
+html.theme-dark .lifecycle-badge--MISSING,
+html.theme-dark .lifecycle-badge--FLAKY {
+  color: #ffa657;
+  background: #3d2c0a;
+  border-color: #9e6a03;
+}
+html.theme-dark .lifecycle-badge--GONE {
+  color: #ff7b72;
+  background: #3d1214;
+  border-color: #da3633;
+}
+html.theme-dark .lifecycle-badge--UNCHANGED {
+  color: #c9d1d9;
+  background: #21262d;
+  border-color: #484f58;
 }

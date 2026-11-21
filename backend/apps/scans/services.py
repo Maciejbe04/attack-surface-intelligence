@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import partial
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -12,6 +13,15 @@ from django.utils import timezone
 from .events import append_scan_event
 from .models import GroupSchedule, ScanBatch, ScanRun, Target, TargetGroup
 from .tasks import execute_batch
+
+
+def resolve_window_seconds(requested: int | None) -> int:
+    """Always apply a global scan window (like allowlist: non-optional safety rail)."""
+    default = int(getattr(settings, "SCAN_DEFAULT_WINDOW_SECONDS", 3600) or 3600)
+    default = max(60, min(default, 86400))
+    if requested is None or int(requested) <= 0:
+        return default
+    return max(60, min(int(requested), 86400))
 
 
 def publish_batch(batch_id: int, delivery_id: str) -> None:
@@ -99,9 +109,8 @@ def queue_scan_for_targets(
             if existing is not None:
                 return existing, False
 
-        deadline_at = None
-        if window_seconds and window_seconds > 0:
-            deadline_at = timezone.now() + timedelta(seconds=window_seconds)
+        resolved_window = resolve_window_seconds(window_seconds)
+        deadline_at = timezone.now() + timedelta(seconds=resolved_window)
 
         try:
             with transaction.atomic():
@@ -112,7 +121,7 @@ def queue_scan_for_targets(
                     total_batches=len(targets),
                     group=group,
                     schedule=schedule,
-                    window_seconds=window_seconds if window_seconds else None,
+                    window_seconds=resolved_window,
                     deadline_at=deadline_at,
                 )
         except IntegrityError:

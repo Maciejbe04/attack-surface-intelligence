@@ -687,7 +687,7 @@ export function App() {
   const [consoleScan, setConsoleScan] = useState<ScanDetail | null>(null);
   const [consoleLoading, setConsoleLoading] = useState(false);
   const [consoleReloadKey, setConsoleReloadKey] = useState(0);
-  const [scanWindowSeconds, setScanWindowSeconds] = useState<number | "">("");
+  const [scanWindowSeconds, setScanWindowSeconds] = useState<number>(3600);
   const [scansPage, setScansPage] = useState(1);
   const [scanQuery, setScanQuery] = useState("");
   const [scanStatusFilter, setScanStatusFilter] = useState<"" | ScanStatus | "paused">("");
@@ -824,14 +824,23 @@ export function App() {
 
   useEffect(() => {
     if (!user) return;
+    let timer: number | undefined;
     const onVisibility = () => {
-      if (!document.hidden) {
-        // Never clear solely because one visibility probe failed.
-        void refreshSessionUser({ clearIfAnonymous: true }).catch(() => undefined);
+      if (document.hidden) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        return;
       }
+      // Debounce Alt+Tab restore; avoid stacking session probes with scan polls.
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void refreshSessionUser({ clearIfAnonymous: true }).catch(() => undefined);
+      }, 500);
     };
     document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [user?.id]);
 
   useEffect(() => {
@@ -908,10 +917,10 @@ export function App() {
       if (document.hidden) {
         clearTimer();
         controller?.abort();
-      } else {
-        clearTimer();
-        timer = window.setTimeout(poll, 0);
+        return;
       }
+      clearTimer();
+      timer = window.setTimeout(poll, 400);
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -922,8 +931,7 @@ export function App() {
       controller?.abort();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-    // nav: refetch immediately when the user switches pages.
-  }, [user?.id, language, scanRefreshKey, nav, pushToast, t]);
+  }, [user?.id, language, scanRefreshKey, pushToast, t]);
 
   useEffect(() => {
     if (!user || consoleScanId === null) {
@@ -935,6 +943,7 @@ export function App() {
     let disposed = false;
     let timer: number | undefined;
     let controller: AbortController | null = null;
+    let hasLoadedOnce = false;
 
     const clearTimer = () => {
       if (timer !== undefined) {
@@ -944,14 +953,15 @@ export function App() {
     };
 
     const pollDetail = async () => {
-      if (disposed) return;
+      if (disposed || document.hidden) return;
       controller?.abort();
       const request = new AbortController();
       controller = request;
-      setConsoleLoading(true);
+      if (!hasLoadedOnce) setConsoleLoading(true);
       try {
         const detail = await getScan(consoleScanId, request.signal);
         if (disposed || controller !== request) return;
+        hasLoadedOnce = true;
         setConsoleScan({
           ...detail,
           events: detail.events ?? [],
@@ -980,11 +990,8 @@ export function App() {
         const exportInFlight =
           detail.defectdojo_export_status === "pending" ||
           detail.defectdojo_export_status === "sending";
-        if (
-          !document.hidden &&
-          (ACTIVE_SCAN_STATUSES.has(detail.status) || exportInFlight)
-        ) {
-          timer = window.setTimeout(pollDetail, 1500);
+        if (ACTIVE_SCAN_STATUSES.has(detail.status) || exportInFlight) {
+          timer = window.setTimeout(pollDetail, 2000);
         }
       } catch (error) {
         if (disposed || controller !== request || isAbortError(error)) return;
@@ -993,9 +1000,7 @@ export function App() {
           t("Console unavailable"),
           apiErrorMessage(error, t("Could not load scan activity.")),
         );
-        if (!document.hidden) {
-          timer = window.setTimeout(pollDetail, 4000);
-        }
+        timer = window.setTimeout(pollDetail, 5000);
       } finally {
         if (controller === request) controller = null;
         if (!disposed) setConsoleLoading(false);
@@ -1006,10 +1011,11 @@ export function App() {
       if (document.hidden) {
         clearTimer();
         controller?.abort();
-      } else {
-        clearTimer();
-        timer = window.setTimeout(pollDetail, 0);
+        return;
       }
+      // Debounce Alt+Tab / focus restore so we do not thrash the page.
+      clearTimer();
+      timer = window.setTimeout(pollDetail, 400);
     };
 
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -1022,7 +1028,7 @@ export function App() {
     };
   }, [user?.id, language, consoleScanId, scanRefreshKey, consoleReloadKey]);
 
-  function openScanConsole(scan: number | Scan | ScanDetail) {
+  function openScanConsole(scan: number | Scan | ScanDetail, opts: { goToScans?: boolean } = {}) {
     const scanId = typeof scan === "number" ? scan : scan.id;
     if (typeof scan !== "number") {
       setConsoleScan((prev) => {
@@ -1037,12 +1043,20 @@ export function App() {
     }
     setConsoleScanId(scanId);
     setConsoleReloadKey((value) => value + 1);
-    window.requestAnimationFrame(() => {
-      document.getElementById("scan-activity-console")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
+    const jumpToScans = Boolean(opts.goToScans) || nav !== "scans";
+    if (jumpToScans) {
+      setNav("scans");
+      setScansPage(1);
+    }
+    window.setTimeout(
+      () => {
+        document.getElementById("scan-activity-console")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      },
+      jumpToScans ? 80 : 0,
+    );
   }
 
   useEffect(() => {
@@ -1491,15 +1505,11 @@ export function App() {
     }
     setScanPending(source);
     try {
-      const windowSeconds =
-        source === "dashboard" && scanWindowSeconds !== ""
-          ? Number(scanWindowSeconds)
-          : undefined;
       const scan = await createScan({
         target_ids: targetIds,
         modules,
         client_request_id: newUuid(),
-        ...(windowSeconds != null ? { window_seconds: windowSeconds } : {}),
+        window_seconds: Number(scanWindowSeconds) || 3600,
       });
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
       setConsoleScan({
@@ -1507,7 +1517,7 @@ export function App() {
         events: scan.events ?? [],
         batches: scan.batches ?? [],
       });
-      openScanConsole(scan.id);
+      openScanConsole(scan.id, { goToScans: true });
       setScanRefreshKey((value) => value + 1);
       pushToast(
         "ok",
@@ -1561,14 +1571,12 @@ export function App() {
     }
     setScanPending("dashboard");
     try {
-      const windowSeconds =
-        scanWindowSeconds === "" ? null : Number(scanWindowSeconds);
       const scan = await scanGroup(
         group.id,
         modules,
         newUuid(),
         undefined,
-        windowSeconds,
+        Number(scanWindowSeconds) || 3600,
       );
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
       setConsoleScan({
@@ -1576,7 +1584,7 @@ export function App() {
         events: scan.events ?? [],
         batches: scan.batches ?? [],
       });
-      openScanConsole(scan.id);
+      openScanConsole(scan.id, { goToScans: true });
       setScanRefreshKey((value) => value + 1);
       refreshGroups();
       pushToast(
@@ -1901,18 +1909,15 @@ export function App() {
                       <select
                         id="scan-window"
                         className="input input--select"
-                        value={scanWindowSeconds === "" ? "" : String(scanWindowSeconds)}
-                        onChange={(e) =>
-                          setScanWindowSeconds(e.target.value ? Number(e.target.value) : "")
-                        }
+                        value={String(scanWindowSeconds)}
+                        onChange={(e) => setScanWindowSeconds(Number(e.target.value) || 3600)}
                       >
-                        <option value="">{t("Off (no deadline)")}</option>
                         <option value="1800">30m</option>
                         <option value="3600">1h</option>
                         <option value="7200">2h</option>
                       </select>
                       <p className="field-help">
-                        {t("Optional deadline; unfinished batches pause and can be resumed.")}
+                        {t("Required deadline for every scan; unfinished batches pause and can be resumed.")}
                       </p>
                     </div>
                   </div>
@@ -1979,39 +1984,14 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan)}
+                    onOpenConsole={(scan) => openScanConsole(scan, { goToScans: true })}
                     t={t}
                   />
                 </div>
+                <p className="field-help">
+                  {t("Open a probe to view the activity log and findings on the Scans page.")}
+                </p>
               </section>
-
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
-
-              <FindingsPanel
-                scan={consoleScan}
-                scans={scans}
-                canMutate={canMutate}
-                canExport={canExport}
-                onScanUpdated={(updated) => {
-                  setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                  setConsoleScan({
-                    ...updated,
-                    events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
-                    batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
-                  });
-                  setScanRefreshKey((value) => value + 1);
-                }}
-                pushToast={pushToast}
-                t={t}
-              />
             </>
           )}
 
@@ -2522,15 +2502,6 @@ export function App() {
                 </div>
               </section>
 
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
             </>
           )}
 

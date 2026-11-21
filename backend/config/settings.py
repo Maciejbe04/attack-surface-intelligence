@@ -210,9 +210,11 @@ SESSION_HMAC = read_secret("session_hmac")
 WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
+# Global scan deadline (seconds). Always applied when a client omits window_seconds
+# so unlimited scans cannot be started by accident. Override via env.
 SCAN_DEFAULT_WINDOW_SECONDS = max(
-    0,
-    int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "0") or "0"),
+    60,
+    int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "3600") or "3600"),
 )
 
 APP_NAME = os.environ.get("APP_NAME", "SurfaceX")
