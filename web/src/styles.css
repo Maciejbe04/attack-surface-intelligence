@@ -131,6 +131,111 @@ a:hover {
   font-size: 18px;
 }
 
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--aws-border-light);
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.toast strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.toast p {
+  margin: 0;
+  color: var(--aws-text-secondary);
+  font-size: 13px;
+}
+
+.toast--error {
+  border-color: var(--aws-danger);
+  background: #fdf2f1;
+}
+
+.toast--ok {
+  border-color: var(--aws-success);
+  background: #f2f8f0;
+}
+
+.toast__close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--aws-text-secondary);
+  padding: 0 2px;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.module-card {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--aws-border-light);
+  border-radius: var(--radius);
+  background: #fff;
+  cursor: pointer;
+}
+
+.module-card:hover {
+  border-color: #0073bb;
+}
+
+.module-card.is-selected {
+  border-color: #0073bb;
+  background: var(--aws-selected);
+}
+
+.module-card input {
+  margin-top: 3px;
+}
+
+.module-card__body {
+  display: grid;
+  gap: 4px;
+}
+
+.module-card__name {
+  font-weight: 700;
+}
+
+.module-card__summary {
+  color: var(--aws-text-secondary);
+  font-size: 13px;
+}
+
+.module-card__tool {
+  color: #0073bb;
+  font-size: 12px;
+  font-family: "Amazon Ember Mono", "SFMono-Regular", Consolas, monospace;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 220px 1fr;

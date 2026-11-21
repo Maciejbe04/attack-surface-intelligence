@@ -1,10 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
-
-type Health = {
-  status: string;
-  database: boolean;
-};
+import { PROBE_MODULES, ProbeModuleId } from "./modules";
 
 type HostTarget = {
   id: string;
@@ -13,9 +9,25 @@ type HostTarget = {
   addedAt: string;
 };
 
-type NavId = "targets" | "scans" | "dashboard";
+type NavId = "dashboard" | "targets" | "scans";
+
+type Toast = {
+  id: string;
+  kind: "error" | "ok";
+  title: string;
+  message: string;
+};
+
+type ProbeJob = {
+  id: string;
+  host: string;
+  modules: ProbeModuleId[];
+  createdAt: string;
+  status: "queued";
+};
 
 const STORAGE_KEY = "surfacex.targets.v1";
+const JOBS_KEY = "surfacex.probeJobs.v1";
 
 function detectType(value: string): HostTarget["type"] {
   if (value.includes("/")) return "cidr";
@@ -51,6 +63,17 @@ function loadTargets(): HostTarget[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as HostTarget[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadJobs(): ProbeJob[] {
+  try {
+    const raw = localStorage.getItem(JOBS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ProbeJob[];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -197,7 +220,11 @@ function LoginScreen({
                 </div>
               </div>
               <div className="actions">
-                <button type="submit" className="btn btn--primary" disabled={busy || mfaCode.length < 6}>
+                <button
+                  type="submit"
+                  className="btn btn--primary"
+                  disabled={busy || mfaCode.length < 6}
+                >
                   {busy ? "Verifying…" : "Verify"}
                 </button>
                 <button
@@ -224,35 +251,59 @@ function LoginScreen({
 export function App() {
   const [bootstrapping, setBootstrapping] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [nav, setNav] = useState<NavId>("targets");
-  const [health, setHealth] = useState<Health | null>(null);
-  const [healthError, setHealthError] = useState<string | null>(null);
+  const [nav, setNav] = useState<NavId>("dashboard");
   const [targets, setTargets] = useState<HostTarget[]>(() => loadTargets());
+  const [jobs, setJobs] = useState<ProbeJob[]>(() => loadJobs());
   const [draft, setDraft] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [probeHost, setProbeHost] = useState("");
+  const [moduleIds, setModuleIds] = useState<Set<ProbeModuleId>>(
+    () => new Set(["host-discovery", "port-scan", "http-fingerprint"]),
+  );
+
+  function pushToast(kind: Toast["kind"], title: string, message: string) {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, kind, title, message }]);
+    window.setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 6000);
+  }
+
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
 
   useEffect(() => {
-    Promise.all([
-      apiFetch("/api/auth/me/").then(async (r) => r.json()),
-      fetch("/api/health/").then(async (r) => {
+    apiFetch("/api/auth/me/")
+      .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
-      }),
-    ])
-      .then(([me, healthData]) => {
-        if (me.authenticated) setUser(me.user as AuthUser);
-        setHealth(healthData as Health);
-        setHealthError(null);
       })
-      .catch((err: Error) => setHealthError(err.message))
+      .then((me) => {
+        if (me.authenticated) setUser(me.user as AuthUser);
+      })
+      .catch(() => {
+        pushToast("error", "No connection", "Cannot reach SurfaceX API. Check Docker Compose.");
+      })
       .finally(() => setBootstrapping(false));
   }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(targets));
   }, [targets]);
+
+  useEffect(() => {
+    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+  }, [jobs]);
+
+  useEffect(() => {
+    if (!probeHost && targets.length > 0) {
+      setProbeHost(targets[0].value);
+    }
+  }, [targets, probeHost]);
 
   const allSelected = targets.length > 0 && selected.size === targets.length;
   const someSelected = selected.size > 0 && selected.size < targets.length;
@@ -262,7 +313,11 @@ export function App() {
   );
 
   async function signOut() {
-    await apiFetch("/api/auth/logout/", { method: "POST", body: "{}" });
+    try {
+      await apiFetch("/api/auth/logout/", { method: "POST", body: "{}" });
+    } catch {
+      pushToast("error", "No connection", "Sign-out request failed.");
+    }
     setUser(null);
   }
 
@@ -277,6 +332,19 @@ export function App() {
   function toggleOne(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleModule(id: ProbeModuleId) {
+    setModuleIds((prev) => {
+      const next = new Set(prev);
+      if (id === "full-pipeline") {
+        return next.has(id) ? new Set() : new Set<ProbeModuleId>(["full-pipeline"]);
+      }
+      next.delete("full-pipeline");
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
@@ -306,20 +374,51 @@ export function App() {
     setDraft("");
     setDraftError(null);
     setFlash(`Added ${value}`);
+    if (!probeHost) setProbeHost(value);
   }
 
   function removeSelected() {
     if (selected.size === 0) return;
     const count = selected.size;
+    const removed = new Set(selectedTargets.map((t) => t.value));
     setTargets((prev) => prev.filter((t) => !selected.has(t.id)));
     setSelected(new Set());
+    if (removed.has(probeHost)) {
+      setProbeHost("");
+    }
     setFlash(`Removed ${count} target${count === 1 ? "" : "s"}`);
   }
 
   function queueSelected() {
     if (selectedTargets.length === 0) return;
     setFlash(
-      `Queued scan for ${selectedTargets.length} host${selectedTargets.length === 1 ? "" : "s"} (scanner wiring comes next).`,
+      `Queued scan for ${selectedTargets.length} host${selectedTargets.length === 1 ? "" : "s"}.`,
+    );
+  }
+
+  function runProbe() {
+    const host = probeHost.trim();
+    if (!host) {
+      pushToast("error", "Host required", "Select or enter a host / IP to probe.");
+      return;
+    }
+    if (moduleIds.size === 0) {
+      pushToast("error", "No modules", "Select at least one discovery module.");
+      return;
+    }
+    const modules = Array.from(moduleIds);
+    const job: ProbeJob = {
+      id: crypto.randomUUID(),
+      host,
+      modules,
+      createdAt: new Date().toISOString(),
+      status: "queued",
+    };
+    setJobs((prev) => [job, ...prev].slice(0, 50));
+    pushToast(
+      "ok",
+      "Probe queued",
+      `${host} · ${modules.length} module${modules.length === 1 ? "" : "s"} (worker wiring next).`,
     );
   }
 
@@ -343,27 +442,47 @@ export function App() {
           SurfaceX
         </a>
         <span className="topnav__meta">
-          <span
-            className={`status-dot ${health?.database ? "is-ok" : healthError ? "is-bad" : ""}`}
-            aria-hidden="true"
-          />
           {user.username} · {user.role}
-          {user.mfa_enabled ? " · MFA on" : ""}
-          {" · "}
-          {healthError
-            ? `API unreachable`
-            : health
-              ? `API ${health.status}`
-              : "Checking API…"}
+          {user.mfa_enabled ? " · MFA" : ""}
         </span>
         <button type="button" className="btn btn--normal topnav__signout" onClick={signOut}>
           Sign out
         </button>
       </header>
 
+      <div className="toast-stack" aria-live="polite">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`toast ${toast.kind === "error" ? "toast--error" : "toast--ok"}`}
+            role={toast.kind === "error" ? "alert" : "status"}
+          >
+            <div>
+              <strong>{toast.title}</strong>
+              <p>{toast.message}</p>
+            </div>
+            <button
+              type="button"
+              className="toast__close"
+              aria-label="Dismiss"
+              onClick={() => dismissToast(toast.id)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
       <div className="layout">
         <nav className="sidenav" aria-label="Console">
           <div className="sidenav__section">Attack surface</div>
+          <button
+            type="button"
+            className={`sidenav__item ${nav === "dashboard" ? "is-active" : ""}`}
+            onClick={() => setNav("dashboard")}
+          >
+            Dashboard
+          </button>
           <button
             type="button"
             className={`sidenav__item ${nav === "targets" ? "is-active" : ""}`}
@@ -378,16 +497,125 @@ export function App() {
           >
             Scans
           </button>
-          <button
-            type="button"
-            className={`sidenav__item ${nav === "dashboard" ? "is-active" : ""}`}
-            onClick={() => setNav("dashboard")}
-          >
-            Dashboard
-          </button>
         </nav>
 
         <main className="content">
+          {nav === "dashboard" && (
+            <>
+              <header className="page-header">
+                <h1>Dashboard</h1>
+                <p>
+                  Pick a host and run discovery modules. SurfaceX probes only — no login,
+                  brute force, or exploitation.
+                </p>
+              </header>
+
+              <section className="panel">
+                <div className="panel__header">
+                  <h2>Target host</h2>
+                </div>
+                <div className="panel__body">
+                  <div className="form-row">
+                    <label htmlFor="probe-host">Host / IP</label>
+                    <div>
+                      <input
+                        id="probe-host"
+                        className="input"
+                        list="known-hosts"
+                        value={probeHost}
+                        onChange={(e) => setProbeHost(e.target.value)}
+                        placeholder="10.0.0.15 or app.example.lab"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <datalist id="known-hosts">
+                        {targets.map((t) => (
+                          <option key={t.id} value={t.value} />
+                        ))}
+                      </datalist>
+                      <p className="field-help">
+                        Type an address or choose from saved targets.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel__header">
+                  <h2>Discovery modules</h2>
+                  <div className="actions">
+                    <button type="button" className="btn btn--primary" onClick={runProbe}>
+                      Run selected
+                    </button>
+                  </div>
+                </div>
+                <div className="module-grid">
+                  {PROBE_MODULES.map((mod) => {
+                    const checked = moduleIds.has(mod.id);
+                    return (
+                      <label
+                        key={mod.id}
+                        className={`module-card ${checked ? "is-selected" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleModule(mod.id)}
+                        />
+                        <span className="module-card__body">
+                          <span className="module-card__name">{mod.name}</span>
+                          <span className="module-card__summary">{mod.summary}</span>
+                          <span className="module-card__tool">{mod.tool}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="panel__footer">
+                  <span className="table-toolbar__count">
+                    {moduleIds.size} module{moduleIds.size === 1 ? "" : "s"} selected
+                  </span>
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel__header">
+                  <h2>Recent probe jobs</h2>
+                </div>
+                <div className="table-wrap">
+                  {jobs.length === 0 ? (
+                    <div className="empty">
+                      <strong>No probe jobs</strong>
+                      Select modules and run a discovery probe against a host.
+                    </div>
+                  ) : (
+                    <table className="hosts">
+                      <thead>
+                        <tr>
+                          <th>Host</th>
+                          <th>Modules</th>
+                          <th>Status</th>
+                          <th>Queued</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobs.map((job) => (
+                          <tr key={job.id}>
+                            <td className="mono">{job.host}</td>
+                            <td>{job.modules.join(", ")}</td>
+                            <td>{job.status}</td>
+                            <td>{new Date(job.createdAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
+
           {nav === "targets" && (
             <>
               <header className="page-header">
@@ -538,27 +766,37 @@ export function App() {
             <>
               <header className="page-header">
                 <h1>Scans</h1>
-                <p>Scan runs and progress will appear here after scheduler wiring.</p>
+                <p>Queued discovery jobs from the dashboard and target list.</p>
               </header>
               <div className="panel">
-                <div className="empty">
-                  <strong>No scan runs yet</strong>
-                  Select targets and use Scan selected to queue work.
-                </div>
-              </div>
-            </>
-          )}
-
-          {nav === "dashboard" && (
-            <>
-              <header className="page-header">
-                <h1>Dashboard</h1>
-                <p>Change summary across hosts, services, and certificates.</p>
-              </header>
-              <div className="panel">
-                <div className="empty">
-                  <strong>Waiting for observations</strong>
-                  Dashboard populates after the first completed scan.
+                <div className="table-wrap">
+                  {jobs.length === 0 ? (
+                    <div className="empty">
+                      <strong>No scan runs yet</strong>
+                      Use Dashboard modules to probe a host.
+                    </div>
+                  ) : (
+                    <table className="hosts">
+                      <thead>
+                        <tr>
+                          <th>Host</th>
+                          <th>Modules</th>
+                          <th>Status</th>
+                          <th>Queued</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {jobs.map((job) => (
+                          <tr key={job.id}>
+                            <td className="mono">{job.host}</td>
+                            <td>{job.modules.join(", ")}</td>
+                            <td>{job.status}</td>
+                            <td>{new Date(job.createdAt).toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </>
