@@ -3,6 +3,7 @@ import { ObservationLifecycle, Scan } from "./api/scans";
 import { Translate } from "./i18n";
 
 const SERIES: ObservationLifecycle[] = ["NEW", "CHANGED", "MISSING", "FLAKY", "GONE"];
+const BAR_MAX_PX = 140;
 
 type RangeKey = "24h" | "7d" | "30d" | "all";
 
@@ -134,38 +135,40 @@ export function ChangesOverTime({
             role="list"
             aria-label={t("Changes over time")}
           >
-            {points.map((point) => (
-              <button
-                key={point.id}
-                type="button"
-                className="changes-over-time__col"
-                role="listitem"
-                onClick={() => onOpenScan(point.id)}
-                title={`${point.label} · ${formatTick(point.finishedAt)} · ${SERIES.map(
-                  (key) => `${key} ${point.values[key]}`,
-                ).join(", ")}`}
-                aria-label={`${t("Open scan log")} ${point.label}`}
-              >
-                <div
-                  className="changes-over-time__stack"
-                  style={{ height: `${Math.max(8, (point.total / maxTotal) * 100)}%` }}
+            {points.map((point) => {
+              const barHeight = Math.max(8, Math.round((point.total / maxTotal) * BAR_MAX_PX));
+              return (
+                <button
+                  key={point.id}
+                  type="button"
+                  className="changes-over-time__col"
+                  role="listitem"
+                  onClick={() => onOpenScan(point.id)}
+                  title={`${point.label} · ${formatTick(point.finishedAt)} · ${SERIES.map(
+                    (key) => `${key} ${point.values[key]}`,
+                  ).join(", ")}`}
+                  aria-label={`${t("Open scan log")} ${point.label}`}
                 >
-                  {SERIES.map((key) => {
-                    const value = point.values[key];
-                    if (value <= 0) return null;
-                    return (
-                      <div
-                        key={key}
-                        className={`changes-over-time__seg changes-over-time__seg--${key}`}
-                        style={{ flexGrow: value, flexBasis: 0 }}
-                      />
-                    );
-                  })}
-                </div>
-                <span className="changes-over-time__label mono">{point.label}</span>
-                <span className="changes-over-time__when">{formatTick(point.finishedAt)}</span>
-              </button>
-            ))}
+                  <div className="changes-over-time__plot">
+                    <div className="changes-over-time__stack" style={{ height: `${barHeight}px` }}>
+                      {SERIES.map((key) => {
+                        const value = point.values[key];
+                        if (value <= 0) return null;
+                        return (
+                          <div
+                            key={key}
+                            className={`changes-over-time__seg changes-over-time__seg--${key}`}
+                            style={{ flexGrow: value, flexBasis: 0 }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <span className="changes-over-time__label mono">{point.label}</span>
+                  <span className="changes-over-time__when">{formatTick(point.finishedAt)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
