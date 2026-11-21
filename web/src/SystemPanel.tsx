@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AuditEvent, listAudit } from "./api/scans";
 import { apiFetch } from "./auth";
 import { Translate } from "./i18n";
 import { APP_NAME, APP_VERSION } from "./version";
@@ -34,11 +35,18 @@ export type SystemInfo = {
     python: string;
   };
   integrations: SystemIntegration[];
+  signatures?: {
+    pack_version: string;
+    count: number;
+    ids: string[];
+    summary: string;
+  };
   stack: SystemComponent[];
 };
 
 type Props = {
   active: boolean;
+  isAdmin?: boolean;
   t: Translate;
 };
 
@@ -48,10 +56,11 @@ function statusLabel(status: string, t: Translate): string {
   return status;
 }
 
-export function SystemPanel({ active, t }: Props) {
+export function SystemPanel({ active, isAdmin = false, t }: Props) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     if (!active) return;
@@ -76,6 +85,22 @@ export function SystemPanel({ active, t }: Props) {
       });
     return () => controller.abort();
   }, [active, t]);
+
+  useEffect(() => {
+    if (!active || !isAdmin) {
+      setAudit([]);
+      return;
+    }
+    const controller = new AbortController();
+    listAudit(controller.signal)
+      .then((payload) => {
+        if (!controller.signal.aborted) setAudit(payload.results.slice(0, 20));
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setAudit([]);
+      });
+    return () => controller.abort();
+  }, [active, isAdmin]);
 
   if (!active) return null;
 
@@ -157,6 +182,70 @@ export function SystemPanel({ active, t }: Props) {
               </ul>
             </div>
           </section>
+
+          {info.signatures && (
+            <section className="panel">
+              <div className="panel__header">
+                <h2>{t("Signatures pack")}</h2>
+              </div>
+              <div className="panel__body">
+                <p className="field-help" style={{ marginTop: 0 }}>
+                  {t(info.signatures.summary)}
+                </p>
+                <dl className="system-panel__meta">
+                  <div>
+                    <dt>{t("Pack version")}</dt>
+                    <dd className="mono">{info.signatures.pack_version || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("Signatures")}</dt>
+                    <dd className="mono">{info.signatures.count}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("IDs")}</dt>
+                    <dd className="mono">{info.signatures.ids.join(", ") || "—"}</dd>
+                  </div>
+                </dl>
+              </div>
+            </section>
+          )}
+
+          {isAdmin && (
+            <section className="panel">
+              <div className="panel__header">
+                <h2>{t("Recent audit")}</h2>
+              </div>
+              <div className="panel__body">
+                {audit.length === 0 ? (
+                  <p className="field-help">{t("No audit events yet.")}</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="hosts">
+                      <caption className="sr-only">{t("Audit log")}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("When")}</th>
+                          <th scope="col">{t("Actor")}</th>
+                          <th scope="col">{t("Action")}</th>
+                          <th scope="col">{t("Summary")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {audit.map((event) => (
+                          <tr key={event.id}>
+                            <td>{new Date(event.created_at).toLocaleString()}</td>
+                            <td className="mono">{event.actor || "—"}</td>
+                            <td className="mono">{event.action}</td>
+                            <td>{event.summary}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           <section className="panel">
             <div className="panel__header">

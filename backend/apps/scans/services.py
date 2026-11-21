@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import partial
 
 from django.contrib.auth.models import User
@@ -71,6 +72,7 @@ def queue_scan_for_targets(
     client_request_id: str = "",
     group: TargetGroup | None = None,
     schedule: GroupSchedule | None = None,
+    window_seconds: int | None = None,
 ) -> tuple[ScanRun, bool]:
     """Create a scan run for targets. Returns (run, created)."""
     if not targets:
@@ -86,6 +88,10 @@ def queue_scan_for_targets(
             if existing is not None:
                 return existing, False
 
+        deadline_at = None
+        if window_seconds and window_seconds > 0:
+            deadline_at = timezone.now() + timedelta(seconds=window_seconds)
+
         try:
             with transaction.atomic():
                 run = ScanRun.objects.create(
@@ -95,6 +101,8 @@ def queue_scan_for_targets(
                     total_batches=len(targets),
                     group=group,
                     schedule=schedule,
+                    window_seconds=window_seconds if window_seconds else None,
+                    deadline_at=deadline_at,
                 )
         except IntegrityError:
             run = ScanRun.objects.get(

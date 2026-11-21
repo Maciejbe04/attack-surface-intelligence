@@ -52,6 +52,18 @@ def login_view(request: Request) -> Response:
 
     user = authenticate(request, username=username, password=password)
     if user is None:
+        try:
+            from apps.scans.audit import record_audit
+
+            record_audit(
+                actor=None,
+                action="auth.login_failure",
+                object_type="user",
+                object_id=username[:64],
+                summary=f"Failed login for {username[:64]}",
+            )
+        except Exception:
+            pass
         return Response(
             {"detail": "Invalid username or password."},
             status=status.HTTP_401_UNAUTHORIZED,

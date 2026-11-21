@@ -1468,3 +1468,86 @@ table.hosts .mono {
     flex-direction: column;
   }
 }
+
+.panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.findings-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.findings-kpis--dashboard {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--aws-border-light);
+  background: var(--aws-surface, #fff);
+}
+
+.findings-kpi {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lifecycle-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+.lifecycle-badge--NEW {
+  color: #067d3b;
+  background: #e9f7ef;
+  border-color: #b7e0c5;
+}
+
+.lifecycle-badge--CHANGED {
+  color: #8c5a00;
+  background: #fff4de;
+  border-color: #f0d59a;
+}
+
+.lifecycle-badge--MISSING,
+.lifecycle-badge--FLAKY {
+  color: #7a4d00;
+  background: #fff8e8;
+  border-color: #efd7a0;
+}
+
+.lifecycle-badge--GONE {
+  color: #8b1a1a;
+  background: #fdecec;
+  border-color: #f0b9b9;
+}
+
+.lifecycle-badge--UNCHANGED {
+  color: #545b64;
+  background: #f2f3f3;
+  border-color: #d5dbdb;
+}
+
+.table-toolbar__window {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.status-badge--paused {
+  color: #8c5a00;
+  background: #fff4de;
+  border-color: #f0d59a;
+}

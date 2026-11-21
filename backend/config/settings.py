@@ -198,6 +198,10 @@ SESSION_HMAC = read_secret("session_hmac")
 WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
+SCAN_DEFAULT_WINDOW_SECONDS = max(
+    0,
+    int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "0") or "0"),
+)
 
 APP_NAME = os.environ.get("APP_NAME", "SurfaceX")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")

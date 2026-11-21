@@ -52,8 +52,8 @@ Jeśli Compose działa, a DD nie:
 ```
 
 - UI DefectDojo: [http://localhost:8081](http://localhost:8081)
-- Użytkownik: `admin`
-- Hasło: zawartość lokalnego pliku `secrets/defectdojo_admin_password`
+- Domyślne konto lokalne: `admin` / `changeme` (to samo zapisuje `./scripts/init-secrets.sh` w `secrets/defectdojo_admin_password`)
+- Inne hasło: `DEFECTDOJO_ADMIN_PASSWORD=... ./scripts/init-secrets.sh`, potem świeży volume DefectDojo (`docker volume rm surfacex_defectdojo_postgres`)
 
 Checklist:
 

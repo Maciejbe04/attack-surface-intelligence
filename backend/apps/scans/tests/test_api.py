@@ -526,6 +526,7 @@ class InternalWorkerAPITests(TestCase):
                 "recovered": 2,
                 "published": 2,
                 "failed": 0,
+                "deadline_paused": 0,
             },
         )
         recovered = list(
@@ -585,6 +586,7 @@ class InternalWorkerAPITests(TestCase):
                 "recovered": 1,
                 "published": 0,
                 "failed": 1,
+                "deadline_paused": 0,
             },
         )
         self.batch.refresh_from_db()

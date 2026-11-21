@@ -366,25 +366,13 @@ def _parse_httpx(output: bytes) -> list[dict[str, Any]]:
 
 
 def _signature_results(http_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    for record in http_records:
-        technologies = record.get("tech", [])
-        if not isinstance(technologies, list):
-            technologies = []
-        for technology in technologies[:20]:
-            if isinstance(technology, str):
-                findings.append(
-                    {
-                        "endpoint": record.get("url", record.get("input", "")),
-                        "technology": technology[:200],
-                        "confidence": 30,
-                        "level": "low",
-                        "evidence": "httpx technology detection",
-                    }
-                )
-        if len(findings) >= MAX_OBSERVATIONS:
-            break
-    return findings
+    try:
+        from .signatures import match_http_records
+
+        findings = match_http_records(http_records)
+    except Exception:
+        findings = []
+    return findings[:MAX_OBSERVATIONS]
 
 
 def execute_scan(

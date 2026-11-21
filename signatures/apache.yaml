@@ -1,0 +1,22 @@
+apiVersion: surfacex/v1
+kind: Signature
+metadata:
+  id: apache-httpd
+  name: Apache HTTP Server
+  category: http-server
+  version: 1
+spec:
+  matchAny: false
+  rules:
+    - type: header
+      name: server
+      contains: "Apache"
+      weight: 40
+    - type: header
+      name: server
+      regex: "Apache/[0-9]"
+      weight: 20
+  confidence:
+    low: [1, 39]
+    medium: [40, 69]
+    high: [70, 100]

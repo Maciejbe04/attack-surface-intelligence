@@ -97,6 +97,14 @@ class ScanRun(models.Model):
         null=True,
         blank=True,
     )
+    window_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional scan window length in seconds; null means no deadline.",
+    )
+    deadline_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    eta_seconds = models.PositiveIntegerField(null=True, blank=True)
+    resume_available = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -123,6 +131,7 @@ class ScanBatch(models.Model):
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
         CANCELLED = "cancelled", "Cancelled"
+        PAUSED = "paused", "Paused"
 
     run = models.ForeignKey(ScanRun, on_delete=models.CASCADE, related_name="batches")
     target = models.ForeignKey(
@@ -268,3 +277,114 @@ class GroupSchedule(models.Model):
 
     def __str__(self) -> str:
         return f"schedule:{self.group_id}:{self.frequency}"
+
+
+class Observation(models.Model):
+    """Normalized finding from a scan batch (host/port/http/tech/cert)."""
+
+    class EntityType(models.TextChoices):
+        HOST = "host", "Host"
+        PORT = "port", "Port"
+        HTTP = "http", "HTTP endpoint"
+        TECH = "tech", "Technology"
+        CERT = "cert", "TLS certificate"
+        SIGNATURE = "signature", "Signature match"
+
+    class Lifecycle(models.TextChoices):
+        NEW = "NEW", "New"
+        CHANGED = "CHANGED", "Changed"
+        MISSING = "MISSING", "Missing"
+        FLAKY = "FLAKY", "Flaky"
+        GONE = "GONE", "Gone"
+        UNCHANGED = "UNCHANGED", "Unchanged"
+
+    class Source(models.TextChoices):
+        SCANNER = "scanner", "Scanner"
+        IMPORT = "import", "Import"
+
+    run = models.ForeignKey(ScanRun, on_delete=models.CASCADE, related_name="observations")
+    target = models.ForeignKey(
+        Target,
+        on_delete=models.SET_NULL,
+        related_name="observations",
+        null=True,
+        blank=True,
+    )
+    target_address = models.CharField(max_length=255, db_index=True)
+    entity_type = models.CharField(max_length=16, choices=EntityType.choices, db_index=True)
+    entity_key = models.CharField(max_length=512, db_index=True)
+    lifecycle = models.CharField(
+        max_length=16,
+        choices=Lifecycle.choices,
+        default=Lifecycle.NEW,
+        db_index=True,
+    )
+    attrs = models.JSONField(default=dict, blank=True)
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.SCANNER,
+    )
+    miss_streak = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("entity_type", "entity_key", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("run", "entity_key"),
+                name="scans_observation_run_key_uniq",
+            )
+        ]
+        indexes = [
+            models.Index(fields=("run", "lifecycle"), name="scans_obser_run_id_99cba9_idx"),
+            models.Index(
+                fields=("target_address", "entity_type"),
+                name="scans_obser_target__8acc2a_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.entity_type}:{self.entity_key}:{self.lifecycle}"
+
+
+class FingerprintEvidence(models.Model):
+    observation = models.ForeignKey(
+        Observation,
+        on_delete=models.CASCADE,
+        related_name="evidence",
+    )
+    kind = models.CharField(max_length=32, default="summary")
+    summary = models.CharField(max_length=500, blank=True, default="")
+    # Encrypted payload (AES-GCM envelope). Empty when encryption is unavailable.
+    ciphertext = models.TextField(blank=True, default="")
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return f"evidence:{self.pk}:{self.kind}"
+
+
+class AuditLog(models.Model):
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="audit_events",
+    )
+    action = models.CharField(max_length=64, db_index=True)
+    object_type = models.CharField(max_length=64, blank=True, default="")
+    object_id = models.CharField(max_length=64, blank=True, default="")
+    summary = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-id",)
+
+    def __str__(self) -> str:
+        return f"audit:{self.pk}:{self.action}"

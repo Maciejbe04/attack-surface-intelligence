@@ -11,6 +11,7 @@ import {
   listGroups,
   listScans,
   listTargets,
+  resumeScan,
   Scan,
   ScanDetail,
   ScanModule,
@@ -24,6 +25,7 @@ import {
 } from "./api/scans";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 import { AppFooter } from "./AppFooter";
+import { FindingsPanel, LifecycleKpis } from "./FindingsPanel";
 import { Language, Translate, useLanguage } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
 import { Logo } from "./Logo";
@@ -39,10 +41,20 @@ import { SystemLockButton, SystemPanel } from "./SystemPanel";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
+function formatEta(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "";
+  if (seconds < 60) return `~${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `~${minutes}m`;
+  return `~${Math.round(minutes / 60)}h`;
+}
+
 type NavId = "dashboard" | "targets" | "groups" | "scans" | "system";
 
 /** Select value meaning "create a new group with the typed name". */
 const NEW_GROUP = "__new__";
+/** Filter value for hosts that are not in any group. */
+const NO_GROUP = "__none__";
 
 type Toast = {
   id: string;
@@ -101,7 +113,9 @@ function ScanTable({
   canMutate,
   cancellingIds,
   focusedScanId,
+  resumingIds,
   onCancel,
+  onResume,
   onOpenConsole,
   t,
 }: {
@@ -111,7 +125,9 @@ function ScanTable({
   canMutate: boolean;
   cancellingIds: Set<number>;
   focusedScanId: number | null;
+  resumingIds: Set<number>;
   onCancel: (scan: Scan) => void;
+  onResume: (scan: Scan) => void;
   onOpenConsole: (scan: Scan) => void;
   t: Translate;
 }) {
@@ -143,7 +159,9 @@ function ScanTable({
         {scans.map((scan) => {
           const active = ACTIVE_SCAN_STATUSES.has(scan.status);
           const cancelling = cancellingIds.has(scan.id);
+          const resuming = resumingIds.has(scan.id);
           const focused = focusedScanId === scan.id;
+          const eta = formatEta(scan.eta_seconds);
           return (
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
@@ -173,13 +191,19 @@ function ScanTable({
                   <span className={`status-badge status-badge--${scan.status}`}>
                     {t(STATUS_LABELS[scan.status])}
                   </span>
+                  {scan.resume_available && (
+                    <span className="status-badge status-badge--partial">{t("Paused")}</span>
+                  )}
                 </div>
                 {scan.error && <span className="scan-error">{scan.error}</span>}
               </td>
               <td>
                 <div className="scan-progress">
                   <progress value={scan.progress} max={100} aria-label={t("Scan progress")} />
-                  <span>{scan.progress}%</span>
+                  <span>
+                    {scan.progress}%
+                    {eta ? ` · ${eta}` : ""}
+                  </span>
                 </div>
               </td>
               <td>
@@ -200,6 +224,17 @@ function ScanTable({
                 >
                   {focused ? t("Viewing log") : t("View log")}
                 </button>
+                {scan.resume_available && canMutate && (
+                  <button
+                    type="button"
+                    className="btn btn--normal"
+                    onClick={() => onResume(scan)}
+                    disabled={resuming}
+                    aria-busy={resuming}
+                  >
+                    {resuming ? t("Resuming…") : t("Resume")}
+                  </button>
+                )}
                 {active && canMutate && (
                   <button
                     type="button"
@@ -481,6 +516,7 @@ export function App() {
   const [bulkGroupChoice, setBulkGroupChoice] = useState("");
   const [bulkGroupName, setBulkGroupName] = useState("");
   const [groupPending, setGroupPending] = useState(false);
+  const [assigningTargetId, setAssigningTargetId] = useState<number | null>(null);
   const [importGroupChoice, setImportGroupChoice] = useState("");
   const [importGroupName, setImportGroupName] = useState("");
   const [addGroupChoice, setAddGroupChoice] = useState("");
@@ -492,14 +528,18 @@ export function App() {
   const [removePending, setRemovePending] = useState(false);
   const [scanPending, setScanPending] = useState<"dashboard" | "targets" | null>(null);
   const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set());
+  const [resumingIds, setResumingIds] = useState<Set<number>>(new Set());
   const [consoleScanId, setConsoleScanId] = useState<number | null>(null);
   const [consoleScan, setConsoleScan] = useState<ScanDetail | null>(null);
   const [consoleLoading, setConsoleLoading] = useState(false);
   const [consoleReloadKey, setConsoleReloadKey] = useState(0);
+  const [scanWindowSeconds, setScanWindowSeconds] = useState<number | "">("");
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
   const canMutate = user?.role === "admin" || user?.role === "operator";
+  const canExport =
+    user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
     const id = crypto.randomUUID();
@@ -763,8 +803,11 @@ export function App() {
   // Filter on the loaded list so selection, bulk actions and counts stay in sync.
   const visibleTargets = useMemo(() => {
     const query = targetQuery.trim().toLowerCase();
-    const groupId = targetGroupFilter ? Number(targetGroupFilter) : null;
+    const ungroupedOnly = targetGroupFilter === NO_GROUP;
+    const groupId =
+      targetGroupFilter && targetGroupFilter !== NO_GROUP ? Number(targetGroupFilter) : null;
     return targets.filter((target) => {
+      if (ungroupedOnly && (target.groups?.length ?? 0) > 0) return false;
       if (groupId !== null && !target.groups.some((group) => group.id === groupId)) return false;
       if (!query) return true;
       return (
@@ -818,7 +861,7 @@ export function App() {
   async function changeSelectedMembership(action: "add" | "remove") {
     if (!canMutate || groupPending || selected.size === 0) return;
     const choice = action === "remove" ? targetGroupFilter : bulkGroupChoice;
-    if (!choice || (choice === NEW_GROUP && !bulkGroupName.trim())) return;
+    if (!choice || choice === NO_GROUP || (choice === NEW_GROUP && !bulkGroupName.trim())) return;
     setGroupPending(true);
     try {
       const group = await resolveGroupChoice(choice, bulkGroupName);
@@ -841,6 +884,48 @@ export function App() {
       refreshGroups();
     } finally {
       setGroupPending(false);
+    }
+  }
+
+  async function assignTargetGroup(target: Target, choice: string) {
+    if (!canMutate || !choice || assigningTargetId !== null) return;
+    let newName = "";
+    if (choice === NEW_GROUP) {
+      newName = window.prompt(t("New group name"))?.trim() ?? "";
+      if (!newName) return;
+    }
+    setAssigningTargetId(target.id);
+    try {
+      const group = await resolveGroupChoice(choice, newName);
+      if (!group) return;
+      await updateGroupMembers(group.id, "add", [target.id]);
+      await refreshTargets();
+      refreshGroups();
+      setFlash(`${t("Added to group")} ${group.name}: ${target.address}`);
+    } catch (error) {
+      pushToast("error", t("Group not updated"), apiErrorMessage(error, t("Could not update the group.")));
+      refreshGroups();
+    } finally {
+      setAssigningTargetId(null);
+    }
+  }
+
+  async function removeTargetFromGroup(target: Target, groupId: number) {
+    if (!canMutate || assigningTargetId !== null) return;
+    setAssigningTargetId(target.id);
+    try {
+      const group = groups.find((item) => item.id === groupId);
+      await updateGroupMembers(groupId, "remove", [target.id]);
+      await refreshTargets();
+      refreshGroups();
+      setFlash(
+        `${t("Removed from group")} ${group?.name ?? groupId}: ${target.address}`,
+      );
+    } catch (error) {
+      pushToast("error", t("Group not updated"), apiErrorMessage(error, t("Could not update the group.")));
+      refreshGroups();
+    } finally {
+      setAssigningTargetId(null);
     }
   }
 
@@ -1153,7 +1238,15 @@ export function App() {
     }
     setScanPending("dashboard");
     try {
-      const scan = await scanGroup(group.id, modules, crypto.randomUUID());
+      const windowSeconds =
+        scanWindowSeconds === "" ? null : Number(scanWindowSeconds);
+      const scan = await scanGroup(
+        group.id,
+        modules,
+        crypto.randomUUID(),
+        undefined,
+        windowSeconds,
+      );
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
       setConsoleScan({
         ...scan,
@@ -1185,6 +1278,37 @@ export function App() {
     openScanConsole(scan.id);
     setScanRefreshKey((value) => value + 1);
     setNav("scans");
+  }
+
+  async function onResumeScan(scan: Scan) {
+    if (!canMutate || resumingIds.has(scan.id) || !scan.resume_available) return;
+    setResumingIds((prev) => new Set(prev).add(scan.id));
+    try {
+      const updated = await resumeScan(scan.id);
+      setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      if (consoleScanId === updated.id) {
+        setConsoleScan({
+          ...updated,
+          events: updated.events ?? [],
+          batches: updated.batches ?? [],
+        });
+        setConsoleReloadKey((value) => value + 1);
+      }
+      setScanRefreshKey((value) => value + 1);
+      pushToast("ok", t("Scan resumed"), `#${updated.id}`);
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Resume failed"),
+        apiErrorMessage(error, t("Could not resume scan.")),
+      );
+    } finally {
+      setResumingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(scan.id);
+        return next;
+      });
+    }
   }
 
   async function onCancelScan(scan: Scan) {
@@ -1388,6 +1512,27 @@ export function App() {
                       </p>
                     </div>
                   </div>
+                  <div className="form-row">
+                    <label htmlFor="scan-window">{t("Scan window")}</label>
+                    <div>
+                      <select
+                        id="scan-window"
+                        className="input input--select"
+                        value={scanWindowSeconds === "" ? "" : String(scanWindowSeconds)}
+                        onChange={(e) =>
+                          setScanWindowSeconds(e.target.value ? Number(e.target.value) : "")
+                        }
+                      >
+                        <option value="">{t("Off (no deadline)")}</option>
+                        <option value="1800">30m</option>
+                        <option value="3600">1h</option>
+                        <option value="7200">2h</option>
+                      </select>
+                      <p className="field-help">
+                        {t("Optional deadline; unfinished batches pause and can be resumed.")}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </section>
 
@@ -1402,6 +1547,8 @@ export function App() {
                 t={t}
               />
 
+              <LifecycleKpis scans={scans} t={t} />
+
               <section className="panel">
                 <div className="panel__header">
                   <h2>{t("Recent probe jobs")}</h2>
@@ -1414,12 +1561,31 @@ export function App() {
                     canMutate={canMutate}
                     cancellingIds={cancellingIds}
                     focusedScanId={consoleScanId}
+                    resumingIds={resumingIds}
                     onCancel={onCancelScan}
+                    onResume={onResumeScan}
                     onOpenConsole={(scan) => openScanConsole(scan.id)}
                     t={t}
                   />
                 </div>
               </section>
+
+              <FindingsPanel
+                scan={consoleScan}
+                canMutate={canMutate}
+                canExport={canExport}
+                onScanUpdated={(updated) => {
+                  setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                  setConsoleScan({
+                    ...updated,
+                    events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
+                    batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
+                  });
+                  setScanRefreshKey((value) => value + 1);
+                }}
+                pushToast={pushToast}
+                t={t}
+              />
 
               <ScanConsole
                 scan={consoleScan}
@@ -1693,6 +1859,7 @@ export function App() {
                       onChange={(e) => setTargetGroupFilter(e.target.value)}
                     >
                       <option value="">{t("All hosts")}</option>
+                      <option value={NO_GROUP}>{t("No group (none)")}</option>
                       {groups.map((group) => (
                         <option key={group.id} value={group.id}>
                           {group.name} ({group.target_count})
@@ -1856,19 +2023,86 @@ export function App() {
                               </td>
                               <td className="target-groups">
                                 {memberships.length === 0 ? (
-                                  <span className="target-groups__none">{t("none")}</span>
+                                  canMutate ? (
+                                    <label className="target-groups__assign">
+                                      <span className="target-groups__none">{t("none")}</span>
+                                      <select
+                                        className="input input--select target-groups__select"
+                                        value=""
+                                        disabled={assigningTargetId === target.id || groupPending}
+                                        aria-label={`${t("Assign group")} ${target.address}`}
+                                        aria-busy={assigningTargetId === target.id}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          e.target.value = "";
+                                          if (value) void assignTargetGroup(target, value);
+                                        }}
+                                      >
+                                        <option value="">{t("Choose group…")}</option>
+                                        {groups.map((group) => (
+                                          <option key={group.id} value={group.id}>
+                                            {group.name}
+                                          </option>
+                                        ))}
+                                        <option value={NEW_GROUP}>{t("New group…")}</option>
+                                      </select>
+                                    </label>
+                                  ) : (
+                                    <span className="target-groups__none">{t("none")}</span>
+                                  )
                                 ) : (
-                                  memberships.map((group) => (
-                                    <button
-                                      key={group.id}
-                                      type="button"
-                                      className="group-chip group-chip--button"
-                                      onClick={() => setTargetGroupFilter(String(group.id))}
-                                      title={t("Show only this group")}
-                                    >
-                                      {group.name}
-                                    </button>
-                                  ))
+                                  <div className="target-groups__list">
+                                    {memberships.map((group) => (
+                                      <span key={group.id} className="target-groups__chip-row">
+                                        <button
+                                          type="button"
+                                          className="group-chip group-chip--button"
+                                          onClick={() => setTargetGroupFilter(String(group.id))}
+                                          title={t("Show only this group")}
+                                        >
+                                          {group.name}
+                                        </button>
+                                        {canMutate && (
+                                          <button
+                                            type="button"
+                                            className="group-chip-remove"
+                                            disabled={assigningTargetId === target.id || groupPending}
+                                            onClick={() => void removeTargetFromGroup(target, group.id)}
+                                            aria-label={`${t("Remove from group")} ${group.name}`}
+                                            title={t("Remove from group")}
+                                          >
+                                            ×
+                                          </button>
+                                        )}
+                                      </span>
+                                    ))}
+                                    {canMutate && (
+                                      <select
+                                        className="input input--select target-groups__select target-groups__select--add"
+                                        value=""
+                                        disabled={assigningTargetId === target.id || groupPending}
+                                        aria-label={`${t("Add to group")} ${target.address}`}
+                                        onChange={(e) => {
+                                          const value = e.target.value;
+                                          e.target.value = "";
+                                          if (value) void assignTargetGroup(target, value);
+                                        }}
+                                      >
+                                        <option value="">+</option>
+                                        {groups
+                                          .filter(
+                                            (group) =>
+                                              !memberships.some((member) => member.id === group.id),
+                                          )
+                                          .map((group) => (
+                                            <option key={group.id} value={group.id}>
+                                              {group.name}
+                                            </option>
+                                          ))}
+                                        <option value={NEW_GROUP}>{t("New group…")}</option>
+                                      </select>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                               <td>{target.type}</td>
@@ -1923,12 +2157,31 @@ export function App() {
                     canMutate={canMutate}
                     cancellingIds={cancellingIds}
                     focusedScanId={consoleScanId}
+                    resumingIds={resumingIds}
                     onCancel={onCancelScan}
+                    onResume={onResumeScan}
                     onOpenConsole={(scan) => openScanConsole(scan.id)}
                     t={t}
                   />
                 </div>
               </div>
+
+              <FindingsPanel
+                scan={consoleScan}
+                canMutate={canMutate}
+                canExport={canExport}
+                onScanUpdated={(updated) => {
+                  setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                  setConsoleScan({
+                    ...updated,
+                    events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
+                    batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
+                  });
+                  setScanRefreshKey((value) => value + 1);
+                }}
+                pushToast={pushToast}
+                t={t}
+              />
 
               <ScanConsole
                 scan={consoleScan}
@@ -1942,7 +2195,7 @@ export function App() {
             </>
           )}
 
-          {nav === "system" && <SystemPanel active t={t} />}
+          {nav === "system" && <SystemPanel active isAdmin={user?.role === "admin"} t={t} />}
         </main>
       </div>
 

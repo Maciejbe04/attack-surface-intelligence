@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://surfacex.local/schemas/surfacex.export.v1.json",
+  "title": "SurfaceX export v1",
+  "type": "object",
+  "required": ["schema", "run", "observations"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "surfacex.export.v1"
+    },
+    "exported_at": { "type": "string", "format": "date-time" },
+    "run": {
+      "type": "object",
+      "required": ["id", "status"],
+      "properties": {
+        "id": { "type": "integer" },
+        "status": { "type": "string" },
+        "group_id": { "type": ["integer", "null"] },
+        "finished_at": { "type": ["string", "null"] },
+        "modules": { "type": "array" }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["entity_type", "entity_key", "lifecycle", "attrs"],
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_key": { "type": "string" },
+          "lifecycle": { "type": "string" },
+          "target_address": { "type": "string" },
+          "attrs": { "type": "object" },
+          "source": { "type": "string" },
+          "miss_streak": { "type": "integer" }
+        }
+      }
+    }
+  }
+}
