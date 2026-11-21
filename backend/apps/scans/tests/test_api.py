@@ -88,6 +88,8 @@ class PublicScanAPITests(TestCase):
         self.assertEqual(batch.target_address, target.address)
         self.assertEqual(run.modules_snapshot[0]["filters"]["profile"], "discovery-fast")
         self.assertEqual(response.json()["targets"], [target.address])
+        self.assertGreaterEqual(len(response.json()["events"]), 2)
+        self.assertIn("Queued scan", response.json()["events"][0]["message"])
         publish.assert_called_once_with(
             args=(batch.id, str(batch.delivery_id)),
             queue="scan",
@@ -364,11 +366,18 @@ class InternalWorkerAPITests(TestCase):
 
         response = self.client.post(
             reverse("internal-batch-progress", args=(self.batch.id,)),
-            {**self.identity, "progress": 45},
+            {
+                **self.identity,
+                "progress": 45,
+                "message": "Starting nmap for test target.",
+            },
             format="json",
             **self.headers,
         )
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            self.run.events.filter(message="Starting nmap for test target.").exists()
+        )
 
         complete_url = reverse("internal-batch-complete", args=(self.batch.id,))
         payload = {**self.identity, "result": {"hosts": []}}
@@ -392,6 +401,12 @@ class InternalWorkerAPITests(TestCase):
         self.assertEqual(self.batch.status, ScanBatch.Status.COMPLETED)
         self.assertEqual(self.run.status, ScanRun.Status.COMPLETED)
         self.assertEqual(self.run.progress, 100)
+        self.client.force_login(self.owner)
+        detail = self.client.get(reverse("scan-detail", args=(self.run.id,)))
+        self.assertEqual(detail.status_code, 200)
+        self.assertTrue(
+            any("Batch completed" in event["message"] for event in detail.json()["events"])
+        )
 
     def test_bad_delivery_id_is_rejected(self) -> None:
         response = self.client.post(

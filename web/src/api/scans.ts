@@ -39,6 +39,18 @@ export type ScanBatch = {
   finished_at: string | null;
 };
 
+export type ScanEventLevel = "info" | "warn" | "error";
+
+export type ScanEvent = {
+  id: number;
+  batch_id: number | null;
+  target_address: string | null;
+  level: ScanEventLevel;
+  source: string;
+  message: string;
+  created_at: string;
+};
+
 export type Scan = {
   id: number;
   status: ScanStatus;
@@ -58,6 +70,7 @@ export type Scan = {
 
 export type ScanDetail = Scan & {
   batches: ScanBatch[];
+  events: ScanEvent[];
 };
 
 export type CreateScanRequest = {

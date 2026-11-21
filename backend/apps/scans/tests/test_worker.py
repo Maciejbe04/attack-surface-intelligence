@@ -54,7 +54,7 @@ class RunnerTests(SimpleTestCase):
                     "modules": modules,
                 },
                 should_cancel=lambda: False,
-                report_progress=lambda progress: None,
+                report_progress=lambda progress, message="": None,
             )
 
         self.assertEqual(commands[0][0], "nmap")
@@ -84,7 +84,7 @@ class RunnerTests(SimpleTestCase):
                     "modules": modules,
                 },
                 should_cancel=lambda: False,
-                report_progress=lambda progress: None,
+                report_progress=lambda progress, message="": None,
             )
 
         self.assertEqual(httpx_inputs, [b"https://app.example.test:443\n"])

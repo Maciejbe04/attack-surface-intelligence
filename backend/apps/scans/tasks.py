@@ -151,11 +151,14 @@ def execute_batch(self, batch_id: int, delivery_id: str) -> dict[str, Any]:
         cancellation_cache["cancelled"] = bool(response.get("cancel_requested"))
         return bool(cancellation_cache["cancelled"])
 
-    def report_progress(progress: int) -> None:
+    def report_progress(progress: int, message: str = "") -> None:
+        payload: dict[str, Any] = {**identity, "progress": progress}
+        if message:
+            payload["message"] = message
         _api_request(
             "POST",
             f"/api/internal/batches/{batch_id}/progress/",
-            {**identity, "progress": progress},
+            payload,
         )
 
     try:

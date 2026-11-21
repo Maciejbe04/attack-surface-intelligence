@@ -140,3 +140,34 @@ class QueueState(models.Model):
 
     def __str__(self) -> str:
         return f"queue:{self.name}"
+
+
+class ScanEvent(models.Model):
+    class Level(models.TextChoices):
+        INFO = "info", "Info"
+        WARN = "warn", "Warning"
+        ERROR = "error", "Error"
+
+    run = models.ForeignKey(ScanRun, on_delete=models.CASCADE, related_name="events")
+    batch = models.ForeignKey(
+        ScanBatch,
+        on_delete=models.SET_NULL,
+        related_name="events",
+        null=True,
+        blank=True,
+    )
+    level = models.CharField(
+        max_length=16,
+        choices=Level.choices,
+        default=Level.INFO,
+        db_index=True,
+    )
+    source = models.CharField(max_length=32, default="api")
+    message = models.CharField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("id",)
+
+    def __str__(self) -> str:
+        return f"event:{self.pk}:{self.level}"
