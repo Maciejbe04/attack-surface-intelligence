@@ -9,7 +9,7 @@ rm -rf "$OUT/raw" "$OUT/shots"; mkdir -p "$OUT"
 "$REPO/demo/record/reset.sh"
 cp "$REPO/demo/record/demo.mjs" "$PW_DIR/demo.mjs"
 VIDEO=$(cd "$PW_DIR" && REPO="$REPO" OUT="$OUT" node demo.mjs | sed -n 's/^VIDEO //p')
-ffmpeg -y -loglevel error -i "$VIDEO" -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p -movflags +faststart "$OUT/SurfaceX-demo.mp4"
+python3 "$REPO/demo/record/speedup.py" "$VIDEO" "$OUT/ff.json" "$OUT/SurfaceX-demo.mp4"  # scan waits play 4x
 echo "MP4: $OUT/SurfaceX-demo.mp4"
 
 # Slides: refresh screenshots (JPEG, small PDF) and render the deck.
