@@ -9,6 +9,7 @@ const OUT = process.env.OUT || `${REPO}/demo/out`;
 const APP = "http://localhost:8080";
 const DOJO = "http://127.0.0.1:8081"; // different host than the app, so session cookies do not collide
 const W = 1920, H = 1080;
+const PHP_KEY = "tech:http://10.77.0.11:80:php:7.4.33";
 mkdirSync(`${OUT}/shots`, { recursive: true });
 
 const browser = await chromium.launch({ channel: "chrome", headless: true });
@@ -84,13 +85,21 @@ async function filterLifecycle(value) {
 
 // ---------- 1. intro + login ----------
 await p.goto(APP);
-await cap("To SurfaceX uruchomiony na naszym laboratorium: siedem kontenerów udaje kawałek sieci uczelni w 10.77.0.0/24.", "", 4500);
-await cap("Logujemy się jako admin. Pod koniec zajrzymy też na konto, które może tylko czytać.", "", 2800);
+await cap("To SurfaceX na naszym laboratorium: siedem kontenerów udaje kawałek sieci uczelni w 10.77.0.0/24. Logujemy się jako admin.", "", 4500);
 await login("admin", "changeme");
 await shot("dashboard");
 
+// ---------- 1b. allowlist: scanner touches only approved ranges ----------
+await go("Allowlist");
+await cap("Najpierw zakres. Skaner ruszy tylko adresy z allowlisty, więc wpisujemy podsieć labu.", "", 3200);
+await p.locator("#allowlist-value").locator("xpath=preceding-sibling::select").selectOption("cidr");
+await slowType(p.locator("#allowlist-value"), "10.77.0.0/24");
+await p.getByRole("button", { name: /^Add$/ }).click(); await sleep(1800);
+await shot("allowlist");
+await go("Dashboard");
+
 // ---------- 2. modules + safe scanning ----------
-await cap("Wybieramy moduły. Hosty i porty bada nmap, strony WWW i certyfikaty httpx. Każdy moduł ma limit tempa, a skaner tylko odpytuje usługi.", "", 5500);
+await cap("Wybieramy moduły. Hosty i porty bada nmap, strony WWW i certyfikaty httpx. Każdy moduł ma limit tempa, a skaner tylko odpytuje usługi.", "", 5000);
 for (const m of ["Service detection", "TLS certificate", "Custom signatures"]) {
   const cb = p.getByRole("checkbox", { name: new RegExp(m) });
   if (!(await cb.isChecked())) { await cb.scrollIntoViewIfNeeded(); await cb.check(); await sleep(500); }
@@ -100,7 +109,7 @@ await shot("filters");
 
 // ---------- 3. import ----------
 await go("Targets");
-await cap("Cele wczytujemy z pliku CSV. Ten sam import przyjmuje JSON i zwykłą listę adresów.", "", 3200);
+await cap("Cele wczytujemy z pliku CSV. Ten sam import przyjmuje JSON i zwykłą listę adresów.", "", 2800);
 await p.setInputFiles('input[type="file"]', `${REPO}/demo/lab/targets.csv`);
 await sleep(1200);
 const auto = p.getByRole("checkbox", { name: /After import, queue discovery/ });
@@ -109,12 +118,11 @@ await shot("import");
 await p.getByRole("button", { name: /^Import/ }).click();
 await sleep(2500);
 await p.mouse.wheel(0, 900); await sleep(1500);
-await cap("Siedem hostów od razu trafiło do grupy „Lab demo”, każdy z komentarzem, czym jest.", "", 3500);
+await cap("Siedem hostów od razu trafiło do grupy „Lab demo”, każdy z komentarzem, czym jest.", "", 3000);
 await p.mouse.wheel(0, -3000); await sleep(500);
 
 // ---------- 4. group + schedule ----------
 await go("Groups");
-await cap("Grupa to adresy skanowane razem. Ustawmy jej harmonogram.", "", 2800);
 await p.getByRole("button", { name: /^Schedule$|Edit schedule/ }).first().click(); await sleep(1000);
 await p.locator("#schedule-frequency").selectOption("daily"); await sleep(700);
 await p.locator("#schedule-time").fill("02:00"); await sleep(700);
@@ -122,7 +130,7 @@ const active = p.locator("#schedule-enabled");
 if (!(await active.isChecked())) await active.check();
 await shot("schedule");
 await p.getByRole("button", { name: "Save schedule" }).click(); await sleep(1500);
-await cap("Od teraz „Lab demo” skanuje się codziennie o 02:00 UTC. Na potrzeby nagrania odpalamy skan od razu.", "", 4200);
+await cap("Grupa „Lab demo” skanuje się teraz codziennie o 02:00 UTC. Na potrzeby nagrania odpalamy skan od razu.", "", 4000);
 await p.getByRole("button", { name: "Scan now" }).first().click(); await sleep(1500);
 
 // ---------- 5. scan 1 live ----------
@@ -140,19 +148,27 @@ await cap(`Skan trwał ${Math.round(s1)} sekund. Wyniki same poszły też do Def
 // ---------- 6. findings ----------
 await p.mouse.wheel(0, -20000); await sleep(800);
 await p.locator("text=Findings / Changes").first().scrollIntoViewIfNeeded(); await sleep(800);
-await cap("Teraz wyniki: hosty, otwarte porty, odpowiedzi stron WWW, certyfikat i rozpoznane technologie.", "", 3800);
+await cap("Teraz wyniki: hosty, porty, strony WWW, certyfikat i technologie. Kolumna Curiosity podpowiada, od czego zacząć.", "", 4200);
 await shot("findings-1");
 await centerOn("http:http://10.77.0.10:80");
 await cap("Same tytuły stron zdradzają sporo: staging portalu studenta, kamerę IP i przekierowanie do panelu /admin.", "", 5000);
 await shot("findings-http", { x: 240, y: 200, width: 1680, height: 680 });
-await centerOn("tech:http://10.77.0.11:80:php:7.4.33");
+await centerOn(PHP_KEY);
 await cap("httpx rozpoznał WordPressa 6.4.2 i PHP 7.4.33, które od 2022 roku nie dostaje poprawek bezpieczeństwa.", "", 5000);
 await shot("findings-tech", { x: 240, y: 200, width: 1680, height: 680 });
+// Manual override (req. 14): tags + note survive later scans.
+await p.locator("tr", { hasText: PHP_KEY }).first().getByRole("button", { name: /Add override|Edit override/ }).click(); await sleep(900);
+await p.locator("#override-notes").scrollIntoViewIfNeeded();
+await slowType(p.locator("#override-tags"), "eol, do-zgloszenia");
+await slowType(p.locator("#override-notes"), "PHP bez wsparcia. Zgłoszone do IT.");
+await shot("override-form");
+await p.getByRole("button", { name: "Save override" }).click(); await sleep(1200);
+await cap("Do każdego wyniku można dopisać tagi i notatkę. Dane ze skanera zostają nietknięte.", "", 3800);
 await p.mouse.wheel(0, -20000); await sleep(600);
 await p.locator("text=Findings / Changes").first().scrollIntoViewIfNeeded(); await sleep(600);
-await p.getByRole("button", { name: "Export JSON" }).click(); await sleep(1200);
-await p.getByRole("button", { name: "Export CSV" }).click(); await sleep(1200);
-await cap("Wszystko można pobrać jako JSON albo CSV.", "", 2500);
+await cap("Wszystko można pobrać jako JSON albo CSV.", "", 600);
+await p.getByRole("button", { name: "Export JSON" }).click(); await sleep(1000);
+await p.getByRole("button", { name: "Export CSV" }).click(); await sleep(1000);
 
 // ---------- 7. change the lab, scan 2 ----------
 await cap("Zmieniamy sieć: wyłączamy serwer pomiarowy, aktualizujemy staging i stawiamy nową aplikację.", "", 1000);
@@ -176,6 +192,9 @@ for (const lc of ["NEW", "CHANGED", "MISSING"]) {
   if (rows > 0) { await cap(msg, "", 4300); await shot(`diff-${lc}`, { x: 240, y: 0, width: 1680, height: 620 }); }
 }
 await filterLifecycle("");
+await centerOn(PHP_KEY);
+await cap("Notatka przy PHP przetrwała drugi skan.", "", 3200);
+await shot("override-kept", { x: 240, y: 200, width: 1680, height: 680 });
 
 // ---------- 8. RBAC ----------
 await p.mouse.wheel(0, -20000); await sleep(500);
@@ -184,10 +203,10 @@ await cap("Teraz to samo oczami audytora, który ma rolę viewer.", "", 3000);
 await login("audytor", "Demo-2026!");
 await go("Targets");
 await shot("viewer");
-await cap("Audytor nie ma formularzy ani przycisków skanu. Gdyby spróbował zapisać coś przez API, też dostanie odmowę.", "", 5000);
+await cap("Audytor nie ma formularzy ani przycisków skanu. Gdyby spróbował zapisać coś przez API, też dostanie odmowę.", "", 4300);
 
 // ---------- 9. DefectDojo ----------
-await cap("Na koniec DefectDojo, do którego SurfaceX wysyła wyniki po każdym skanie.", "", 3000);
+await cap("Na koniec DefectDojo, do którego SurfaceX wysyła wyniki po każdym skanie.", "", 2600);
 await p.goto(`${DOJO}/login`);
 await slowType(p.locator("#id_username"), "admin");
 await slowType(p.locator("#id_password"), "changeme");
@@ -196,8 +215,8 @@ await sleep(2500);
 await p.goto(`${DOJO}/finding/open`);
 await sleep(2500);
 await shot("defectdojo");
-await cap("Każdy host, usługa i technologia jest tu osobnym findingiem informacyjnym, gotowym do przejrzenia przez zespół.", "", 5000);
-await cap("Dzięki za obejrzenie. Kod i ten lab są w repozytorium, a całość startuje przez docker compose up.", "", 4000);
+await cap("Każdy host, usługa i technologia jest tu osobnym findingiem informacyjnym, gotowym do przejrzenia przez zespół.", "", 4500);
+await cap("Dzięki za obejrzenie. Kod i ten lab są w repozytorium, a całość startuje przez docker compose up.", "", 3500);
 
 const video = p.video();
 await ctx.close();

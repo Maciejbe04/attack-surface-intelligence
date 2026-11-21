@@ -9,7 +9,7 @@ rm -rf "$OUT/raw" "$OUT/shots"; mkdir -p "$OUT"
 "$REPO/demo/record/reset.sh"
 cp "$REPO/demo/record/demo.mjs" "$PW_DIR/demo.mjs"
 VIDEO=$(cd "$PW_DIR" && REPO="$REPO" OUT="$OUT" node demo.mjs | sed -n 's/^VIDEO //p')
-python3 "$REPO/demo/record/speedup.py" "$VIDEO" "$OUT/ff.json" "$OUT/SurfaceX-demo.mp4"  # scan waits play 4x
+python3 "$REPO/demo/record/speedup.py" "$VIDEO" "$OUT/ff.json" "$OUT/SurfaceX-demo.mp4"  # scan waits sped up (SPEED in speedup.py)
 echo "MP4: $OUT/SurfaceX-demo.mp4"
 
 # Slides: refresh screenshots (JPEG, small PDF) and render the deck.

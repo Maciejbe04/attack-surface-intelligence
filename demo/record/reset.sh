@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 docker compose exec -T api python manage.py shell -c "
 from apps.scans import models as m
-for name in ['FingerprintEvidence','Observation','ScanEvent','ScanBatch','ScanRun','GroupSchedule','Target','TargetGroup','AuditLog']:
+for name in ['FingerprintEvidence','Observation','ScanEvent','ScanBatch','ScanRun','GroupSchedule','ManualOverride','AllowlistEntry','Target','TargetGroup','AuditLog']:
     model = getattr(m, name, None)
     if model: print(name, model.objects.all().delete()[0])
 from django.contrib.auth.models import User

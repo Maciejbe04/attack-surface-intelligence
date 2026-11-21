@@ -3,7 +3,7 @@
 import json, subprocess, sys
 
 raw, marks_file, out = sys.argv[1:4]
-SPEED = 4
+SPEED = 6
 marks = json.load(open(marks_file))
 assert len(marks) % 2 == 0, "ff marks must come in start/end pairs"
 pairs = list(zip(marks[::2], marks[1::2]))
