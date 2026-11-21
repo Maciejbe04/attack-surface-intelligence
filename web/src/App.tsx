@@ -160,6 +160,18 @@ function LoginScreen({
               : "Use your console username and password."}
           </p>
 
+          {!mfaToken && (
+            <div className="flash flash--error" role="alert">
+              <div>
+                <strong>Warning: MFA is disabled</strong>
+                <p>
+                  Multi-factor authentication is currently turned off for this console.
+                  Accounts are protected by password only.
+                </p>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="flash flash--error" role="alert">
               <div>
