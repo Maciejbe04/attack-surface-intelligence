@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ScanBatch, ScanRun, Target
+from .models import ScanBatch, ScanEvent, ScanRun, Target
 
 
 @admin.register(Target)
@@ -60,3 +60,11 @@ class ScanBatchAdmin(admin.ModelAdmin):
         "finished_at",
         "updated_at",
     )
+
+
+@admin.register(ScanEvent)
+class ScanEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "run", "batch", "level", "source", "message", "created_at")
+    list_filter = ("level", "source")
+    search_fields = ("message",)
+    readonly_fields = ("created_at",)

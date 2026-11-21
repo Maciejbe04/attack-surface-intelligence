@@ -197,6 +197,19 @@ const PL: Record<string, string> = {
   "Switch to standard contrast": "Przełącz na standardowy kontrast",
   "Switch to high contrast": "Przełącz na wysoki kontrast",
   Language: "Język",
+  "Activity console": "Konsola aktywności",
+  "Run a probe or scan selected targets to stream execution logs here.":
+    "Uruchom sondę albo skan wybranych celów, aby tu zobaczyć logi wykonania.",
+  Live: "Na żywo",
+  "Refreshing…": "Odświeżanie…",
+  "Clear console": "Wyczyść konsolę",
+  "Scan activity log": "Dziennik aktywności skanu",
+  "Waiting for the next scan run.": "Oczekiwanie na kolejny przebieg skanu.",
+  "No activity events yet for this scan.": "Brak zdarzeń aktywności dla tego skanu.",
+  "View log": "Pokaż log",
+  "Viewing log": "Podgląd logu",
+  "Console unavailable": "Konsola niedostępna",
+  "Could not load scan activity.": "Nie udało się wczytać aktywności skanu.",
 };
 
 export function useLanguage() {

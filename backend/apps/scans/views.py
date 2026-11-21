@@ -17,7 +17,8 @@ from .defectdojo import (
     DefectDojoNotConfigured,
     export_scan_to_defectdojo,
 )
-from .models import ScanBatch, ScanRun, Target
+from .events import append_scan_event
+from .models import ScanBatch, ScanEvent, ScanRun, Target
 from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
     ScanCreateSerializer,
@@ -185,7 +186,31 @@ class ScanListCreateView(APIView):
                     partial(_publish_batch, batch.pk, str(batch.delivery_id))
                 )
 
-        run = ScanRun.objects.prefetch_related("batches").get(pk=run.pk)
+            module_ids = [
+                module.get("id", "?")
+                for module in serializer.validated_data["modules"]
+                if isinstance(module, dict)
+            ]
+            append_scan_event(
+                run,
+                (
+                    f"Queued scan #{run.pk} for {len(batches)} target(s); "
+                    f"modules: {', '.join(str(item) for item in module_ids) or 'none'}."
+                ),
+                source="api",
+            )
+            for batch in batches:
+                append_scan_event(
+                    run,
+                    f"Batch queued for {batch.target_address} ({batch.target_type}).",
+                    batch=batch,
+                    source="api",
+                )
+
+        run = (
+            ScanRun.objects.prefetch_related("batches", "events__batch")
+            .get(pk=run.pk)
+        )
         return Response(ScanRunSerializer(run).data, status=status.HTTP_201_CREATED)
 
 
@@ -194,7 +219,7 @@ class ScanDetailView(APIView):
 
     def get(self, request: Request, run_id: int) -> Response:
         run = get_object_or_404(
-            _runs_for(request.user).prefetch_related("batches"),
+            _runs_for(request.user).prefetch_related("batches", "events__batch"),
             pk=run_id,
         )
         return Response(ScanRunSerializer(run).data)
@@ -264,7 +289,25 @@ class ScanCancelView(APIView):
                     "updated_at",
                 )
             )
+            if has_running:
+                append_scan_event(
+                    run,
+                    "Cancellation requested; waiting for running batches to stop.",
+                    level=ScanEvent.Level.WARN,
+                    source="api",
+                )
+            else:
+                append_scan_event(
+                    run,
+                    "Scan cancelled before worker execution.",
+                    level=ScanEvent.Level.WARN,
+                    source="api",
+                )
 
+        run = (
+            ScanRun.objects.prefetch_related("batches", "events__batch")
+            .get(pk=run.pk)
+        )
         return Response(ScanRunSerializer(run).data)
 
 

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError
 from rest_framework import serializers
 
-from .models import ScanBatch, ScanRun, Target
+from .models import ScanBatch, ScanEvent, ScanRun, Target
 from .modules import validate_modules
 from .validation import normalize_target
 
@@ -64,9 +64,30 @@ class ScanBatchSerializer(serializers.ModelSerializer):
         )
 
 
+class ScanEventSerializer(serializers.ModelSerializer):
+    target_address = serializers.SerializerMethodField()
+
+    def get_target_address(self, instance: ScanEvent) -> str | None:
+        batch = instance.batch
+        return batch.target_address if batch is not None else None
+
+    class Meta:
+        model = ScanEvent
+        fields = (
+            "id",
+            "batch_id",
+            "target_address",
+            "level",
+            "source",
+            "message",
+            "created_at",
+        )
+
+
 class ScanRunSerializer(serializers.ModelSerializer):
     modules = serializers.JSONField(source="modules_snapshot", read_only=True)
     batches = ScanBatchSerializer(many=True, read_only=True)
+    events = ScanEventSerializer(many=True, read_only=True)
     targets = serializers.SerializerMethodField()
 
     def get_targets(self, instance: ScanRun) -> list[str]:
@@ -90,12 +111,17 @@ class ScanRunSerializer(serializers.ModelSerializer):
             "started_at",
             "finished_at",
             "batches",
+            "events",
         )
 
 
 class ScanRunListSerializer(ScanRunSerializer):
     class Meta(ScanRunSerializer.Meta):
-        fields = tuple(field for field in ScanRunSerializer.Meta.fields if field != "batches")
+        fields = tuple(
+            field
+            for field in ScanRunSerializer.Meta.fields
+            if field not in {"batches", "events"}
+        )
 
 
 class ScanCreateSerializer(serializers.Serializer):

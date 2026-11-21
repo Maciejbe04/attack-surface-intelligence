@@ -7,9 +7,11 @@ import {
   createTarget,
   deleteTarget,
   exportScanToDefectDojo,
+  getScan,
   listScans,
   listTargets,
   Scan,
+  ScanDetail,
   ScanModule,
   ScanStatus,
   Target,
@@ -26,6 +28,7 @@ import {
   ModuleRegistryState,
   summarizeFilters,
 } from "./modules";
+import { ScanConsole } from "./ScanConsole";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
@@ -89,8 +92,10 @@ function ScanTable({
   canExport,
   cancellingIds,
   exportingIds,
+  focusedScanId,
   onCancel,
   onExport,
+  onOpenConsole,
   t,
 }: {
   scans: Scan[];
@@ -100,8 +105,10 @@ function ScanTable({
   canExport: boolean;
   cancellingIds: Set<number>;
   exportingIds: Set<number>;
+  focusedScanId: number | null;
   onCancel: (scan: Scan) => void;
   onExport: (scan: Scan) => void;
+  onOpenConsole: (scan: Scan) => void;
   t: Translate;
 }) {
   if (scans.length === 0) {
@@ -125,7 +132,7 @@ function ScanTable({
           <th scope="col">{t("Progress")}</th>
           <th scope="col">{t("Batches")}</th>
           <th scope="col">{t("Queued")}</th>
-          {(canMutate || canExport) && <th scope="col">{t("Actions")}</th>}
+          <th scope="col">{t("Actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -133,12 +140,13 @@ function ScanTable({
           const active = ACTIVE_SCAN_STATUSES.has(scan.status);
           const cancelling = cancellingIds.has(scan.id);
           const exporting = exportingIds.has(scan.id);
+          const focused = focusedScanId === scan.id;
           const exportable =
             canExport &&
             scan.completed_batches > 0 &&
             ["completed", "partial", "failed"].includes(scan.status);
           return (
-            <tr key={scan.id}>
+            <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
               <td className="scan-targets">
                 {scan.targets.length > 0 ? scan.targets.join(", ") : "—"}
@@ -169,32 +177,38 @@ function ScanTable({
                 )}
               </td>
               <td>{new Date(scan.created_at).toLocaleString()}</td>
-              {(canMutate || canExport) && (
-                <td className="scan-actions">
-                  {active && (
-                    <button
-                      type="button"
-                      className="btn btn--danger"
-                      onClick={() => onCancel(scan)}
-                      disabled={cancelling || scan.status === "cancel_requested"}
-                      aria-busy={cancelling}
-                    >
-                      {cancelling ? t("Cancelling…") : t("Cancel")}
-                    </button>
-                  )}
-                  {exportable && (
-                    <button
-                      type="button"
-                      className="btn btn--normal"
-                      onClick={() => onExport(scan)}
-                      disabled={exporting}
-                      aria-busy={exporting}
-                    >
-                      {exporting ? t("Exporting…") : t("Send to DefectDojo")}
-                    </button>
-                  )}
-                </td>
-              )}
+              <td className="scan-actions">
+                <button
+                  type="button"
+                  className="btn btn--normal"
+                  onClick={() => onOpenConsole(scan)}
+                  aria-pressed={focused}
+                >
+                  {focused ? t("Viewing log") : t("View log")}
+                </button>
+                {active && canMutate && (
+                  <button
+                    type="button"
+                    className="btn btn--danger"
+                    onClick={() => onCancel(scan)}
+                    disabled={cancelling || scan.status === "cancel_requested"}
+                    aria-busy={cancelling}
+                  >
+                    {cancelling ? t("Cancelling…") : t("Cancel")}
+                  </button>
+                )}
+                {exportable && (
+                  <button
+                    type="button"
+                    className="btn btn--normal"
+                    onClick={() => onExport(scan)}
+                    disabled={exporting}
+                    aria-busy={exporting}
+                  >
+                    {exporting ? t("Exporting…") : t("Send to DefectDojo")}
+                  </button>
+                )}
+              </td>
             </tr>
           );
         })}
@@ -460,6 +474,9 @@ export function App() {
   const [scanPending, setScanPending] = useState<"dashboard" | "targets" | null>(null);
   const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set());
   const [exportingIds, setExportingIds] = useState<Set<number>>(new Set());
+  const [consoleScanId, setConsoleScanId] = useState<number | null>(null);
+  const [consoleScan, setConsoleScan] = useState<ScanDetail | null>(null);
+  const [consoleLoading, setConsoleLoading] = useState(false);
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
@@ -587,6 +604,87 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [user?.id, language, scanRefreshKey]);
+
+  useEffect(() => {
+    if (!user || consoleScanId === null) {
+      setConsoleScan(null);
+      setConsoleLoading(false);
+      return;
+    }
+
+    let disposed = false;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+
+    const clearTimer = () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+
+    const pollDetail = async () => {
+      if (disposed || document.hidden || controller) return;
+      controller = new AbortController();
+      setConsoleLoading(true);
+      try {
+        const detail = await getScan(consoleScanId, controller.signal);
+        if (disposed) return;
+        setConsoleScan(detail);
+        setScans((prev) =>
+          prev.map((item) =>
+            item.id === detail.id
+              ? {
+                  ...item,
+                  status: detail.status,
+                  progress: detail.progress,
+                  completed_batches: detail.completed_batches,
+                  failed_batches: detail.failed_batches,
+                  result_summary: detail.result_summary,
+                  error: detail.error,
+                  started_at: detail.started_at,
+                  finished_at: detail.finished_at,
+                }
+              : item,
+          ),
+        );
+        if (ACTIVE_SCAN_STATUSES.has(detail.status)) {
+          timer = window.setTimeout(pollDetail, 1500);
+        }
+      } catch (error) {
+        if (!disposed && !isAbortError(error)) {
+          pushToast(
+            "error",
+            t("Console unavailable"),
+            apiErrorMessage(error, t("Could not load scan activity.")),
+          );
+          timer = window.setTimeout(pollDetail, 4000);
+        }
+      } finally {
+        controller = null;
+        if (!disposed) setConsoleLoading(false);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        clearTimer();
+        controller?.abort();
+      } else {
+        clearTimer();
+        timer = window.setTimeout(pollDetail, 0);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    void pollDetail();
+    return () => {
+      disposed = true;
+      clearTimer();
+      controller?.abort();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [user?.id, language, consoleScanId, scanRefreshKey]);
 
   useEffect(() => {
     if (!probeHost && targets.length > 0) {
@@ -775,6 +873,8 @@ export function App() {
         client_request_id: crypto.randomUUID(),
       });
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
+      setConsoleScanId(scan.id);
+      setConsoleScan(scan);
       setScanRefreshKey((value) => value + 1);
       pushToast(
         "ok",
@@ -1035,6 +1135,16 @@ export function App() {
                 t={t}
               />
 
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
+
               <section className="panel">
                 <div className="panel__header">
                   <h2>{t("Recent probe jobs")}</h2>
@@ -1048,8 +1158,10 @@ export function App() {
                     canExport={canExport}
                     cancellingIds={cancellingIds}
                     exportingIds={exportingIds}
+                    focusedScanId={consoleScanId}
                     onCancel={onCancelScan}
                     onExport={onExportScan}
+                    onOpenConsole={(scan) => setConsoleScanId(scan.id)}
                     t={t}
                   />
                 </div>
@@ -1243,6 +1355,16 @@ export function App() {
                   )}
                 </div>
               </section>
+
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
             </>
           )}
 
@@ -1252,6 +1374,15 @@ export function App() {
                 <h1>{t("Scans")}</h1>
                 <p>{t("Queued discovery jobs from the dashboard and target list.")}</p>
               </header>
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
               <div className="panel">
                 <div className="table-wrap" aria-busy={dataLoading}>
                   <ScanTable
@@ -1262,8 +1393,10 @@ export function App() {
                     canExport={canExport}
                     cancellingIds={cancellingIds}
                     exportingIds={exportingIds}
+                    focusedScanId={consoleScanId}
                     onCancel={onCancelScan}
                     onExport={onExportScan}
+                    onOpenConsole={(scan) => setConsoleScanId(scan.id)}
                     t={t}
                   />
                 </div>

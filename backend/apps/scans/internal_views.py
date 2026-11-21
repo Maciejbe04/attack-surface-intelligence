@@ -16,7 +16,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import QueueState, ScanBatch, ScanRun
+from .events import append_scan_event
+from .models import QueueState, ScanBatch, ScanEvent, ScanRun
 from .tasks import execute_batch
 
 MAX_RESULT_BYTES = 2 * 1024 * 1024
@@ -244,17 +245,27 @@ class BatchClaimView(WorkerAPIView):
                 )
 
             now = timezone.now()
+            claimed_now = False
             if batch.status == ScanBatch.Status.QUEUED:
                 batch.status = ScanBatch.Status.RUNNING
                 batch.claimed_at = now
                 batch.save(
                     update_fields=("status", "claimed_at", "updated_at")
                 )
+                claimed_now = True
             if batch.run.status == ScanRun.Status.QUEUED:
                 batch.run.status = ScanRun.Status.RUNNING
                 batch.run.started_at = now
                 batch.run.save(
                     update_fields=("status", "started_at", "updated_at")
+                )
+
+            if claimed_now:
+                append_scan_event(
+                    batch.run,
+                    f"Worker claimed batch for {batch.target_address}.",
+                    batch=batch,
+                    source="worker",
                 )
 
             return Response(
@@ -284,6 +295,15 @@ class BatchProgressView(WorkerAPIView):
                 {"detail": "progress must be between 0 and 100."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        message = request.data.get("message", "")
+        if message is None:
+            message = ""
+        if not isinstance(message, str):
+            return Response(
+                {"detail": "message must be a string."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        message = message.strip()[:2000]
 
         with transaction.atomic():
             batch = self.get_batch(batch_id, request.data.get("delivery_id"))
@@ -296,6 +316,13 @@ class BatchProgressView(WorkerAPIView):
                 batch.progress = max(batch.progress, progress)
                 batch.save(update_fields=("progress", "updated_at"))
                 _aggregate_run(batch.run)
+                if message:
+                    append_scan_event(
+                        batch.run,
+                        message,
+                        batch=batch,
+                        source="worker",
+                    )
             return Response(
                 {
                     "status": batch.status,
@@ -372,7 +399,31 @@ class BatchCompleteView(WorkerAPIView):
                     "updated_at",
                 )
             )
+            hosts = result.get("hosts") if isinstance(result.get("hosts"), list) else []
+            http_records = (
+                result.get("http") if isinstance(result.get("http"), list) else []
+            )
+            append_scan_event(
+                batch.run,
+                (
+                    f"Batch completed for {batch.target_address}: "
+                    f"{len(hosts)} host(s), {len(http_records)} HTTP observation(s)."
+                ),
+                batch=batch,
+                source="worker",
+            )
             _aggregate_run(batch.run)
+            if batch.run.status in {
+                ScanRun.Status.COMPLETED,
+                ScanRun.Status.PARTIAL,
+                ScanRun.Status.FAILED,
+                ScanRun.Status.CANCELLED,
+            }:
+                append_scan_event(
+                    batch.run,
+                    f"Scan finished with status {batch.run.status} ({batch.run.progress}%).",
+                    source="api",
+                )
             return Response({"status": batch.status})
 
 
@@ -415,5 +466,35 @@ class BatchFailView(WorkerAPIView):
             batch.save(
                 update_fields=("status", "error", "finished_at", "updated_at")
             )
+            append_scan_event(
+                batch.run,
+                f"Batch {desired_status} for {batch.target_address}: {batch.error}",
+                level=(
+                    ScanEvent.Level.WARN
+                    if desired_status == ScanBatch.Status.CANCELLED
+                    else ScanEvent.Level.ERROR
+                ),
+                batch=batch,
+                source="worker",
+            )
             _aggregate_run(batch.run)
+            if batch.run.status in {
+                ScanRun.Status.COMPLETED,
+                ScanRun.Status.PARTIAL,
+                ScanRun.Status.FAILED,
+                ScanRun.Status.CANCELLED,
+            }:
+                append_scan_event(
+                    batch.run,
+                    f"Scan finished with status {batch.run.status} ({batch.run.progress}%).",
+                    level=(
+                        ScanEvent.Level.ERROR
+                        if batch.run.status == ScanRun.Status.FAILED
+                        else ScanEvent.Level.WARN
+                        if batch.run.status
+                        in {ScanRun.Status.PARTIAL, ScanRun.Status.CANCELLED}
+                        else ScanEvent.Level.INFO
+                    ),
+                    source="api",
+                )
             return Response({"status": batch.status})

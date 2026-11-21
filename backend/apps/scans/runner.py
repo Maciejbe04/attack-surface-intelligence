@@ -391,7 +391,7 @@ def execute_scan(
     job: dict[str, Any],
     *,
     should_cancel: Callable[[], bool],
-    report_progress: Callable[[int], None],
+    report_progress: Callable[[int, str], None],
 ) -> dict[str, Any]:
     target_data = job.get("target")
     modules = job.get("modules")
@@ -407,15 +407,26 @@ def execute_scan(
     if should_cancel():
         raise ScanCancelled("Scan cancellation requested.")
 
-    report_progress(5)
     nmap_arguments, scan_mode = _nmap_arguments(target, target_type, selected)
+    report_progress(
+        5,
+        f"Starting nmap ({scan_mode}) for {target}: {' '.join(nmap_arguments[:-1])} <target>",
+    )
     nmap_output, _ = _run_command(
         nmap_arguments,
         input_data=None,
         should_cancel=should_cancel,
     )
     hosts = _parse_nmap(nmap_output)
-    report_progress(55)
+    open_ports = sum(
+        len(host.get("ports", []))
+        for host in hosts
+        if isinstance(host.get("ports"), list)
+    )
+    report_progress(
+        55,
+        f"nmap finished for {target}: {len(hosts)} host(s), {open_ports} open port(s).",
+    )
 
     needs_http = bool(
         {"http-fingerprint", "tls-cert", "signatures", "full-pipeline"} & set(selected)
@@ -425,17 +436,31 @@ def execute_scan(
     if needs_http:
         endpoints = _http_endpoints(target, hosts, selected)
         if endpoints:
+            httpx_args = _httpx_arguments(selected)
+            report_progress(
+                60,
+                f"Starting httpx for {len(endpoints)} endpoint(s): {' '.join(httpx_args)}",
+            )
             httpx_output, _ = _run_command(
-                _httpx_arguments(selected),
+                httpx_args,
                 input_data=("\n".join(endpoints) + "\n").encode("utf-8"),
                 should_cancel=should_cancel,
             )
             http_records = _parse_httpx(httpx_output)
-    report_progress(90)
+            report_progress(
+                90,
+                f"httpx finished for {target}: {len(http_records)} HTTP observation(s).",
+            )
+        else:
+            report_progress(90, f"No HTTP endpoints to probe for {target}.")
+    else:
+        report_progress(90, f"HTTP fingerprinting skipped for {target}.")
 
     run_signatures = "signatures" in selected or bool(
         selected.get("full-pipeline", {}).get("includeSignatures")
     )
+    if run_signatures:
+        report_progress(95, f"Matching signatures against observations for {target}.")
     result = {
         "target": {"address": target, "type": target_type},
         "metadata": {
@@ -451,5 +476,5 @@ def execute_scan(
     }
     if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > MAX_RESULT_BYTES:
         raise ScanRunnerError("Normalized result exceeded the 1.8 MiB limit.")
-    report_progress(100)
+    report_progress(100, f"Normalized results ready for {target}.")
     return result
