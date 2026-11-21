@@ -44,7 +44,20 @@ const PL: Record<string, string> = {
   "Add IP addresses, CIDR ranges, or hostnames. Select hosts with checkboxes, then queue a scan or remove them from the working set.":
     "Dodawaj adresy IP, zakresy CIDR i nazwy hostów. Zaznacz hosty, aby uruchomić skan lub usunąć je z zestawu.",
   "Target host": "Host docelowy",
+  "Target group": "Grupa docelowa",
   "Host / IP": "Host / IP",
+  hosts: "hostów",
+  none: "none",
+  "Group required": "Wymagana grupa",
+  "Choose a target group to scan.": "Wybierz grupę docelową do skanowania.",
+  "Choose a target group to scan all of its hosts.":
+    "Wybierz grupę, aby przeskanować wszystkie jej hosty.",
+  "Empty group": "Pusta grupa",
+  "The selected group has no hosts yet.": "Wybrana grupa nie ma jeszcze hostów.",
+  "Optional. Assign the new host to a group so it can be scanned with others.":
+    "Opcjonalnie. Przypisz nowy host do grupy, aby skanować go razem z innymi.",
+  "Pick a .txt, .csv, or .json file — not a folder.":
+    "Wybierz plik .txt, .csv lub .json — nie folder.",
   "Type an address or choose from saved targets.":
     "Wpisz adres lub wybierz jeden z zapisanych celów.",
   "Recent probe jobs": "Ostatnie zadania rozpoznania",

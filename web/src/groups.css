@@ -83,6 +83,12 @@
   color: var(--aws-danger);
 }
 
+.target-groups__none {
+  color: var(--aws-text-secondary);
+  font-size: 12px;
+  font-style: italic;
+}
+
 .group-chip {
   display: inline-block;
   max-width: 220px;

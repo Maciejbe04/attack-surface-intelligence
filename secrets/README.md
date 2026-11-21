@@ -8,6 +8,14 @@ Generate them with:
 ./scripts/init-secrets.sh
 ```
 
+**Windows / Git Bash:** uruchom `init-secrets.sh` **zanim** pierwszy raz wystartujesz Compose.
+Jeśli Compose wystartuje bez plików w `secrets/`, Docker często tworzy **puste katalogi** o nazwach sekretów (`defectdojo_admin_password` itd.). Skrypt usuwa takie puste stuby i zapisuje normalne pliki. Gdy katalog nie jest pusty:
+
+```bash
+mv secrets/defectdojo_admin_password "secrets/defectdojo_admin_password.bak.$(date +%s)"
+./scripts/init-secrets.sh
+```
+
 DefectDojo wymaga osobnego profilu Compose oraz kompletnych sekretów `defectdojo_*`.
 Najprostszy start:
 

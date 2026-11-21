@@ -6,7 +6,6 @@ import {
   createScan,
   createTarget,
   deleteTarget,
-  DefectDojoExportStatus,
   getScan,
   importTargetsFile,
   listGroups,
@@ -20,6 +19,7 @@ import {
   TargetGroup,
   TargetType,
   createGroup,
+  scanGroup,
   updateGroupMembers,
 } from "./api/scans";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
@@ -28,7 +28,6 @@ import { Language, Translate, useLanguage } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
 import { Logo } from "./Logo";
 import { GroupsPanel } from "./GroupsPanel";
-import { HostSearch } from "./HostSearch";
 import { ModulePanel } from "./ModulePanel";
 import {
   createInitialModuleState,
@@ -95,15 +94,6 @@ const STATUS_LABELS: Record<ScanStatus, string> = {
   cancelled: "Cancelled",
 };
 
-const DEFECTDOJO_STATUS_LABELS: Record<DefectDojoExportStatus, string> = {
-  none: "DD idle",
-  pending: "DD queued",
-  sending: "DD sending",
-  sent: "DD sent",
-  failed: "DD failed",
-  skipped: "DD skipped",
-};
-
 function ScanTable({
   scans,
   emptyTitle,
@@ -154,7 +144,6 @@ function ScanTable({
           const active = ACTIVE_SCAN_STATUSES.has(scan.status);
           const cancelling = cancellingIds.has(scan.id);
           const focused = focusedScanId === scan.id;
-          const defectdojoStatus = scan.defectdojo_export_status || "none";
           return (
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
@@ -184,17 +173,6 @@ function ScanTable({
                   <span className={`status-badge status-badge--${scan.status}`}>
                     {t(STATUS_LABELS[scan.status])}
                   </span>
-                  {defectdojoStatus !== "none" && (
-                    <span
-                      className={`status-badge status-badge--dd-${defectdojoStatus}`}
-                      title={
-                        scan.defectdojo_export_detail ||
-                        t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])
-                      }
-                    >
-                      {t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])}
-                    </span>
-                  )}
                 </div>
                 {scan.error && <span className="scan-error">{scan.error}</span>}
               </td>
@@ -494,6 +472,7 @@ export function App() {
   const [flash, setFlash] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [probeTarget, setProbeTarget] = useState<Target | null>(null);
+  const [probeGroupId, setProbeGroupId] = useState("");
   const [groups, setGroups] = useState<TargetGroup[]>([]);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [groupsRefreshKey, setGroupsRefreshKey] = useState(0);
@@ -504,6 +483,8 @@ export function App() {
   const [groupPending, setGroupPending] = useState(false);
   const [importGroupChoice, setImportGroupChoice] = useState("");
   const [importGroupName, setImportGroupName] = useState("");
+  const [addGroupChoice, setAddGroupChoice] = useState("");
+  const [addGroupName, setAddGroupName] = useState("");
   const [addPending, setAddPending] = useState(false);
   const [importPending, setImportPending] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -951,21 +932,45 @@ export function App() {
       setDraftError(t("This target is already on the list."));
       return;
     }
+    if (addGroupChoice === NEW_GROUP && !addGroupName.trim()) {
+      setDraftError(t("Type a name for the new group."));
+      return;
+    }
 
     setAddPending(true);
     try {
-      const target = await createTarget({
+      let target = await createTarget({
         address: value,
         type: detectType(value),
         comment: draftComment.trim(),
       });
+      let groupLabel = "";
+      if (addGroupChoice) {
+        const group = await resolveGroupChoice(addGroupChoice, addGroupName);
+        if (group) {
+          await updateGroupMembers(group.id, "add", [target.id]);
+          target = { ...target, groups: [{ id: group.id, name: group.name }] };
+          groupLabel = group.name;
+          refreshGroups();
+          if (addGroupChoice === NEW_GROUP) {
+            setAddGroupChoice(String(group.id));
+            setAddGroupName("");
+          }
+        }
+      }
       setTargets((prev) =>
-        [...prev, target].sort((a, b) => a.address.localeCompare(b.address)),
+        [...prev.filter((item) => item.id !== target.id), target].sort((a, b) =>
+          a.address.localeCompare(b.address),
+        ),
       );
       setDraft("");
       setDraftComment("");
       setDraftError(null);
-      setFlash(`${t("Added")} ${target.address}`);
+      setFlash(
+        groupLabel
+          ? `${t("Added")} ${target.address} · ${t("Group")}: ${groupLabel}`
+          : `${t("Added")} ${target.address}`,
+      );
       if (!probeTarget) setProbeTarget(target);
     } catch (error) {
       const message = apiErrorMessage(error, t("Could not add target."));
@@ -1130,12 +1135,48 @@ export function App() {
     );
   }
 
-  function runProbe() {
-    if (!probeTarget) {
-      pushToast("error", t("Host required"), t("Search for a saved host and pick it from the list."));
+  async function runProbe() {
+    if (!canMutate || scanPending !== null) return;
+    const modules = selectedModules();
+    if (modules.length === 0) {
+      pushToast("error", t("No modules"), t("Select at least one discovery module."));
       return;
     }
-    void queueScan([probeTarget.id], "dashboard");
+    const group = groups.find((item) => String(item.id) === probeGroupId);
+    if (!group) {
+      pushToast("error", t("Group required"), t("Choose a target group to scan."));
+      return;
+    }
+    if (group.target_count === 0) {
+      pushToast("error", t("Empty group"), t("The selected group has no hosts yet."));
+      return;
+    }
+    setScanPending("dashboard");
+    try {
+      const scan = await scanGroup(group.id, modules, crypto.randomUUID());
+      setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
+      setConsoleScan({
+        ...scan,
+        events: scan.events ?? [],
+        batches: scan.batches ?? [],
+      });
+      openScanConsole(scan.id);
+      setScanRefreshKey((value) => value + 1);
+      refreshGroups();
+      pushToast(
+        "ok",
+        t("Scan queued"),
+        `${t("Group")}: ${group.name} · ${group.target_count} ${t("hosts")} · ${t("Modules")}: ${modules.length}`,
+      );
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Scan not queued"),
+        apiErrorMessage(error, t("Could not queue scan.")),
+      );
+    } finally {
+      setScanPending(null);
+    }
   }
 
   function onGroupScanQueued(scan: ScanDetail) {
@@ -1317,22 +1358,33 @@ export function App() {
 
               <section className="panel">
                 <div className="panel__header">
-                  <h2>{t("Target host")}</h2>
+                  <h2>{t("Target group")}</h2>
                 </div>
                 <div className="panel__body">
                   <div className="form-row">
-                    <label htmlFor="probe-host">{t("Host / IP")}</label>
+                    <label htmlFor="probe-group">{t("Group")}</label>
                     <div>
-                      <HostSearch
-                        id="probe-host"
-                        selected={probeTarget}
-                        onSelect={setProbeTarget}
-                        t={t}
-                      />
+                      <select
+                        id="probe-group"
+                        className="input input--select"
+                        value={probeGroupId}
+                        onChange={(e) => setProbeGroupId(e.target.value)}
+                        disabled={groupsLoading}
+                      >
+                        <option value="">{t("Choose group…")}</option>
+                        {groups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name} ({group.target_count} {t("hosts")})
+                          </option>
+                        ))}
+                      </select>
                       <p className="field-help">
-                        {probeTarget
-                          ? `${t("Selected")}: ${probeTarget.address} (${probeTarget.type})`
-                          : t("Start typing to search saved hosts; pick one to scan it on its own.")}
+                        {(() => {
+                          const selected = groups.find((group) => String(group.id) === probeGroupId);
+                          return selected
+                            ? `${t("Selected")}: ${selected.name} · ${selected.target_count} ${t("hosts")}`
+                            : t("Choose a target group to scan all of its hosts.");
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -1344,8 +1396,8 @@ export function App() {
                 onToggleEnabled={toggleModuleEnabled}
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
-                onRun={runProbe}
-                canRun={canMutate && scanPending === null}
+                onRun={() => void runProbe()}
+                canRun={canMutate && scanPending === null && Boolean(probeGroupId)}
                 runPending={scanPending === "dashboard"}
                 t={t}
               />
@@ -1419,9 +1471,27 @@ export function App() {
                           id="targets-import-file"
                           className="input"
                           type="file"
-                          accept=".txt,.csv,.json,text/plain,text/csv,application/json"
-                          onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                          accept=".txt,.csv,.json,text/csv,text/plain,application/json"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] ?? null;
+                            if (file && file.size === 0 && !file.name.includes(".")) {
+                              setImportFile(null);
+                              pushToast(
+                                "error",
+                                t("Import failed"),
+                                t("Pick a .txt, .csv, or .json file — not a folder."),
+                              );
+                              e.target.value = "";
+                              return;
+                            }
+                            setImportFile(file);
+                          }}
                         />
+                        {importFile && (
+                          <p className="field-help mono">
+                            {t("Selected")}: {importFile.name} ({importFile.size} B)
+                          </p>
+                        )}
                         <p className="field-help">
                           {t(
                             "TXT: one host per line. CSV/JSON: value/address column. Up to 10 000 hosts. Uses modules selected on the Dashboard.",
@@ -1546,6 +1616,39 @@ export function App() {
                       <p className="field-help">
                         {t("Optional note describing the host, owner, environment, or purpose.")}{" "}
                         {draftComment.length}/280
+                      </p>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="add-target-group">{t("Group")}</label>
+                    <div>
+                      <select
+                        id="add-target-group"
+                        className="input input--select"
+                        value={addGroupChoice}
+                        onChange={(e) => setAddGroupChoice(e.target.value)}
+                      >
+                        <option value="">{t("No group")}</option>
+                        {groups.map((group) => (
+                          <option key={group.id} value={group.id}>
+                            {group.name} ({group.target_count})
+                          </option>
+                        ))}
+                        <option value={NEW_GROUP}>{t("New group…")}</option>
+                      </select>
+                      {addGroupChoice === NEW_GROUP && (
+                        <input
+                          id="add-target-group-name"
+                          className="input group-name-input"
+                          value={addGroupName}
+                          onChange={(e) => setAddGroupName(e.target.value)}
+                          placeholder={t("New group name")}
+                          aria-label={t("New group name")}
+                          maxLength={100}
+                        />
+                      )}
+                      <p className="field-help">
+                        {t("Optional. Assign the new host to a group so it can be scanned with others.")}
                       </p>
                     </div>
                   </div>
@@ -1723,7 +1826,7 @@ export function App() {
                           )}
                           <th scope="col">{t("Host / IP")}</th>
                           <th scope="col">{t("Comment")}</th>
-                          <th scope="col">{t("Groups")}</th>
+                          <th scope="col">{t("Group")}</th>
                           <th scope="col">{t("Type")}</th>
                           <th scope="col">{t("Added")}</th>
                         </tr>
@@ -1731,6 +1834,7 @@ export function App() {
                       <tbody>
                         {visibleTargets.map((target) => {
                           const isSelected = selected.has(target.id);
+                          const memberships = target.groups ?? [];
                           return (
                             <tr
                               key={target.id}
@@ -1751,10 +1855,10 @@ export function App() {
                                 {target.comment || <span className="target-comment--empty">—</span>}
                               </td>
                               <td className="target-groups">
-                                {target.groups.length === 0 ? (
-                                  <span className="target-comment--empty">—</span>
+                                {memberships.length === 0 ? (
+                                  <span className="target-groups__none">{t("none")}</span>
                                 ) : (
-                                  target.groups.map((group) => (
+                                  memberships.map((group) => (
                                     <button
                                       key={group.id}
                                       type="button"
