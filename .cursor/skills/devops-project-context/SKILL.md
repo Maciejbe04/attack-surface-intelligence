@@ -16,6 +16,7 @@ Read `docs/mvp-plan.md` for acceptance criteria and `docs/architecture.md` for c
 - Runtime orchestration: Docker Compose.
 - Do not add Terraform, Ansible, Kubernetes, Helm or Swarm.
 - Application stack: Go, React/TypeScript, PostgreSQL and Redis.
+- Scanning stack: nmap discovery, ProjectDiscovery httpx and custom declarative signatures.
 - Supported image architectures: `linux/amd64` and `linux/arm64`.
 - Supported local environments: Linux Docker Engine and Docker Desktop on Intel/Apple Silicon macOS.
 - No mandatory SaaS or cloud dependency.
@@ -31,7 +32,7 @@ Treat a proposal that violates these decisions as an architecture change. Explai
 - scheduler: scan windows, snapshots, batches, checkpoints and ETA;
 - redis: sessions, queue and leases;
 - postgres: durable source of truth;
-- worker: nmap, HTTP/TLS fingerprinting and signatures;
+- worker: nmap discovery, ProjectDiscovery httpx, evidence normalization and signatures;
 - backup: encrypted PostgreSQL backup and restore verification.
 
 Workers send results through the internal API. They do not receive administrative database credentials.

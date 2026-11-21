@@ -24,7 +24,7 @@ Preserve these logical services:
 - scheduler: schedules, snapshots, batches, deadlines and ETA;
 - redis: sessions, queue and leases;
 - postgres: durable source of truth;
-- worker: nmap and HTTP/TLS fingerprinting;
+- worker: nmap discovery, ProjectDiscovery httpx and custom fingerprint signatures;
 - backup: encrypted PostgreSQL backup.
 
 Workers submit results through the internal API. Do not give workers database administrator credentials or Docker socket access.
@@ -64,6 +64,7 @@ Mount secrets from gitignored files with mode `0600`. Keep examples limited to n
 - Use multi-stage Dockerfiles with `TARGETOS` and `TARGETARCH`.
 - Prefer Go builds with `CGO_ENABLED=0`.
 - Install nmap from the target image package repository; never copy a host binary.
+- Build a pinned ProjectDiscovery httpx version from source for the target architecture; do not use the unrelated Python package named httpx.
 - Ensure every base image publishes both `linux/amd64` and `linux/arm64`.
 - Define multi-platform builds in `docker-bake.hcl`.
 - Use QEMU for validation only, not as the default local runtime.

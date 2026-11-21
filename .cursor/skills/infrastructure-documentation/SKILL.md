@@ -100,6 +100,7 @@ Important current decisions:
 - local-first operation;
 - native amd64 and arm64 images;
 - adaptive nmap SYN/TCP connect mode;
+- nmap discovery followed by ProjectDiscovery httpx and custom declarative signatures;
 - immutable scanner observations plus persistent manual overrides;
 - application-level AES-256-GCM for sensitive fields.
 

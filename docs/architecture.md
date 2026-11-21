@@ -30,7 +30,7 @@ flowchart TB
       end
 
       subgraph scannerNet [Sieć scanner egress]
-        Worker[Workery nmap i HTTP TLS]
+        Worker[Workery nmap httpx i sygnatury]
       end
 
       DatabaseVolume[(Wolumen danych)]
@@ -123,14 +123,25 @@ Worker wykonuje:
 
 - discovery nmap;
 - identyfikację portów i usług;
-- HTTP/HTTPS fingerprinting;
-- analizę TLS;
+- wsadowe sondowanie HTTP/HTTPS przez ProjectDiscovery httpx;
+- analizę TLS i wstępną detekcję technologii z JSONL httpx;
 - customowe sygnatury;
+- normalizację evidence i obliczanie confidence score;
 - bezpieczne zbieranie evidence.
 
 Worker otrzymuje jedynie token umożliwiający pobieranie zadań i przesyłanie wyników. Nie posiada poświadczeń administracyjnych bazy ani dostępu do socketu Dockera.
 
 Na zgodnym Linuksie worker używa SYN scan. Na Docker Desktop lub bez raw sockets przechodzi na TCP connect scan. Tryb skanu jest zapisany przy wyniku.
+
+Pipeline workera:
+
+```text
+nmap → endpointy HTTP(S) → httpx JSONL → własne sygnatury → evidence → confidence score
+```
+
+httpx jest uruchamiany dla partii endpointów, a jego JSONL jest przetwarzany strumieniowo. Wersja narzędzia, użyte opcje i limity trafiają do metadanych przebiegu. Detekcje technologii są dowodami wejściowymi dla wspólnego modelu pewności, a nie bezwarunkowym wynikiem.
+
+Własny moduł Go uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, ograniczone fragmenty HTML i dozwolone ścieżki. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
 
 ### PostgreSQL
 
@@ -172,7 +183,7 @@ Sieć z kontrolowanym wyjściem do dozwolonych celów. Podłączone są do niej 
 3. Scheduler tworzy snapshot przebiegu i batche.
 4. Batche trafiają do Redis.
 5. Worker pobiera zadanie i ponownie waliduje cel.
-6. Worker uruchamia nmap i fingerprinting.
+6. Worker uruchamia nmap, przekazuje wykryte endpointy HTTP/HTTPS do httpx i wykonuje własne sygnatury.
 7. Wynik wraz z evidence trafia do wewnętrznego API.
 8. API normalizuje i szyfruje dane wrażliwe.
 9. Silnik różnic porównuje obserwację z poprzednim pełnym przebiegiem.
@@ -196,7 +207,7 @@ Własne obrazy są budowane przez `docker buildx bake` dla:
 - `linux/amd64`;
 - `linux/arm64`.
 
-Kod Go jest kompilowany dla `TARGETOS/TARGETARCH` bez zależności wymagających CGO. nmap pochodzi z repozytorium pakietów obrazu bazowego dla właściwej architektury. Frontend jest zestawem statycznych plików niezależnych od CPU.
+Kod Go jest kompilowany dla `TARGETOS/TARGETARCH` bez zależności wymagających CGO. nmap pochodzi z repozytorium pakietów obrazu bazowego dla właściwej architektury. Przypięta wersja ProjectDiscovery httpx jest budowana ze źródeł dla docelowej architektury w wieloetapowym Dockerfile. Frontend jest zestawem statycznych plików niezależnych od CPU.
 
 Ten sam commit musi przejść build, migracje, healthcheck, logowanie, import, testowy skan i eksport na obu architekturach.
 

@@ -29,7 +29,9 @@ System służy wyłącznie do discovery. Nie wykonuje logowania, brute force ani
 - PostgreSQL: główne źródło prawdy;
 - Redis: sesje, kolejka i koordynacja zadań;
 - Docker Compose: lokalne uruchamianie całego stosu;
-- nmap: discovery i identyfikacja usług.
+- nmap: discovery i identyfikacja portów oraz usług;
+- ProjectDiscovery httpx: wydajne sondowanie HTTP/HTTPS, TLS i wstępna detekcja technologii;
+- własny silnik sygnatur: normalizacja evidence i obliczanie poziomu pewności.
 
 Oficjalnie wspierane platformy:
 
@@ -105,7 +107,7 @@ Scheduler:
 
 Każdy przebieg posiada `window_start` oraz `deadline`. Po zakończeniu okna scheduler zatrzymuje aktywne procesy, oznacza pozostałe batche jako `paused` i wznawia je w następnym oknie bez powtarzania ukończonej pracy.
 
-nmap działa w osobnej grupie procesów. Najpierw otrzymuje sygnał łagodnego zakończenia, a po upływie grace period jest bezwarunkowo kończony. Wynik częściowy nie wpływa na status `MISSING` ani `GONE`.
+nmap i httpx działają w osobnych grupach procesów. Najpierw otrzymują sygnał łagodnego zakończenia, a po upływie grace period są bezwarunkowo kończone. Wynik częściowy nie wpływa na status `MISSING` ani `GONE`.
 
 ETA wykorzystuje EWMA przepustowości poprzednich batchy dla danego profilu skanu. Rozmiar batcha jest dynamiczny:
 
@@ -133,17 +135,41 @@ Worker przy starcie testuje dostępność raw sockets. Na zgodnym Linuksie używ
 
 ## Fingerprinting
 
-Worker zbiera:
+Oficjalny pipeline fingerprintingu:
 
-- port, protokół i nazwę usługi;
+```text
+nmap → endpointy HTTP(S) → httpx JSONL → własne sygnatury → evidence → confidence score
+```
+
+nmap wykrywa aktywne hosty, porty i podstawowe usługi. httpx otrzymuje wyłącznie endpointy HTTP/HTTPS znalezione podczas discovery i przetwarza je partiami, zamiast uruchamiać osobny proces dla każdego adresu.
+
+httpx odpowiada za:
+
 - status i tytuł HTTP;
 - przekierowania;
-- nagłówki;
-- nazwy cookies;
-- certyfikat TLS;
+- podstawowe nagłówki i nazwę serwera;
+- informacje o certyfikacie TLS;
 - favicon hash;
+- wstępną detekcję technologii.
+
+Własny moduł Go normalizuje JSONL z httpx, zbiera ograniczone dane wymagane przez customowe sygnatury i tworzy evidence dla:
+
+- nagłówków;
+- nazw cookies;
 - ograniczone fragmenty HTML;
-- wyniki bezpiecznych ścieżek, np. `/login`, `/admin` lub `/version`.
+- bezpiecznych ścieżek, np. `/login`, `/admin` lub `/version`;
+- wyników technologicznych zwróconych przez httpx.
+
+httpx jest źródłem dowodów, a nie bezwarunkową prawdą. Każdy fingerprint przechodzi przez wspólny model confidence score. Nie używamy WhatWeb ani Nuclei jako obowiązkowego elementu MVP.
+
+Wymagania operacyjne httpx:
+
+- przypięta, jawnie udokumentowana wersja;
+- uruchamianie wsadowe i strumieniowe przetwarzanie JSONL;
+- wspólny rate limit oraz deadline profilu skanu;
+- limit przekierowań, odpowiedzi i czasu;
+- brak automatycznego rozszerzania celu poza allowlistę;
+- zapis wersji narzędzia i użytych opcji w metadanych przebiegu.
 
 Każda detekcja przechowuje dowody i score `0–100`. Domyślne wagi:
 
@@ -202,7 +228,7 @@ Import i eksport CSV/JSON używa wersjonowanego schematu. Wybrane obserwacje mog
 
 `compose.yml` nie wymusza `linux/amd64`, nie używa `network_mode: host`, ścieżek właściwych dla pojedynczego systemu ani binariów kopiowanych z hosta.
 
-API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika zależności wymagających CGO. Frontend buduje się do statycznych zasobów niezależnych od CPU.
+API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika zależności wymagających CGO. Przypięta wersja httpx jest budowana ze źródeł w wieloetapowym Dockerfile dla docelowej architektury. Frontend buduje się do statycznych zasobów niezależnych od CPU.
 
 `docker buildx bake` buduje obrazy `linux/amd64` i `linux/arm64`. Emulacja QEMU służy do walidacji, natomiast lokalnie uruchamiany jest natywny wariant.
 
@@ -212,7 +238,7 @@ API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika 
 - Docker Engine z Compose albo Docker Desktop;
 - udokumentowanej minimalnej ilości RAM i miejsca.
 
-Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis ani nmap.
+Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis, nmap ani httpx.
 
 ## Kryteria akceptacji
 
@@ -224,6 +250,7 @@ Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis ani nmap.
 - Koniec okna nie pozostawia procesów potomnych.
 - Ukończone batche nie są powtarzane po wznowieniu.
 - Dashboard pokazuje czas, postęp i ETA.
+- httpx przetwarza endpointy partiami, respektuje rate limit i generuje poprawnie normalizowany JSONL na obu architekturach.
 - Nieudany pomiar nie powoduje `MISSING` ani `GONE`.
 - Test obejmuje nowy host, usługę, zmianę technologii, zmianę certyfikatu, pojedynczy brak, `FLAKY` i `GONE`.
 - Viewer nie wykonuje zapisu.
@@ -240,7 +267,7 @@ Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis ani nmap.
 2. Model PostgreSQL, migracje, logowanie, sesje i RBAC.
 3. Formularze oraz import celów i wyników CSV/JSON.
 4. Scheduler, kolejka, batche, checkpointy i okna czasowe.
-5. Discovery nmap oraz HTTP/TLS fingerprinting.
+5. Discovery nmap oraz wsadowy HTTP/TLS fingerprinting przez ProjectDiscovery httpx.
 6. Deklaratywne sygnatury i score pewności.
 7. Historia, diff oraz stany `NEW/CHANGED/MISSING/FLAKY/GONE`.
 8. Dashboard, trwałe edycje i eksport.
