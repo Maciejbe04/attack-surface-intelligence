@@ -24,6 +24,7 @@ import {
   updateGroupMembers,
 } from "./api/scans";
 import { apiFetch, AuthUser } from "./auth";
+import { HostSearch } from "./HostSearch";
 import { newUuid } from "./uuid";
 import { AppFooter } from "./AppFooter";
 import { FindingsPanel, LifecycleKpis } from "./FindingsPanel";
@@ -506,6 +507,7 @@ export function App() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [probeMode, setProbeMode] = useState<"group" | "host">("group");
   const [probeTarget, setProbeTarget] = useState<Target | null>(null);
   const [probeGroupId, setProbeGroupId] = useState("");
   const [groups, setGroups] = useState<TargetGroup[]>([]);
@@ -1181,10 +1183,15 @@ export function App() {
     }
     setScanPending(source);
     try {
+      const windowSeconds =
+        source === "dashboard" && scanWindowSeconds !== ""
+          ? Number(scanWindowSeconds)
+          : undefined;
       const scan = await createScan({
         target_ids: targetIds,
         modules,
         client_request_id: newUuid(),
+        ...(windowSeconds != null ? { window_seconds: windowSeconds } : {}),
       });
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
       setConsoleScan({
@@ -1225,6 +1232,14 @@ export function App() {
     const modules = selectedModules();
     if (modules.length === 0) {
       pushToast("error", t("No modules"), t("Select at least one discovery module."));
+      return;
+    }
+    if (probeMode === "host") {
+      if (!probeTarget) {
+        pushToast("error", t("Host required"), t("Choose a saved host to scan."));
+        return;
+      }
+      await queueScan([probeTarget.id], "dashboard");
       return;
     }
     const group = groups.find((item) => String(item.id) === probeGroupId);
@@ -1475,43 +1490,80 @@ export function App() {
                 <h1>{t("Dashboard")}</h1>
                 <p>
                   {t(
-                    "Pick a host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.",
+                    "Pick a target group or host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.",
                   )}
                 </p>
               </header>
 
               <section className="panel">
-                <div className="panel__header">
-                  <h2>{t("Target group")}</h2>
+                <div className="panel__header panel__header--split">
+                  <h2>{probeMode === "group" ? t("Target group") : t("Target host")}</h2>
+                  <div className="mode-toggle" role="group" aria-label={t("Probe target mode")}>
+                    <button
+                      type="button"
+                      className={`mode-toggle__btn ${probeMode === "group" ? "is-active" : ""}`}
+                      aria-pressed={probeMode === "group"}
+                      onClick={() => setProbeMode("group")}
+                    >
+                      {t("Target group")}
+                    </button>
+                    <button
+                      type="button"
+                      className={`mode-toggle__btn ${probeMode === "host" ? "is-active" : ""}`}
+                      aria-pressed={probeMode === "host"}
+                      onClick={() => setProbeMode("host")}
+                    >
+                      {t("Target host")}
+                    </button>
+                  </div>
                 </div>
                 <div className="panel__body">
-                  <div className="form-row">
-                    <label htmlFor="probe-group">{t("Group")}</label>
-                    <div>
-                      <select
-                        id="probe-group"
-                        className="input input--select"
-                        value={probeGroupId}
-                        onChange={(e) => setProbeGroupId(e.target.value)}
-                        disabled={groupsLoading}
-                      >
-                        <option value="">{t("Choose group…")}</option>
-                        {groups.map((group) => (
-                          <option key={group.id} value={group.id}>
-                            {group.name} ({group.target_count} {t("hosts")})
-                          </option>
-                        ))}
-                      </select>
-                      <p className="field-help">
-                        {(() => {
-                          const selected = groups.find((group) => String(group.id) === probeGroupId);
-                          return selected
-                            ? `${t("Selected")}: ${selected.name} · ${selected.target_count} ${t("hosts")}`
-                            : t("Choose a target group to scan all of its hosts.");
-                        })()}
-                      </p>
+                  {probeMode === "group" ? (
+                    <div className="form-row">
+                      <label htmlFor="probe-group">{t("Group")}</label>
+                      <div>
+                        <select
+                          id="probe-group"
+                          className="input input--select"
+                          value={probeGroupId}
+                          onChange={(e) => setProbeGroupId(e.target.value)}
+                          disabled={groupsLoading}
+                        >
+                          <option value="">{t("Choose group…")}</option>
+                          {groups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name} ({group.target_count} {t("hosts")})
+                            </option>
+                          ))}
+                        </select>
+                        <p className="field-help">
+                          {(() => {
+                            const selected = groups.find((group) => String(group.id) === probeGroupId);
+                            return selected
+                              ? `${t("Selected")}: ${selected.name} · ${selected.target_count} ${t("hosts")}`
+                              : t("Choose a target group to scan all of its hosts.");
+                          })()}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="form-row">
+                      <label htmlFor="probe-host">{t("Host / IP")}</label>
+                      <div>
+                        <HostSearch
+                          id="probe-host"
+                          selected={probeTarget}
+                          onSelect={setProbeTarget}
+                          t={t}
+                        />
+                        <p className="field-help">
+                          {probeTarget
+                            ? `${t("Selected")}: ${probeTarget.address}`
+                            : t("Type an address or choose from saved targets.")}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="form-row">
                     <label htmlFor="scan-window">{t("Scan window")}</label>
                     <div>
@@ -1542,7 +1594,11 @@ export function App() {
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
                 onRun={() => void runProbe()}
-                canRun={canMutate && scanPending === null && Boolean(probeGroupId)}
+                canRun={
+                  canMutate &&
+                  scanPending === null &&
+                  (probeMode === "group" ? Boolean(probeGroupId) : Boolean(probeTarget))
+                }
                 runPending={scanPending === "dashboard"}
                 t={t}
               />

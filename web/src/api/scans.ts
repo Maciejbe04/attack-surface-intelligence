@@ -176,6 +176,7 @@ export type CreateScanRequest = {
   target_ids: number[];
   modules: ScanModule[];
   client_request_id: string;
+  window_seconds?: number | null;
 };
 
 export type DefectDojoExportResult = {

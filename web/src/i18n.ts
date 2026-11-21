@@ -41,10 +41,14 @@ const PL: Record<string, string> = {
   Scans: "Skanowania",
   "Pick a host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
     "Wybierz host i uruchom moduły rozpoznania. SurfaceX wykonuje wyłącznie bezpieczne sondy — bez logowania, brute force i exploitacji.",
+  "Pick a target group or host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
+    "Wybierz grupę lub host i uruchom moduły rozpoznania. SurfaceX wykonuje wyłącznie bezpieczne sondy — bez logowania, brute force i exploitacji.",
   "Add IP addresses, CIDR ranges, or hostnames. Select hosts with checkboxes, then queue a scan or remove them from the working set.":
     "Dodawaj adresy IP, zakresy CIDR i nazwy hostów. Zaznacz hosty, aby uruchomić skan lub usunąć je z zestawu.",
   "Target host": "Host docelowy",
   "Target group": "Grupa docelowa",
+  "Probe target mode": "Tryb celu sondy",
+  "Choose a saved host to scan.": "Wybierz zapisany host do skanowania.",
   "Host / IP": "Host / IP",
   hosts: "hostów",
   none: "none",
