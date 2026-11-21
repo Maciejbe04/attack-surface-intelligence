@@ -34,8 +34,8 @@ Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
 ## Uwierzytelnianie
 
 - hasła: Argon2id;
-- sesje: losowy identyfikator w Redis;
-- cookie: `HttpOnly`, `SameSite=Strict`;
+- sesje: cookie Django (`HttpOnly`, `SameSite=Lax` lokalnie);
+- opcjonalne MFA: TOTP (Authenticator) — szczegóły w `docs/auth-mfa.md`;
 - flaga `Secure`: wymagana przy HTTPS; lokalnie bez TLS dopuszczalne jest wyłączenie `Secure` wyłącznie w profilu `local-dev`;
 - limit prób logowania oraz audyt nieudanych logowań;
 - sesja ma idle timeout i absolute timeout.

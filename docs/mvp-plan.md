@@ -360,6 +360,7 @@ Dostępne:
 - `docs/encryption.md`: pola, klucze i rotacja;
 - `docs/demo-script.md`: demonstracja dwóch skanów;
 - `docs/local-platforms.md`: Linux/macOS/Windows, amd64/arm64 i tryby nmap;
+- `docs/auth-mfa.md`: logowanie i TOTP MFA;
 - `docs/adr-001-http-fingerprinting.md`: wybór httpx.
 
 Do uzupełnienia wraz z implementacją:

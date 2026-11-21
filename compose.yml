@@ -15,7 +15,10 @@ x-api-env: &api-env
   POSTGRES_PORT: "5432"
   CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
   CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-  REDIS_URL: redis://redis:6379/2
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/2}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:18080,http://127.0.0.1:18080}
+  BOOTSTRAP_ADMIN_USER: ${BOOTSTRAP_ADMIN_USER:-admin}
+  BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme}
 
 services:
   gateway:

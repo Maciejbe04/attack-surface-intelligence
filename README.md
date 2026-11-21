@@ -80,6 +80,7 @@ Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła 
 - [Szyfrowanie](docs/encryption.md)
 - [Scenariusz demo](docs/demo-script.md)
 - [Platformy lokalne](docs/local-platforms.md)
+- [Logowanie i MFA](docs/auth-mfa.md)
 - [ADR-001: wybór silnika HTTP fingerprintingu](docs/adr-001-http-fingerprinting.md)
 
 ## Poza zakresem MVP

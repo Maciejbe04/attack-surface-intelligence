@@ -104,6 +104,33 @@ a:hover {
   font-size: 12px;
 }
 
+.topnav__signout {
+  margin-left: var(--space-m);
+  height: 28px;
+  font-size: 12px;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl);
+  background: var(--aws-bg);
+}
+
+.login-card {
+  width: min(440px, 100%);
+  margin: 0;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  margin-bottom: var(--space-m);
+  font-size: 18px;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 220px 1fr;

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 
 type Health = {
   status: string;
@@ -24,8 +25,7 @@ function detectType(value: string): HostTarget["type"] {
 
 function isValidTarget(value: string): boolean {
   const v = value.trim();
-  if (!v) return false;
-  if (v.includes(" ")) return false;
+  if (!v || v.includes(" ")) return false;
   if (detectType(v) === "ip") {
     return v.split(".").every((part) => {
       const n = Number(part);
@@ -57,7 +57,173 @@ function loadTargets(): HostTarget[] {
   }
 }
 
+function LoginScreen({
+  onAuthenticated,
+}: {
+  onAuthenticated: (user: AuthUser) => void;
+}) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submitPassword(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await ensureCsrf();
+      const response = await apiFetch("/api/auth/login/", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.detail || "Sign-in failed.");
+        return;
+      }
+      if (data.mfa_required) {
+        setMfaToken(data.mfa_token);
+        return;
+      }
+      onAuthenticated(data.user as AuthUser);
+    } catch {
+      setError("Cannot reach authentication API.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitMfa(event: FormEvent) {
+    event.preventDefault();
+    if (!mfaToken) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await apiFetch("/api/auth/mfa/verify/", {
+        method: "POST",
+        body: JSON.stringify({ mfa_token: mfaToken, code: mfaCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.detail || "Invalid MFA code.");
+        if (data.mfa_token) setMfaToken(data.mfa_token);
+        return;
+      }
+      onAuthenticated(data.user as AuthUser);
+    } catch {
+      setError("Cannot reach authentication API.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="login-page">
+      <div className="login-card panel">
+        <div className="panel__header">
+          <h2>{mfaToken ? "Multi-factor authentication" : "Sign in"}</h2>
+        </div>
+        <div className="panel__body">
+          <div className="login-brand">
+            <span className="topnav__mark" aria-hidden="true" />
+            <strong>SurfaceX</strong>
+          </div>
+          <p className="field-help" style={{ marginBottom: 16 }}>
+            {mfaToken
+              ? "Enter the 6-digit code from your authenticator app."
+              : "Use your console username and password."}
+          </p>
+
+          {error && (
+            <div className="flash flash--error" role="alert">
+              <div>
+                <strong>Authentication error</strong>
+                <p>{error}</p>
+              </div>
+            </div>
+          )}
+
+          {!mfaToken ? (
+            <form onSubmit={submitPassword}>
+              <div className="form-row">
+                <label htmlFor="username">Username</label>
+                <input
+                  id="username"
+                  className="input"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="password">Password</label>
+                <input
+                  id="password"
+                  type="password"
+                  className="input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              <div className="actions">
+                <button type="submit" className="btn btn--primary" disabled={busy}>
+                  {busy ? "Signing in…" : "Sign in"}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={submitMfa}>
+              <div className="form-row">
+                <label htmlFor="mfa">MFA code</label>
+                <div>
+                  <input
+                    id="mfa"
+                    className="input"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                    autoComplete="one-time-code"
+                    required
+                  />
+                  <p className="field-help">TOTP from Google Authenticator, 1Password, or Authy.</p>
+                </div>
+              </div>
+              <div className="actions">
+                <button type="submit" className="btn btn--primary" disabled={busy || mfaCode.length < 6}>
+                  {busy ? "Verifying…" : "Verify"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--normal"
+                  disabled={busy}
+                  onClick={() => {
+                    setMfaToken(null);
+                    setMfaCode("");
+                    setError(null);
+                  }}
+                >
+                  Back
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("targets");
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
@@ -68,16 +234,20 @@ export function App() {
   const [flash, setFlash] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/health/")
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((data: Health) => {
-        setHealth(data);
+    Promise.all([
+      apiFetch("/api/auth/me/").then(async (r) => r.json()),
+      fetch("/api/health/").then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
+    ])
+      .then(([me, healthData]) => {
+        if (me.authenticated) setUser(me.user as AuthUser);
+        setHealth(healthData as Health);
         setHealthError(null);
       })
-      .catch((err: Error) => setHealthError(err.message));
+      .catch((err: Error) => setHealthError(err.message))
+      .finally(() => setBootstrapping(false));
   }, []);
 
   useEffect(() => {
@@ -86,11 +256,15 @@ export function App() {
 
   const allSelected = targets.length > 0 && selected.size === targets.length;
   const someSelected = selected.size > 0 && selected.size < targets.length;
-
   const selectedTargets = useMemo(
     () => targets.filter((t) => selected.has(t.id)),
     [targets, selected],
   );
+
+  async function signOut() {
+    await apiFetch("/api/auth/logout/", { method: "POST", body: "{}" });
+    setUser(null);
+  }
 
   function toggleAll() {
     if (allSelected) {
@@ -120,13 +294,15 @@ export function App() {
       setDraftError("This target is already on the list.");
       return;
     }
-    const item: HostTarget = {
-      id: crypto.randomUUID(),
-      value,
-      type: detectType(value),
-      addedAt: new Date().toISOString(),
-    };
-    setTargets((prev) => [item, ...prev]);
+    setTargets((prev) => [
+      {
+        id: crypto.randomUUID(),
+        value,
+        type: detectType(value),
+        addedAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
     setDraft("");
     setDraftError(null);
     setFlash(`Added ${value}`);
@@ -147,6 +323,18 @@ export function App() {
     );
   }
 
+  if (bootstrapping) {
+    return (
+      <div className="login-page">
+        <p className="field-help">Loading console…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen onAuthenticated={setUser} />;
+  }
+
   return (
     <div className="app">
       <header className="topnav">
@@ -159,12 +347,18 @@ export function App() {
             className={`status-dot ${health?.database ? "is-ok" : healthError ? "is-bad" : ""}`}
             aria-hidden="true"
           />
+          {user.username} · {user.role}
+          {user.mfa_enabled ? " · MFA on" : ""}
+          {" · "}
           {healthError
-            ? `API unreachable (${healthError})`
+            ? `API unreachable`
             : health
-              ? `API ${health.status} · DB ${health.database ? "up" : "down"}`
+              ? `API ${health.status}`
               : "Checking API…"}
         </span>
+        <button type="button" className="btn btn--normal topnav__signout" onClick={signOut}>
+          Sign out
+        </button>
       </header>
 
       <div className="layout">
@@ -328,9 +522,7 @@ export function App() {
                               </td>
                               <td className="mono">{target.value}</td>
                               <td>{target.type}</td>
-                              <td>
-                                {new Date(target.addedAt).toLocaleString()}
-                              </td>
+                              <td>{new Date(target.addedAt).toLocaleString()}</td>
                             </tr>
                           );
                         })}
