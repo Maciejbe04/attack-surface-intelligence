@@ -436,6 +436,7 @@ const PL: Record<string, string> = {
   "Add entry": "Dodaj wpis",
   "No allowlist entries — all saved targets may be scanned.":
     "Brak wpisów allowlisty — można skanować wszystkie zapisane cele.",
+  "Could not load allowlist.": "Nie udało się wczytać allowlisty.",
   "Could not add allowlist entry.": "Nie udało się dodać wpisu allowlisty.",
   "Could not remove allowlist entry.": "Nie udało się usunąć wpisu allowlisty.",
   Override: "Override",

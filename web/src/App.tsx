@@ -46,6 +46,7 @@ import {
   summarizeFilters,
 } from "./modules";
 import { ScanConsole } from "./ScanConsole";
+import { AllowlistPanel } from "./AllowlistPanel";
 import { SystemLockButton, SystemPanel } from "./SystemPanel";
 import { UsersPanel } from "./UsersPanel";
 import { useHighContrast } from "./useHighContrast";
@@ -59,7 +60,14 @@ function formatEta(seconds: number | null | undefined): string {
   return `~${Math.round(minutes / 60)}h`;
 }
 
-type NavId = "dashboard" | "targets" | "groups" | "scans" | "users" | "system";
+type NavId =
+  | "dashboard"
+  | "targets"
+  | "groups"
+  | "scans"
+  | "allowlist"
+  | "users"
+  | "system";
 
 /** Select value meaning "create a new group with the typed name". */
 const NEW_GROUP = "__new__";
@@ -1525,6 +1533,14 @@ export function App() {
           >
             {t("Scans")}
           </button>
+          <button
+            type="button"
+            className={`sidenav__item ${nav === "allowlist" ? "is-active" : ""}`}
+            aria-current={nav === "allowlist" ? "page" : undefined}
+            onClick={() => setNav("allowlist")}
+          >
+            {t("Allowlist")}
+          </button>
           {user?.role === "admin" && (
             <button
               type="button"
@@ -2321,6 +2337,14 @@ export function App() {
             </>
           )}
 
+          {nav === "allowlist" && (
+            <AllowlistPanel
+              active
+              canManage={user?.role === "admin" || user?.role === "operator"}
+              t={t}
+            />
+          )}
+
           {nav === "users" && user?.role === "admin" && (
             <UsersPanel
               active
@@ -2345,12 +2369,7 @@ export function App() {
           )}
 
           {nav === "system" && (
-            <SystemPanel
-              active
-              isAdmin={user?.role === "admin"}
-              canManageAllowlist={user?.role === "admin" || user?.role === "operator"}
-              t={t}
-            />
+            <SystemPanel active isAdmin={user?.role === "admin"} t={t} />
           )}
         </main>
       </div>

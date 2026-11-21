@@ -15,7 +15,7 @@ Root na LXC: `LabTest#2026`. HTTP `:80` (nginx).
 ## Szybka ścieżka (UI)
 
 1. Zaloguj się jako `admin` lub `operator`.
-2. **System → Allowlist** — upewnij się, że są `10.99.0.70–72` (live już zseedowane dla admin/jacek).
+2. Zakładka **Allowlist** — upewnij się, że są `10.99.0.70–72` (live już zseedowane dla admin/jacek).
 3. **Targets → Import** — wgraj `demo/targets.json` (lub użyj istniejącej grupy `lab-lxc`).
 4. Uruchom skan grupy **`lab-lxc`** z oknem np. 15 minut (`window_seconds`).
 5. Po zakończeniu: Findings → lifecycle `NEW`, technologies / confidence, Compare.

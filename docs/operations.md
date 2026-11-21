@@ -65,7 +65,7 @@ Zob. `docs/backup-restore.md`. Kontener `backup` zapisuje `*.sql.enc` do wolumen
 | Objaw | Co sprawdzić |
 |---|---|
 | 502 / maintenance | gateway + `api` healthy |
-| Scan not queued / allowlist | System → Allowlist; wpisy właściciela |
+| Scan not queued / allowlist | zakładka Allowlist; wpisy właściciela |
 | Worker nie claimuje | `WORKER_TOKEN`, sieć `scanner`, logi worker |
 | DefectDojo down | `COMPOSE_PROFILES=defectdojo`, `./scripts/doctor-defectdojo.sh` |
 | Sesja „wylogowuje” | ten sam origin (IP vs domena); `X-Sessionid` fallback w UI |
