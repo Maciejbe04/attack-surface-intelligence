@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>SurfaceX — HackNation 2026</title>
+<style>
+  @page { size: 1920px 1080px; margin: 0; }
+  :root {
+    --ink: #11141c; --navy: #1c2230; --muted: #5b6475; --line: #dde1e8; --paper: #f4f5f7;
+    --yellow: #ffcc00; --green: #1f8a4c; --amber: #b7791f; --red: #c53030;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #888; }
+  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1920px; height: 1080px; background: var(--paper); position: relative; overflow: hidden; page-break-after: always; break-after: page; padding: 96px 120px 110px; display: flex; flex-direction: column; }
+  .slide:last-child { page-break-after: auto; break-after: auto; }
+  .kicker { font: 700 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 22px; }
+  .kicker b { color: var(--ink); background: var(--yellow); padding: 4px 10px; margin-right: 12px; }
+  h1 { font-size: 72px; line-height: 1.05; letter-spacing: -.02em; font-weight: 800; }
+  h2 { font-size: 58px; line-height: 1.1; letter-spacing: -.015em; font-weight: 800; margin-bottom: 44px; max-width: 1500px; }
+  p, li { font-size: 30px; line-height: 1.45; }
+  .muted { color: var(--muted); }
+  .foot { position: absolute; left: 120px; right: 120px; bottom: 44px; display: flex; justify-content: space-between; font: 500 20px/1 ui-monospace, Menlo, monospace; color: var(--muted); }
+  .foot .logo { font: 800 24px/1 -apple-system, Helvetica, Arial, sans-serif; color: var(--ink); }
+  .foot .logo span { color: #8a6d00; } /* dark gold: yellow fails contrast on light paper */
+  .x, .title .foot .logo span { color: var(--yellow); }
+  .cols { display: grid; gap: 56px; flex: 1; min-height: 0; align-items: start; }
+  .c2 { grid-template-columns: 1fr 1fr; } .c37 { grid-template-columns: 0.9fr 1.1fr; } .c3 { grid-template-columns: repeat(3, 1fr); }
+  ul.clean { list-style: none; } ul.clean li { padding-left: 38px; position: relative; margin-bottom: 20px; }
+  ul.clean li::before { content: ""; position: absolute; left: 0; top: 17px; width: 18px; height: 6px; background: var(--yellow); }
+  .card { background: #fff; border: 1px solid var(--line); border-top: 6px solid var(--navy); padding: 36px 36px 30px; }
+  .card h3 { font-size: 32px; margin-bottom: 14px; }
+  .card p { font-size: 26px; color: #333a48; }
+  .big { font: 800 84px/1 -apple-system, Helvetica, Arial, sans-serif; letter-spacing: -.03em; margin-bottom: 10px; }
+  .shot { width: 100%; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(17,20,28,.16); display: block; background: #fff; }
+  .shotwrap { overflow: hidden; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(17,20,28,.16); background: #fff; }
+  .shotwrap img { width: 100%; display: block; }
+  .cap { font-size: 21px; color: var(--muted); margin-top: 12px; }
+  .badge { display: inline-block; font: 700 20px/1 ui-monospace, Menlo, monospace; padding: 7px 12px; border: 2px solid; margin-right: 8px; vertical-align: middle; }
+  .b-new { color: var(--green); border-color: var(--green); background: #eaf6ef; }
+  .b-chg { color: var(--amber); border-color: var(--amber); background: #fdf5e6; }
+  .b-mis { color: #6b4fbb; border-color: #6b4fbb; background: #f1edfb; }
+  .b-gone { color: var(--red); border-color: var(--red); background: #fdeeee; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { text-align: left; padding: 15px 20px; border-bottom: 1px solid var(--line); font-size: 24px; vertical-align: top; }
+  th { font: 700 18px/1.2 ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); background: #fafbfc; }
+  td.w { font: 700 24px ui-monospace, Menlo, monospace; white-space: nowrap; }
+  .ok { color: var(--green); font-weight: 800; } .part { color: var(--amber); font-weight: 800; }
+  /* title */
+  .title { background: var(--navy); color: #fff; justify-content: center; }
+  .title h1 { font-size: 112px; } .title .x { font-weight: 900; }
+  .title .lead { font-size: 40px; color: #c9cfdb; max-width: 1350px; margin-top: 34px; line-height: 1.35; }
+  .title .meta { margin-top: 70px; display: flex; gap: 70px; font-size: 26px; color: #c9cfdb; }
+  .title .meta b { display: block; color: var(--yellow); font: 700 18px/1 ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 12px; }
+  .title .foot { color: #8f98aa; } .title .foot .logo { color: #fff; }
+  .mark { position: absolute; right: 120px; top: 50%; transform: translateY(-50%); width: 360px; height: 360px; }
+  /* architecture */
+  svg text { font-family: -apple-system, Helvetica, Arial, sans-serif; }
+  .cmd { background: var(--navy); color: #e6e9f0; font: 500 27px/1.7 ui-monospace, Menlo, monospace; padding: 34px 40px; }
+  .cmd .p { color: var(--yellow); }
+  .demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+  .video { background: var(--navy); color: #fff; padding: 34px 40px; margin-top: 8px; }
+  .video b { color: var(--yellow); font: 700 18px/1 ui-monospace, Menlo, monospace; letter-spacing: .14em; text-transform: uppercase; display: block; margin-bottom: 12px; }
+  .video a { color: #fff; font-size: 30px; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide title">
+  <div class="kicker" style="color:#8f98aa"><b>HackNation 2026</b>Zadanie CBI AGH · Attack Surface Intelligence</div>
+  <h1>Surface<span class="x">X</span></h1>
+  <p class="lead">Cykliczny discovery scan dużych sieci: aktywne hosty, usługi, fingerprint HTTP/TLS i technologie, z oznaczaniem zmian między przebiegami i eksportem do DefectDojo.</p>
+  <div class="meta">
+    <div><b>Zespół</b>{{TEAM}}</div>
+    <div><b>Stos</b>nmap · httpx · Django · React · Celery · PostgreSQL</div>
+    <div><b>Uruchomienie</b>docker compose up</div>
+  </div>
+  <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+    <g fill="#ffcc00"><path d="M50 8 L56 26 L50 22 L44 26Z"/><path d="M50 92 L44 74 L50 78 L56 74Z"/><path d="M8 50 L26 44 L22 50 L26 56Z"/><path d="M92 50 L74 56 L78 50 L74 44Z"/></g>
+    <circle cx="50" cy="50" r="9" fill="none" stroke="#ffcc00" stroke-width="3"/>
+  </svg>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>01 / 10</span></div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <div class="kicker"><b>Problem</b>Centrum Bezpieczeństwa Informacji AGH</div>
+  <h2>Jednorazowy skan nie pokazuje pełnej powierzchni ataku dużej uczelni</h2>
+  <div class="cols c3">
+    <div class="card"><div class="big">10 000+</div><h3>adresów IP</h3><p>Rozległa adresacja wymaga dzielenia na podgrupy, kontroli tempa i mierzenia czasu skanu.</p></div>
+    <div class="card"><div class="big">~</div><h3>Hosty niestabilne</h3><p>Usługi odpowiadają tylko w niektórych oknach czasowych. Jak raportować zmianę i kiedy uznać host za nieaktywny?</p></div>
+    <div class="card"><div class="big">?</div><h3>Co tam działa</h3><p>Otwarty port to za mało. Liczy się CMS, panel admina, staging, stary komponent, ciasteczka — i trafienie tego do DefectDojo.</p></div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>02 / 10</span></div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <div class="kicker"><b>Architektura</b>Kontenery Docker · linux/amd64 + arm64</div>
+  <h2>Jeden port na zewnątrz, skanowanie w izolowanym workerze</h2>
+  <svg viewBox="0 0 1680 640" width="1680" height="640" role="img" aria-label="Architektura SurfaceX">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#5b6475"/></marker></defs>
+    <g font-size="26" fill="#11141c">
+      <rect x="0" y="250" width="230" height="120" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="115" y="302" text-anchor="middle" font-weight="700">Przeglądarka</text><text x="115" y="338" text-anchor="middle" font-size="21" fill="#5b6475">4 role RBAC</text>
+      <rect x="320" y="250" width="250" height="120" fill="#1c2230"/>
+      <text x="445" y="302" text-anchor="middle" font-weight="700" fill="#fff">gateway</text><text x="445" y="338" text-anchor="middle" font-size="21" fill="#c9cfdb">nginx · jedyny port</text>
+      <rect x="660" y="90" width="260" height="110" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="790" y="138" text-anchor="middle" font-weight="700">web</text><text x="790" y="172" text-anchor="middle" font-size="21" fill="#5b6475">React · dashboard</text>
+      <rect x="660" y="255" width="260" height="110" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="790" y="303" text-anchor="middle" font-weight="700">api</text><text x="790" y="337" text-anchor="middle" font-size="21" fill="#5b6475">Django REST · RBAC</text>
+      <rect x="660" y="420" width="260" height="110" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="790" y="468" text-anchor="middle" font-weight="700">scheduler</text><text x="790" y="502" text-anchor="middle" font-size="21" fill="#5b6475">harmonogramy · okna</text>
+      <rect x="1010" y="255" width="250" height="110" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="1135" y="303" text-anchor="middle" font-weight="700">Redis</text><text x="1135" y="337" text-anchor="middle" font-size="21" fill="#5b6475">kolejka batchy</text>
+      <rect x="1010" y="455" width="250" height="110" fill="#fff" stroke="#11141c" stroke-width="2"/>
+      <text x="1135" y="503" text-anchor="middle" font-weight="700">PostgreSQL</text><text x="1135" y="537" text-anchor="middle" font-size="21" fill="#5b6475">dowody AES-256-GCM</text>
+      <rect x="1350" y="230" width="330" height="160" fill="#ffcc00"/>
+      <text x="1515" y="285" text-anchor="middle" font-weight="800">worker</text><text x="1515" y="322" text-anchor="middle" font-size="22">nmap · httpx</text><text x="1515" y="354" text-anchor="middle" font-size="22">sygnatury YAML</text>
+      <rect x="1350" y="455" width="330" height="110" fill="#fff" stroke="#c53030" stroke-width="2"/>
+      <text x="1515" y="503" text-anchor="middle" font-weight="700">DefectDojo</text><text x="1515" y="537" text-anchor="middle" font-size="21" fill="#5b6475">findingi Info</text>
+      <rect x="1350" y="60" width="330" height="110" fill="none" stroke="#11141c" stroke-width="2" stroke-dasharray="10 8"/>
+      <text x="1515" y="108" text-anchor="middle" font-weight="700">Skanowana sieć</text><text x="1515" y="142" text-anchor="middle" font-size="21" fill="#5b6475">IP · CIDR · domeny</text>
+    </g>
+    <g stroke="#5b6475" stroke-width="3" fill="none" marker-end="url(#a)">
+      <path d="M230 310 H316"/><path d="M570 300 L656 160"/><path d="M570 310 H656"/>
+      <path d="M920 310 H1006"/><path d="M790 420 V369"/><path d="M1260 310 H1346"/>
+      <path d="M1515 230 V174"/><path d="M1350 390 L1264 470"/><path d="M1515 390 V451"/><path d="M920 340 L1006 480"/>
+    </g>
+  </svg>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>03 / 10</span></div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <div class="kicker"><b>Discovery</b>Bezpieczne i kontrolowane skanowanie</div>
+  <h2>Tylko sondy — bez logowania, brute force i exploitów</h2>
+  <div class="cols c37">
+    <ul class="clean">
+      <li><b>Import</b> IP, zakresów CIDR i domen z formularza lub pliku CSV / JSON / TXT (do 10 000 hostów)</li>
+      <li><b>Podział na batche</b> — każdy cel to osobne zadanie w kolejce, postęp i czas widać na żywo</li>
+      <li><b>Kontrola tempa</b> — <span class="mono">--max-rate</span>, timing i retries nmap, rate-limit httpx</li>
+      <li><b>Grupy hostów</b> i <b>harmonogram</b>: co N godzin, codziennie, co tydzień</li>
+      <li><b>Okno czasowe</b> — po przekroczeniu batche są wstrzymywane i wznawiane później</li>
+    </ul>
+    <div><div class="shotwrap"><img src="img/scan1-running.jpg" alt="Skan na żywo z logiem komend nmap i httpx"></div><div class="cap">Skan grupy „Lab demo” w toku: postęp batchy i prawdziwe komendy nmap/httpx w konsoli</div></div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>04 / 10</span></div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <div class="kicker"><b>Fingerprinting</b>HTTP · TLS · technologie · sygnatury</div>
+  <h2>Nie tylko otwarty port — co faktycznie działa pod adresem</h2>
+  <div class="cols c37">
+    <ul class="clean">
+      <li><b>HTTP/HTTPS:</b> kod odpowiedzi, tytuł strony, serwer, przekierowania</li>
+      <li><b>TLS:</b> certyfikat (CN, wystawca) dla usług HTTPS</li>
+      <li><b>Technologie:</b> CMS, framework, serwer aplikacyjny, wersje — np. WordPress 6.4.2, PHP 7.4.33 (EOL)</li>
+      <li><b>Własne sygnatury YAML:</b> nagłówek, ciasteczko, fragment HTML, ścieżka, wersja z regexu; wagi dają poziom pewności (low / medium / high)</li>
+    </ul>
+    <div><div class="shotwrap"><img src="img/findings-tech.jpg" alt="Lista obserwacji z technologiami"></div><div class="cap">Obserwacje ze skanu labu: WordPress, PHP, Nginx, HSTS — każda z poziomem pewności</div></div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>05 / 10</span></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <div class="kicker"><b>Zmiany w czasie</b>Porównanie kolejnych przebiegów</div>
+  <h2>Każda obserwacja ma cykl życia między skanami</h2>
+  <div class="cols c37">
+    <div>
+      <p style="margin-bottom:28px"><span class="badge b-new">NEW</span> nowa usługa lub host</p>
+      <p style="margin-bottom:28px"><span class="badge b-chg">CHANGED</span> zmienione atrybuty (np. tytuł, wersja)</p>
+      <p style="margin-bottom:28px"><span class="badge b-mis">MISSING</span> → <span class="badge b-mis">FLAKY</span> → <span class="badge b-gone">GONE</span><br><span class="muted">brak odpowiedzi w 1 / 2 / 3 kolejnych przebiegach — tak obsługujemy hosty niestabilne</span></p>
+      <p class="muted" style="font-size:26px">W demo: nowa aplikacja (NEW), staging z nową wersją i trybem DEBUG (CHANGED), wyłączony serwer pomiarowy (MISSING).</p>
+    </div>
+    <div><div class="shotwrap"><img src="img/diff-summary.jpg" alt="Wynik drugiego skanu z oznaczeniem zmian"></div><div class="cap">Skan #2: NEW 6 · CHANGED 1 — reszta UNCHANGED, wyłączona usługa jako MISSING</div></div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>06 / 10</span></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <div class="kicker"><b>Demo</b>Działający prototyp na lokalnym labie</div>
+  <h2>7 usług w Dockerze, dwa skany, zmiana infrastruktury pomiędzy</h2>
+  <div class="cols c37">
+    <div>
+      <ul class="clean">
+        <li>Import CSV → grupa → harmonogram → skan</li>
+        <li>Fingerprint: CMS, panel admina, staging, kamera IoT, TLS</li>
+        <li>Zmiana labu → skan #2 → NEW / CHANGED / MISSING</li>
+        <li>Eksport JSON/CSV, DefectDojo, rola viewer</li>
+      </ul>
+      <div class="video"><b>Nagranie demo (~4 min, napisy PL)</b><a href="{{VIDEO_URL}}">{{VIDEO_URL}}</a></div>
+      <p class="cap" style="margin-top:18px">Lab do odtworzenia w repo: <span class="mono">demo/lab/lab.sh up</span></p>
+    </div>
+    <div class="demo-grid">
+      <div class="shotwrap"><img src="img/findings-http.jpg" alt="Fingerprint HTTP"></div>
+      <div class="shotwrap"><img src="img/diff-CHANGED.jpg" alt="Filtr CHANGED"></div>
+      <div class="shotwrap"><img src="img/schedule.jpg" alt="Harmonogram grupy"></div>
+      <div class="shotwrap"><img src="img/defectdojo.jpg" alt="Findingi w DefectDojo"></div>
+    </div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>07 / 10</span></div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <div class="kicker"><b>RBAC i dane</b>Role · szyfrowanie · integracja</div>
+  <h2>Uprawnienia sprawdzane w API, dowody zaszyfrowane w bazie</h2>
+  <div class="cols c2">
+    <table>
+      <tr><th>Rola</th><th>Uprawnienia</th></tr>
+      <tr><td class="w">admin</td><td>Administracja — wszystkie cele, skany i grupy</td></tr>
+      <tr><td class="w">operator</td><td>Dodawanie, usuwanie, modyfikacja celów i grup, uruchamianie skanów</td></tr>
+      <tr><td class="w">analyst</td><td>Odczyt + eksport wyników (JSON/CSV, DefectDojo)</td></tr>
+      <tr><td class="w">viewer</td><td>Tylko odczyt</td></tr>
+    </table>
+    <ul class="clean">
+      <li><b>Encryption at rest:</b> surowe dowody fingerprintu jako koperty AES-256-GCM <span class="mono">sx1:</span></li>
+      <li><b>Sekrety</b> jako Docker secrets, generowane skryptem — nie w repo</li>
+      <li><b>DefectDojo:</b> automatyczny eksport po skanie jako findingi Info (live host, usługa, technologia)</li>
+      <li><b>Opcjonalne MFA</b> (TOTP) dla kont</li>
+    </ul>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>08 / 10</span></div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <div class="kicker"><b>Kryteria oceny</b>Uczciwy stan na dzień zgłoszenia</div>
+  <h2 style="margin-bottom:30px">Pokrycie wymagań AGH</h2>
+  <table>
+    <tr><th style="width:110px">Waga</th><th style="width:640px">Kryterium</th><th>Co działa</th><th style="width:150px">Stan</th></tr>
+    <tr><td class="w">30%</td><td>Discovery i identyfikacja usług</td><td>nmap: hosty, porty, -sV; batche, import CIDR/IP/domen</td><td class="ok">gotowe</td></tr>
+    <tr><td class="w">15%</td><td>Zmiany w czasie, hosty niestabilne, raportowanie</td><td>NEW / CHANGED / MISSING → FLAKY → GONE</td><td class="ok">gotowe</td></tr>
+    <tr><td class="w">20%</td><td>Jakość, dokumentacja, uruchomienie, import/eksport, DefectDojo</td><td>docker compose, CSV/JSON import i eksport, auto-eksport do DefectDojo</td><td class="ok">gotowe</td></tr>
+    <tr><td class="w">15%</td><td>Bezpieczeństwo, kontrola intensywności, dashboard</td><td>max-rate, timing, okno z pauzą i wznowieniem; dashboard z licznikami zmian</td><td class="part">częściowo</td></tr>
+    <tr><td class="w">10%</td><td>Fingerprinting, CMS, nagłówki, ciasteczka, sygnatury</td><td>httpx: tytuł, serwer, TLS, tech-detect; silnik sygnatur YAML</td><td class="part">częściowo</td></tr>
+    <tr><td class="w">10%</td><td>Role i zabezpieczenie danych</td><td>4 role w API, tryb read-only w UI, AES-256-GCM dla dowodów</td><td class="ok">gotowe</td></tr>
+  </table>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>09 / 10</span></div>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <div class="kicker"><b>Start i dalej</b>Łatwe uruchomienie · roadmapa</div>
+  <h2>Działa lokalnie w czterech komendach</h2>
+  <div class="cols c2">
+    <div class="cmd">
+      <span class="p">$</span> cp .env.example .env<br>
+      <span class="p">$</span> ./scripts/init-secrets.sh<br>
+      <span class="p">$</span> docker compose up --build -d<br>
+      <span class="p">$</span> ./demo/lab/lab.sh up <span style="color:#8f98aa"># lab testowy</span><br><br>
+      <span style="color:#8f98aa">UI → http://localhost:8080</span>
+    </div>
+    <div>
+      <h3 style="font-size:34px;margin-bottom:22px">Następne kroki</h3>
+      <ul class="clean">
+        <li>Edycja wyników i nadpisań w UI z zachowaniem przy kolejnych skanach</li>
+        <li>Pełne nagłówki i ciasteczka w widoku obserwacji, ocena „ciekawości”</li>
+        <li>Wykrywanie różnic zależnych od pory dnia</li>
+        <li>Zarządzanie użytkownikami w UI</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span class="logo">Surface<span>X</span></span><span>10 / 10</span></div>
+</section>
+
+</body>
+</html>
