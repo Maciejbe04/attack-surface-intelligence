@@ -7,7 +7,7 @@ const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
 await p.goto(pathToFileURL(`${dir}/index.html`).href, { waitUntil: "networkidle" });
 await p.evaluate(([team, video]) => {
   document.body.innerHTML = document.body.innerHTML.replaceAll("{{TEAM}}", team).replaceAll("{{VIDEO_URL}}", video);
-}, [process.env.TEAM || "—", process.env.VIDEO_URL || "w polu „dodatkowe materiały” w HackTribe"]);
+}, [process.env.TEAM || "Molekuły", process.env.VIDEO_URL || "w polu „dodatkowe materiały” w HackTribe"]);
 await p.waitForLoadState("load");
 await p.evaluate(() => document.fonts.ready);
 await p.evaluate(() => Promise.all([...document.images].map((i) => i.complete ? 0 : new Promise((r) => (i.onload = i.onerror = r)))));

@@ -19,4 +19,4 @@ for f in "$OUT"/shots/*.png; do
   sips -s format jpeg -s formatOptions 80 "$f" --out "$REPO/demo/pitch/img/$n.jpg" >/dev/null
 done
 cp "$REPO/demo/pitch/build.mjs" "$PW_DIR/build.mjs"
-(cd "$PW_DIR" && PITCH_DIR="$REPO/demo/pitch" OUT_PDF="$OUT/SurfaceX-HackNation2026.pdf" TEAM="${TEAM:-}" VIDEO_URL="${VIDEO_URL:-}" node build.mjs)
+(cd "$PW_DIR" && PITCH_DIR="$REPO/demo/pitch" OUT_PDF="$OUT/SurfaceX-HackNation2026.pdf" TEAM="${TEAM:-Molekuły}" VIDEO_URL="${VIDEO_URL:-}" node build.mjs)
