@@ -8,7 +8,9 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp, anulowanie oraz eksport ukończonych obserwacji do opcjonalnego DefectDojo.
 
-Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Harmonogramy użytkownika oraz pause/resume pozostają kolejnym etapem.
+Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Pause/resume pozostaje kolejnym etapem.
+
+Hosty można łączyć w grupy (host może należeć do wielu grup): ręcznie na stronie **Targets** (filtr, zaznaczenie, „Add selected to group”), przy imporcie TXT/CSV/JSON albo na stronie **Groups**. Grupę można przeskanować od razu albo zaplanować: co N godzin, codziennie lub co tydzień o wybranej godzinie UTC. Wyniki zaplanowanych skanów trafiają automatycznie do DefectDojo jak każdy zakończony skan. Pojedynczy host do skanu na pulpicie wybiera się wyszukiwarką, która przeszukuje zapisane cele (adres i komentarz) po stronie API. Szczegóły: [Grupy i harmonogramy](docs/groups-schedules.md).
 
 ## Szybki start
 

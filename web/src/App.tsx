@@ -9,6 +9,7 @@ import {
   DefectDojoExportStatus,
   getScan,
   importTargetsFile,
+  listGroups,
   listScans,
   listTargets,
   Scan,
@@ -16,13 +17,18 @@ import {
   ScanModule,
   ScanStatus,
   Target,
+  TargetGroup,
   TargetType,
+  createGroup,
+  updateGroupMembers,
 } from "./api/scans";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 import { AppFooter } from "./AppFooter";
 import { Language, Translate, useLanguage } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
 import { Logo } from "./Logo";
+import { GroupsPanel } from "./GroupsPanel";
+import { HostSearch } from "./HostSearch";
 import { ModulePanel } from "./ModulePanel";
 import {
   createInitialModuleState,
@@ -34,7 +40,10 @@ import { SystemLockButton, SystemPanel } from "./SystemPanel";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
-type NavId = "dashboard" | "targets" | "scans" | "system";
+type NavId = "dashboard" | "targets" | "groups" | "scans" | "system";
+
+/** Select value meaning "create a new group with the typed name". */
+const NEW_GROUP = "__new__";
 
 type Toast = {
   id: string;
@@ -150,6 +159,12 @@ function ScanTable({
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
               <td className="scan-targets">
+                {scan.group_name && (
+                  <span className="scan-origin">
+                    <span className="group-chip">{scan.group_name}</span>
+                    {scan.scheduled && <span className="scan-origin__schedule">{t("scheduled")}</span>}
+                  </span>
+                )}
                 {scan.targets.length > 0 ? scan.targets.join(", ") : "—"}
               </td>
               <td>
@@ -466,7 +481,17 @@ export function App() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [probeHost, setProbeHost] = useState("");
+  const [probeTarget, setProbeTarget] = useState<Target | null>(null);
+  const [groups, setGroups] = useState<TargetGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsRefreshKey, setGroupsRefreshKey] = useState(0);
+  const [targetQuery, setTargetQuery] = useState("");
+  const [targetGroupFilter, setTargetGroupFilter] = useState("");
+  const [bulkGroupChoice, setBulkGroupChoice] = useState("");
+  const [bulkGroupName, setBulkGroupName] = useState("");
+  const [groupPending, setGroupPending] = useState(false);
+  const [importGroupChoice, setImportGroupChoice] = useState("");
+  const [importGroupName, setImportGroupName] = useState("");
   const [addPending, setAddPending] = useState(false);
   const [importPending, setImportPending] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -522,7 +547,7 @@ export function App() {
     if (!user) {
       setTargets([]);
       setSelected(new Set());
-      setProbeHost("");
+      setProbeTarget(null);
       return;
     }
     const controller = new AbortController();
@@ -568,9 +593,10 @@ export function App() {
         const nextScans = await listScans(controller.signal);
         if (disposed) return;
         setScans(nextScans);
-        if (nextScans.some((scan) => ACTIVE_SCAN_STATUSES.has(scan.status))) {
-          timer = window.setTimeout(poll, 2000);
-        }
+        // Fast while something runs; slow otherwise so scans started by a
+        // group schedule (server-side, no user action) still show up.
+        const active = nextScans.some((scan) => ACTIVE_SCAN_STATUSES.has(scan.status));
+        timer = window.setTimeout(poll, active ? 2000 : 15000);
       } catch (error) {
         if (!disposed && !isAbortError(error)) {
           pushToast(
@@ -603,7 +629,8 @@ export function App() {
       controller?.abort();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [user?.id, language, scanRefreshKey]);
+    // nav: refetch immediately when the user switches pages.
+  }, [user?.id, language, scanRefreshKey, nav]);
 
   useEffect(() => {
     if (!user || consoleScanId === null) {
@@ -709,13 +736,55 @@ export function App() {
   }
 
   useEffect(() => {
-    if (!probeHost && targets.length > 0) {
-      setProbeHost(targets[0].address);
+    if (!user) {
+      setGroups([]);
+      return;
     }
-  }, [targets, probeHost]);
+    const controller = new AbortController();
+    setGroupsLoading(true);
+    listGroups(controller.signal)
+      .then(setGroups)
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          pushToast("error", t("Groups unavailable"), apiErrorMessage(error, t("Could not load groups.")));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setGroupsLoading(false);
+      });
+    return () => controller.abort();
+  }, [user?.id, language, groupsRefreshKey]);
 
-  const allSelected = targets.length > 0 && selected.size === targets.length;
-  const someSelected = selected.size > 0 && selected.size < targets.length;
+  function refreshGroups() {
+    setGroupsRefreshKey((value) => value + 1);
+  }
+
+  async function refreshTargets() {
+    try {
+      setTargets(await listTargets());
+    } catch (error) {
+      pushToast("error", t("Targets unavailable"), apiErrorMessage(error, t("Could not load targets.")));
+    }
+  }
+
+  // Filter on the loaded list so selection, bulk actions and counts stay in sync.
+  const visibleTargets = useMemo(() => {
+    const query = targetQuery.trim().toLowerCase();
+    const groupId = targetGroupFilter ? Number(targetGroupFilter) : null;
+    return targets.filter((target) => {
+      if (groupId !== null && !target.groups.some((group) => group.id === groupId)) return false;
+      if (!query) return true;
+      return (
+        target.address.toLowerCase().includes(query) ||
+        target.comment.toLowerCase().includes(query) ||
+        target.groups.some((group) => group.name.toLowerCase().includes(query))
+      );
+    });
+  }, [targets, targetQuery, targetGroupFilter]);
+
+  const visibleSelectedCount = visibleTargets.filter((target) => selected.has(target.id)).length;
+  const allSelected = visibleTargets.length > 0 && visibleSelectedCount === visibleTargets.length;
+  const someSelected = visibleSelectedCount > 0 && !allSelected;
   const selectedTargets = useMemo(
     () => targets.filter((t) => selected.has(t.id)),
     [targets, selected],
@@ -731,11 +800,55 @@ export function App() {
   }
 
   function toggleAll() {
-    if (allSelected) {
-      setSelected(new Set());
-      return;
+    // Acts on the filtered rows only, so "filter, select all, scan" is a bulk scan.
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const target of visibleTargets) {
+        if (allSelected) next.delete(target.id);
+        else next.add(target.id);
+      }
+      return next;
+    });
+  }
+
+  function showGroupHosts(groupId: number) {
+    setTargetGroupFilter(String(groupId));
+    setTargetQuery("");
+    setNav("targets");
+  }
+
+  async function resolveGroupChoice(choice: string, newName: string): Promise<TargetGroup | null> {
+    if (choice === NEW_GROUP) return createGroup({ name: newName.trim() });
+    return groups.find((group) => String(group.id) === choice) ?? null;
+  }
+
+  async function changeSelectedMembership(action: "add" | "remove") {
+    if (!canMutate || groupPending || selected.size === 0) return;
+    const choice = action === "remove" ? targetGroupFilter : bulkGroupChoice;
+    if (!choice || (choice === NEW_GROUP && !bulkGroupName.trim())) return;
+    setGroupPending(true);
+    try {
+      const group = await resolveGroupChoice(choice, bulkGroupName);
+      if (!group) return;
+      const result = await updateGroupMembers(group.id, action, [...selected]);
+      await refreshTargets();
+      refreshGroups();
+      if (choice === NEW_GROUP) {
+        setBulkGroupChoice(String(group.id));
+        setBulkGroupName("");
+      }
+      if (action === "remove") setSelected(new Set());
+      setFlash(
+        action === "add"
+          ? `${t("Added to group")} ${result.name}: ${result.changed_count}`
+          : `${t("Removed from group")} ${result.name}: ${result.changed_count}`,
+      );
+    } catch (error) {
+      pushToast("error", t("Group not updated"), apiErrorMessage(error, t("Could not update the group.")));
+      refreshGroups();
+    } finally {
+      setGroupPending(false);
     }
-    setSelected(new Set(targets.map((t) => t.id)));
   }
 
   function toggleOne(id: number) {
@@ -841,7 +954,7 @@ export function App() {
       setDraftComment("");
       setDraftError(null);
       setFlash(`${t("Added")} ${target.address}`);
-      if (!probeHost) setProbeHost(target.address);
+      if (!probeTarget) setProbeTarget(target);
     } catch (error) {
       const message = apiErrorMessage(error, t("Could not add target."));
       setDraftError(message);
@@ -859,13 +972,26 @@ export function App() {
       pushToast("error", t("No modules"), t("Select at least one discovery module."));
       return;
     }
+    if (importGroupChoice === NEW_GROUP && !importGroupName.trim()) {
+      pushToast("error", t("Group name required"), t("Type a name for the new group."));
+      return;
+    }
     setImportPending(true);
     try {
       const result = await importTargetsFile(importFile, {
         startScan: importStartScan,
         modules: importStartScan ? modules : undefined,
         clientRequestId: crypto.randomUUID(),
+        groupId:
+          importGroupChoice && importGroupChoice !== NEW_GROUP ? Number(importGroupChoice) : undefined,
+        groupName: importGroupChoice === NEW_GROUP ? importGroupName.trim() : undefined,
       });
+      refreshGroups();
+      setImportGroupName("");
+      const groupNote =
+        result.groups.length > 0
+          ? ` · ${t("Groups")}: ${result.groups.map((group) => group.name).join(", ")}`
+          : "";
       const refreshed = await listTargets();
       setTargets(refreshed);
       setImportFile(null);
@@ -874,7 +1000,8 @@ export function App() {
       setFlash(
         `${t("Imported targets")}: ${result.total_count} ` +
           `(${t("new")}: ${result.created_count}, ${t("existing")}: ${result.existing_count})` +
-          (result.scan ? ` · ${t("Scan")} #${result.scan.id}` : ""),
+          (result.scan ? ` · ${t("Scan")} #${result.scan.id}` : "") +
+          groupNote,
       );
       if (result.scan) {
         setScans((prev) => [result.scan!, ...prev.filter((item) => item.id !== result.scan!.id)]);
@@ -925,7 +1052,8 @@ export function App() {
     const removedTargets = targets.filter((target) => removedIds.has(target.id));
     setTargets((prev) => prev.filter((target) => !removedIds.has(target.id)));
     setSelected((prev) => new Set([...prev].filter((id) => !removedIds.has(id))));
-    if (removedTargets.some((target) => target.address === probeHost)) setProbeHost("");
+    if (removedTargets.some((target) => target.id === probeTarget?.id)) setProbeTarget(null);
+    if (removedIds.size > 0) refreshGroups();
     if (removedIds.size > 0) {
       setFlash(`${t("Removed targets")}: ${removedIds.size}`);
     }
@@ -991,19 +1119,19 @@ export function App() {
   }
 
   function runProbe() {
-    const host = probeHost.trim();
-    if (!host) {
-      pushToast("error", t("Host required"), t("Select a saved host / IP to probe."));
+    if (!probeTarget) {
+      pushToast("error", t("Host required"), t("Search for a saved host and pick it from the list."));
       return;
     }
-    const target = targets.find(
-      (item) => item.address.toLowerCase() === host.toLowerCase(),
-    );
-    if (!target) {
-      pushToast("error", t("Saved target required"), t("Choose a target saved in Targets."));
-      return;
-    }
-    void queueScan([target.id], "dashboard");
+    void queueScan([probeTarget.id], "dashboard");
+  }
+
+  function onGroupScanQueued(scan: ScanDetail) {
+    setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
+    setConsoleScan({ ...scan, events: scan.events ?? [], batches: scan.batches ?? [] });
+    openScanConsole(scan.id);
+    setScanRefreshKey((value) => value + 1);
+    setNav("scans");
   }
 
   async function onCancelScan(scan: Scan) {
@@ -1133,6 +1261,14 @@ export function App() {
           </button>
           <button
             type="button"
+            className={`sidenav__item ${nav === "groups" ? "is-active" : ""}`}
+            aria-current={nav === "groups" ? "page" : undefined}
+            onClick={() => setNav("groups")}
+          >
+            {t("Groups")}
+          </button>
+          <button
+            type="button"
             className={`sidenav__item ${nav === "scans" ? "is-active" : ""}`}
             aria-current={nav === "scans" ? "page" : undefined}
             onClick={() => setNav("scans")}
@@ -1175,23 +1311,16 @@ export function App() {
                   <div className="form-row">
                     <label htmlFor="probe-host">{t("Host / IP")}</label>
                     <div>
-                      <input
+                      <HostSearch
                         id="probe-host"
-                        className="input"
-                        list="known-hosts"
-                        value={probeHost}
-                        onChange={(e) => setProbeHost(e.target.value)}
-                        placeholder="10.0.0.15 or app.example.lab"
-                        autoComplete="off"
-                        spellCheck={false}
+                        selected={probeTarget}
+                        onSelect={setProbeTarget}
+                        t={t}
                       />
-                      <datalist id="known-hosts">
-                        {targets.map((target) => (
-                          <option key={target.id} value={target.address} />
-                        ))}
-                      </datalist>
                       <p className="field-help">
-                        {t("Type an address or choose from saved targets.")}
+                        {probeTarget
+                          ? `${t("Selected")}: ${probeTarget.address} (${probeTarget.type})`
+                          : t("Start typing to search saved hosts; pick one to scan it on its own.")}
                       </p>
                     </div>
                   </div>
@@ -1284,6 +1413,41 @@ export function App() {
                         <p className="field-help">
                           {t(
                             "TXT: one host per line. CSV/JSON: value/address column. Up to 10 000 hosts. Uses modules selected on the Dashboard.",
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <label htmlFor="targets-import-group">{t("Add to group")}</label>
+                      <div>
+                        <select
+                          id="targets-import-group"
+                          className="input input--select"
+                          value={importGroupChoice}
+                          onChange={(e) => setImportGroupChoice(e.target.value)}
+                        >
+                          <option value="">{t("No group")}</option>
+                          {groups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name} ({group.target_count})
+                            </option>
+                          ))}
+                          <option value={NEW_GROUP}>{t("New group…")}</option>
+                        </select>
+                        {importGroupChoice === NEW_GROUP && (
+                          <input
+                            id="targets-import-group-name"
+                            className="input group-name-input"
+                            value={importGroupName}
+                            onChange={(e) => setImportGroupName(e.target.value)}
+                            placeholder={t("New group name")}
+                            aria-label={t("New group name")}
+                            maxLength={100}
+                          />
+                        )}
+                        <p className="field-help">
+                          {t(
+                            "Every host in the file joins this group. CSV files can also set groups per row in a group column (several names separated by ;).",
                           )}
                         </p>
                       </div>
@@ -1391,6 +1555,91 @@ export function App() {
               )}
 
               <section className="panel">
+                <div className="target-filters">
+                  <div className="target-filters__field">
+                    <label htmlFor="targets-filter-query">{t("Filter")}</label>
+                    <input
+                      id="targets-filter-query"
+                      className="input"
+                      type="search"
+                      value={targetQuery}
+                      onChange={(e) => setTargetQuery(e.target.value)}
+                      placeholder={t("Address, comment, or group")}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <div className="target-filters__field">
+                    <label htmlFor="targets-filter-group">{t("Group")}</label>
+                    <select
+                      id="targets-filter-group"
+                      className="input input--select"
+                      value={targetGroupFilter}
+                      onChange={(e) => setTargetGroupFilter(e.target.value)}
+                    >
+                      <option value="">{t("All hosts")}</option>
+                      {groups.map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name} ({group.target_count})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {canMutate && (
+                    <div className="target-filters__field target-filters__bulk" aria-busy={groupPending}>
+                      <label htmlFor="targets-bulk-group">{t("Add selected to group")}</label>
+                      <div className="target-filters__inline">
+                        <select
+                          id="targets-bulk-group"
+                          className="input input--select"
+                          value={bulkGroupChoice}
+                          onChange={(e) => setBulkGroupChoice(e.target.value)}
+                        >
+                          <option value="">{t("Choose group…")}</option>
+                          {groups.map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                          <option value={NEW_GROUP}>{t("New group…")}</option>
+                        </select>
+                        {bulkGroupChoice === NEW_GROUP && (
+                          <input
+                            className="input group-name-input"
+                            value={bulkGroupName}
+                            onChange={(e) => setBulkGroupName(e.target.value)}
+                            placeholder={t("New group name")}
+                            aria-label={t("New group name")}
+                            maxLength={100}
+                          />
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn--normal"
+                          disabled={
+                            selected.size === 0 ||
+                            groupPending ||
+                            !bulkGroupChoice ||
+                            (bulkGroupChoice === NEW_GROUP && !bulkGroupName.trim())
+                          }
+                          onClick={() => changeSelectedMembership("add")}
+                        >
+                          {t("Add")} ({selected.size})
+                        </button>
+                        {targetGroupFilter && (
+                          <button
+                            type="button"
+                            className="btn btn--normal"
+                            disabled={selected.size === 0 || groupPending}
+                            onClick={() => changeSelectedMembership("remove")}
+                          >
+                            {t("Remove from this group")}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="table-toolbar" aria-busy={removePending || scanPending === "targets"}>
                   {canMutate && (
                     <div className="actions">
@@ -1425,7 +1674,9 @@ export function App() {
                   )}
                   <div className="table-toolbar__count">
                     {canMutate ? `${selected.size} ${t("selected")} · ` : ""}
-                    {targets.length} {t("total")}
+                    {visibleTargets.length !== targets.length
+                      ? `${visibleTargets.length} / ${targets.length} ${t("shown")}`
+                      : `${targets.length} ${t("total")}`}
                   </div>
                 </div>
 
@@ -1434,6 +1685,11 @@ export function App() {
                     <div className="empty">
                       <strong>{t("No targets")}</strong>
                       {t("Add an IP address or hostname to start building the scan set.")}
+                    </div>
+                  ) : visibleTargets.length === 0 ? (
+                    <div className="empty">
+                      <strong>{t("No matching hosts")}</strong>
+                      {t("Change the filter or choose another group.")}
                     </div>
                   ) : (
                     <table className="hosts">
@@ -1455,12 +1711,13 @@ export function App() {
                           )}
                           <th scope="col">{t("Host / IP")}</th>
                           <th scope="col">{t("Comment")}</th>
+                          <th scope="col">{t("Groups")}</th>
                           <th scope="col">{t("Type")}</th>
                           <th scope="col">{t("Added")}</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {targets.map((target) => {
+                        {visibleTargets.map((target) => {
                           const isSelected = selected.has(target.id);
                           return (
                             <tr
@@ -1480,6 +1737,23 @@ export function App() {
                               <td className="mono">{target.address}</td>
                               <td className="target-comment">
                                 {target.comment || <span className="target-comment--empty">—</span>}
+                              </td>
+                              <td className="target-groups">
+                                {target.groups.length === 0 ? (
+                                  <span className="target-comment--empty">—</span>
+                                ) : (
+                                  target.groups.map((group) => (
+                                    <button
+                                      key={group.id}
+                                      type="button"
+                                      className="group-chip group-chip--button"
+                                      onClick={() => setTargetGroupFilter(String(group.id))}
+                                      title={t("Show only this group")}
+                                    >
+                                      {group.name}
+                                    </button>
+                                  ))
+                                )}
                               </td>
                               <td>{target.type}</td>
                               <td>{new Date(target.created_at).toLocaleString()}</td>
@@ -1502,6 +1776,20 @@ export function App() {
                 t={t}
               />
             </>
+          )}
+
+          {nav === "groups" && (
+            <GroupsPanel
+              groups={groups}
+              loading={groupsLoading}
+              canMutate={canMutate}
+              currentModules={selectedModules}
+              onGroupsChanged={refreshGroups}
+              onScanQueued={onGroupScanQueued}
+              onShowHosts={showGroupHosts}
+              pushToast={pushToast}
+              t={t}
+            />
           )}
 
           {nav === "scans" && (

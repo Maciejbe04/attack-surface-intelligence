@@ -165,6 +165,7 @@ CELERY_RESULT_EXPIRES = 900
 CELERY_TASK_ROUTES = {
     "scans.execute_batch": {"queue": "scan"},
     "scans.reconcile_batches": {"queue": "scan"},
+    "scans.dispatch_schedules": {"queue": "scan"},
 }
 SCAN_RECONCILE_INTERVAL_SECONDS = max(
     15,
@@ -183,6 +184,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "scans.reconcile_batches",
         "schedule": float(SCAN_RECONCILE_INTERVAL_SECONDS),
         "options": {"queue": "scan"},
+    },
+    "dispatch-group-schedules": {
+        "task": "scans.dispatch_schedules",
+        "schedule": 60.0,
+        # A missed tick is harmless: the next one dispatches everything still due.
+        "options": {"queue": "scan", "expires": 55},
     },
 }
 

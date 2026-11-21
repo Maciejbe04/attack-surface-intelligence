@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-from functools import partial
 
-from django.contrib.auth.models import User
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -23,7 +21,8 @@ from .defectdojo import (
 )
 from .events import append_scan_event
 from .import_targets import MAX_IMPORT_TARGETS, parse_import_payload
-from .models import ScanBatch, ScanEvent, ScanRun, Target
+from .groups import add_targets_to_group, get_or_create_group, normalize_group_name
+from .models import ScanBatch, ScanEvent, ScanRun, Target, TargetGroup
 from .modules import validate_modules
 from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
@@ -33,7 +32,7 @@ from .serializers import (
     TargetSerializer,
     is_admin,
 )
-from .tasks import execute_batch
+from .services import queue_scan_for_targets
 
 
 def _targets_for(user):
@@ -46,56 +45,6 @@ def _runs_for(user):
     return queryset if is_admin(user) else queryset.filter(owner=user)
 
 
-def _publish_batch(batch_id: int, delivery_id: str) -> None:
-    try:
-        execute_batch.apply_async(
-            args=(batch_id, delivery_id),
-            queue="scan",
-        )
-    except Exception as exc:
-        # PostgreSQL remains authoritative when the broker is unavailable.
-        with transaction.atomic():
-            batch = (
-                ScanBatch.objects.select_for_update()
-                .select_related("run")
-                .get(pk=batch_id, delivery_id=delivery_id)
-            )
-            if batch.status != ScanBatch.Status.QUEUED:
-                return
-            batch.status = ScanBatch.Status.FAILED
-            batch.error = f"Queue publish failed: {type(exc).__name__}"
-            batch.finished_at = timezone.now()
-            batch.save(
-                update_fields=("status", "error", "finished_at", "updated_at")
-            )
-            run = ScanRun.objects.select_for_update().get(pk=batch.run_id)
-            run.failed_batches = run.batches.filter(
-                status=ScanBatch.Status.FAILED
-            ).count()
-            unfinished = run.batches.filter(
-                status__in=(ScanBatch.Status.QUEUED, ScanBatch.Status.RUNNING)
-            ).exists()
-            if not unfinished:
-                run.status = ScanRun.Status.FAILED
-                run.finished_at = timezone.now()
-            run.result_summary = {
-                "completed": run.completed_batches,
-                "failed": run.failed_batches,
-                "cancelled": run.batches.filter(
-                    status=ScanBatch.Status.CANCELLED
-                ).count(),
-            }
-            run.save(
-                update_fields=(
-                    "status",
-                    "failed_batches",
-                    "result_summary",
-                    "finished_at",
-                    "updated_at",
-                )
-            )
-
-
 class TargetListCreateView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -105,7 +54,41 @@ class TargetListCreateView(APIView):
         return super().get_permissions()
 
     def get(self, request: Request) -> Response:
-        targets = _targets_for(request.user).order_by("address", "id")
+        """List targets. Optional filters: ?search=, ?group=<id>, ?limit=1..100."""
+        targets = _targets_for(request.user).prefetch_related("groups")
+        search = request.query_params.get("search", "").strip()[:255]
+        if search:
+            targets = targets.filter(
+                Q(address__icontains=search) | Q(comment__icontains=search)
+            )
+        group_id = request.query_params.get("group", "").strip()
+        if group_id:
+            if not group_id.isdigit():
+                return Response(
+                    {"detail": "group must be a numeric ID."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            targets = targets.filter(groups__id=int(group_id))
+        targets = targets.order_by("address", "id")
+        limit = request.query_params.get("limit", "").strip()
+        if limit:
+            if not limit.isdigit() or not 1 <= int(limit) <= 100:
+                return Response(
+                    {"detail": "limit must be between 1 and 100."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if search:
+                # Exact and prefix matches first: what a typeahead user expects.
+                ranked = sorted(
+                    targets[:500],
+                    key=lambda target: (
+                        target.address.lower() != search.lower(),
+                        not target.address.lower().startswith(search.lower()),
+                        target.address,
+                    ),
+                )
+                return Response(TargetSerializer(ranked[: int(limit)], many=True).data)
+            targets = targets[: int(limit)]
         return Response(TargetSerializer(targets, many=True).data)
 
     def post(self, request: Request) -> Response:
@@ -125,91 +108,6 @@ class TargetDetailView(APIView):
         target = get_object_or_404(_targets_for(request.user), pk=target_id)
         target.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-def _queue_scan_for_targets(
-    *,
-    owner: User,
-    targets: list[Target],
-    modules: list[dict],
-    client_request_id: str = "",
-) -> tuple[ScanRun, bool]:
-    """Create a scan run for targets. Returns (run, created)."""
-    if not targets:
-        raise ValueError("At least one target is required.")
-
-    with transaction.atomic():
-        if client_request_id:
-            existing = (
-                ScanRun.objects.select_for_update()
-                .filter(owner=owner, client_request_id=client_request_id)
-                .first()
-            )
-            if existing is not None:
-                return existing, False
-
-        try:
-            with transaction.atomic():
-                run = ScanRun.objects.create(
-                    owner=owner,
-                    modules_snapshot=modules,
-                    client_request_id=client_request_id,
-                    total_batches=len(targets),
-                )
-        except IntegrityError:
-            run = ScanRun.objects.get(
-                owner=owner,
-                client_request_id=client_request_id,
-            )
-            return run, False
-
-        batches = ScanBatch.objects.bulk_create(
-            [
-                ScanBatch(
-                    run=run,
-                    target=target,
-                    target_address=target.address,
-                    target_type=target.target_type,
-                )
-                for target in targets
-            ]
-        )
-        for batch in batches:
-            transaction.on_commit(
-                partial(_publish_batch, batch.pk, str(batch.delivery_id))
-            )
-
-        module_ids = [
-            module.get("id", "?")
-            for module in modules
-            if isinstance(module, dict)
-        ]
-        append_scan_event(
-            run,
-            (
-                f"Queued scan #{run.pk} for {len(batches)} target(s); "
-                f"modules: {', '.join(str(item) for item in module_ids) or 'none'}."
-            ),
-            source="api",
-        )
-        if len(batches) <= 50:
-            for batch in batches:
-                append_scan_event(
-                    run,
-                    f"Batch queued for {batch.target_address} ({batch.target_type}).",
-                    batch=batch,
-                    source="api",
-                )
-        else:
-            append_scan_event(
-                run,
-                (
-                    f"Queued {len(batches)} batches "
-                    "(individual host lines omitted for large imports)."
-                ),
-                source="api",
-            )
-    return run, True
 
 
 class TargetImportView(APIView):
@@ -274,6 +172,43 @@ class TargetImportView(APIView):
         ).strip()[:128]
 
         owner = request.user
+        import_group = None
+        group_id_raw = str(request.data.get("group_id") or "").strip()
+        group_name_raw = str(request.data.get("group_name") or "").strip()
+        if group_id_raw:
+            if not group_id_raw.isdigit():
+                return Response(
+                    {"detail": "group_id must be a numeric ID."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            import_group = TargetGroup.objects.filter(
+                pk=int(group_id_raw),
+                owner=owner,
+            ).first()
+            if import_group is None:
+                return Response(
+                    {"detail": "Group not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        elif group_name_raw:
+            try:
+                normalize_group_name(group_name_raw)
+            except ValueError as exc:
+                return Response(
+                    {"detail": str(exc)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        row_group_names = {
+            name for item in parsed.targets for name in item.groups
+        }
+        try:
+            for name in row_group_names:
+                normalize_group_name(name)
+        except ValueError as exc:
+            return Response(
+                {"detail": f"Invalid group in file: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         addresses = [item.address for item in parsed.targets]
         existing_by_address = {
             target.address: target
@@ -297,6 +232,37 @@ class TargetImportView(APIView):
         all_targets = list(
             Target.objects.filter(owner=owner, address__in=addresses).order_by("id")
         )
+
+        # Group assignment: one group for the whole file plus optional per-row groups.
+        groups_touched: dict[int, dict] = {}
+
+        def assign(group: TargetGroup, members: list[Target], created: bool) -> None:
+            added = add_targets_to_group(group, members)
+            entry = groups_touched.setdefault(
+                group.pk,
+                {"id": group.pk, "name": group.name, "created": created, "added_count": 0},
+            )
+            entry["added_count"] += added
+
+        with transaction.atomic():
+            if import_group is None and group_name_raw:
+                import_group, group_created = get_or_create_group(owner, group_name_raw)
+            else:
+                group_created = False
+            if import_group is not None:
+                assign(import_group, all_targets, group_created)
+            if row_group_names:
+                by_address = {target.address: target for target in all_targets}
+                members_by_name: dict[str, list[Target]] = {}
+                for item in parsed.targets:
+                    target = by_address.get(item.address)
+                    if target is None:
+                        continue
+                    for name in item.groups:
+                        members_by_name.setdefault(name, []).append(target)
+                for name, members in members_by_name.items():
+                    group, created = get_or_create_group(owner, name)
+                    assign(group, members, created)
         created_count = sum(
             1 for target in all_targets if target.address not in existing_addresses
         )
@@ -304,11 +270,12 @@ class TargetImportView(APIView):
 
         scan_payload = None
         if start_scan and all_targets:
-            run, _created = _queue_scan_for_targets(
+            run, _created = queue_scan_for_targets(
                 owner=owner,
                 targets=all_targets,
                 modules=modules,
                 client_request_id=client_request_id,
+                group=import_group,
             )
             run = (
                 ScanRun.objects.prefetch_related("batches", "events__batch")
@@ -325,9 +292,14 @@ class TargetImportView(APIView):
                 "skipped_duplicates_in_file": parsed.skipped_duplicates_in_file,
                 "target_ids": [target.pk for target in all_targets],
                 "targets": TargetSerializer(
-                    all_targets[:500],
+                    Target.objects.filter(
+                        pk__in=[target.pk for target in all_targets[:500]]
+                    )
+                    .prefetch_related("groups")
+                    .order_by("id"),
                     many=True,
                 ).data,
+                "groups": sorted(groups_touched.values(), key=lambda item: item["name"]),
                 "scan": scan_payload,
             },
             status=status.HTTP_201_CREATED,
@@ -345,6 +317,7 @@ class ScanListCreateView(APIView):
     def get(self, request: Request) -> Response:
         runs = (
             _runs_for(request.user)
+            .select_related("group")
             .prefetch_related("batches")
             .order_by("-created_at", "-id")
         )
@@ -354,7 +327,7 @@ class ScanListCreateView(APIView):
         serializer = ScanCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         client_request_id = serializer.validated_data.get("client_request_id", "")
-        run, created = _queue_scan_for_targets(
+        run, created = queue_scan_for_targets(
             owner=request.user,
             targets=serializer.context["targets"],
             modules=serializer.validated_data["modules"],

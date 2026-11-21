@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import time
 
 from django.conf import settings
 from django.db import models
@@ -82,6 +83,20 @@ class ScanRun(models.Model):
         db_index=True,
     )
     defectdojo_export_detail = models.CharField(max_length=500, blank=True, default="")
+    group = models.ForeignKey(
+        "TargetGroup",
+        on_delete=models.SET_NULL,
+        related_name="runs",
+        null=True,
+        blank=True,
+    )
+    schedule = models.ForeignKey(
+        "GroupSchedule",
+        on_delete=models.SET_NULL,
+        related_name="runs",
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -187,3 +202,69 @@ class ScanEvent(models.Model):
 
     def __str__(self) -> str:
         return f"event:{self.pk}:{self.level}"
+
+
+class TargetGroup(models.Model):
+    """Named set of targets owned by one user. A target can belong to many groups."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="target_groups",
+    )
+    name = models.CharField(max_length=100)
+    description = models.CharField(max_length=500, blank=True, default="")
+    targets = models.ManyToManyField(Target, related_name="groups", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("name", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "name"),
+                name="scans_group_owner_name_uniq",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class GroupSchedule(models.Model):
+    """Recurring scan of a whole group. Times are UTC."""
+
+    class Frequency(models.TextChoices):
+        HOURLY = "hourly", "Every N hours"
+        DAILY = "daily", "Daily"
+        WEEKLY = "weekly", "Weekly"
+
+    group = models.OneToOneField(
+        TargetGroup,
+        on_delete=models.CASCADE,
+        related_name="schedule",
+    )
+    enabled = models.BooleanField(default=True)
+    frequency = models.CharField(max_length=16, choices=Frequency.choices)
+    interval_hours = models.PositiveSmallIntegerField(default=24)
+    time_of_day = models.TimeField(default=time(2, 0))
+    weekday = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="0 = Monday … 6 = Sunday",
+    )
+    modules_snapshot = models.JSONField(default=list)
+    next_run_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    last_run = models.ForeignKey(
+        ScanRun,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        null=True,
+        blank=True,
+    )
+    last_status = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"schedule:{self.group_id}:{self.frequency}"

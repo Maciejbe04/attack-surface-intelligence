@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 
 from .auto_export import queue_automatic_defectdojo_export
 from .events import append_scan_event
+from .groups import dispatch_due_schedules
 from .models import QueueState, ScanBatch, ScanEvent, ScanRun
 from .tasks import execute_batch
 
@@ -161,6 +162,13 @@ class BatchReconcileView(WorkerAPIView):
                 "failed": failed,
             }
         )
+
+
+class ScheduleDispatchView(WorkerAPIView):
+    """Called by the scans.dispatch_schedules beat task: queue due group scans."""
+
+    def post(self, request: Request) -> Response:
+        return Response(dispatch_due_schedules())
 
 
 def _aggregate_run(run: ScanRun) -> None:

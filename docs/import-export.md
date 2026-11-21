@@ -20,7 +20,19 @@ Pola:
 - `file` — TXT (jeden host w linii), CSV (`value`/`address`/`host`) lub JSON (`targets[]`)
 - `start_scan` — domyślnie `true`; po imporcie kolejkuje skan
 - `modules` — opcjonalny JSON wybranych modułów (domyślnie `full-pipeline`)
+- `group_id` — opcjonalne ID istniejącej grupy; wszystkie hosty z pliku do niej trafiają
+- `group_name` — alternatywnie nazwa grupy; tworzona, jeśli nie istnieje (porównanie bez rozróżniania wielkości liter)
 - limit: 10 000 hostów / 5 MiB
+
+Grupy można też podać per wiersz: kolumna `group` (lub `groups`, `group_name`) w CSV albo pole `group`/`groups` w JSON. Kilka grup rozdziela się `;` lub `|` (w JSON także listą). Brakujące grupy są tworzone. Host występujący w pliku kilka razy trafia do wszystkich wymienionych grup. Grupa z formularza i grupy z wierszy sumują się.
+
+```csv
+address,group,comment
+10.0.0.10,DMZ;Web,front
+10.0.0.11,DMZ,
+```
+
+Odpowiedź zawiera `groups[]`: `{id, name, created, added_count}` dla każdej grupy, do której coś dodano. Skan uruchomiony przez import z `group_id`/`group_name` jest oznaczony tą grupą.
 
 ### JSON
 

@@ -264,6 +264,188 @@ const PL: Record<string, string> = {
     "Automatyczny eksport findings po zakończonych skanach.",
   "Optional. Configure URL and credentials to enable export.":
     "Opcjonalne. Skonfiguruj URL i poświadczenia, aby włączyć eksport.",
+  "Search failed.":
+    "Wyszukiwanie nie powiodło się.",
+  "Search saved hosts: IP, CIDR, hostname, or comment":
+    "Szukaj zapisanych hostów: IP, CIDR, nazwa lub komentarz",
+  "Searching…":
+    "Wyszukiwanie…",
+  "No saved host matches. Add it on the Targets page first.":
+    "Brak pasującego hosta. Najpierw dodaj go na stronie Cele.",
+  "Matching hosts":
+    "Pasujące hosty",
+  "Selected":
+    "Wybrano",
+  "Start typing to search saved hosts; pick one to scan it on its own.":
+    "Zacznij pisać, aby wyszukać zapisany host; wybierz go, aby przeskanować pojedynczo.",
+  "Search for a saved host and pick it from the list.":
+    "Wyszukaj zapisany host i wybierz go z listy.",
+  "Groups":
+    "Grupy",
+  "Group":
+    "Grupa",
+  "groups":
+    "grup",
+  "Not scheduled":
+    "Bez harmonogramu",
+  "Every":
+    "Co",
+  "Daily at":
+    "Codziennie o",
+  "paused":
+    "wstrzymany",
+  "Monday":
+    "Poniedziałek",
+  "Tuesday":
+    "Wtorek",
+  "Wednesday":
+    "Środa",
+  "Thursday":
+    "Czwartek",
+  "Friday":
+    "Piątek",
+  "Saturday":
+    "Sobota",
+  "Sunday":
+    "Niedziela",
+  "Group hosts to scan them together, now or on a schedule. A host can belong to several groups.":
+    "Grupuj hosty, aby skanować je razem — od razu albo według harmonogramu. Host może należeć do kilku grup.",
+  "Create group":
+    "Utwórz grupę",
+  "Name":
+    "Nazwa",
+  "Description (optional)":
+    "Opis (opcjonalnie)",
+  "Creating…":
+    "Tworzenie…",
+  "Group created":
+    "Utworzono grupę",
+  "Group not created":
+    "Nie utworzono grupy",
+  "Could not create the group.":
+    "Nie udało się utworzyć grupy.",
+  "No groups":
+    "Brak grup",
+  "Create a group here, add hosts from the Targets page, or assign a group when importing a file.":
+    "Utwórz grupę tutaj, dodaj hosty na stronie Cele albo przypisz grupę przy imporcie pliku.",
+  "Host groups":
+    "Grupy hostów",
+  "Hosts":
+    "Hosty",
+  "Schedule":
+    "Harmonogram",
+  "Next run":
+    "Następne uruchomienie",
+  "Last scheduled run":
+    "Ostatnie zaplanowane uruchomienie",
+  "Show hosts":
+    "Pokaż hosty",
+  "Scan now":
+    "Skanuj teraz",
+  "Edit schedule":
+    "Edytuj harmonogram",
+  "Delete":
+    "Usuń",
+  "Delete group \"{name}\"? Hosts and past scans are kept.":
+    "Usunąć grupę „{name}”? Hosty i dotychczasowe skany zostaną zachowane.",
+  "Group deleted":
+    "Usunięto grupę",
+  "Group not deleted":
+    "Nie usunięto grupy",
+  "Could not delete the group.":
+    "Nie udało się usunąć grupy.",
+  "Uncheck to pause without losing the settings.":
+    "Odznacz, aby wstrzymać bez utraty ustawień.",
+  "Repeat":
+    "Powtarzaj",
+  "Every N hours":
+    "Co N godzin",
+  "Daily":
+    "Codziennie",
+  "Weekly":
+    "Co tydzień",
+  "Interval (hours)":
+    "Odstęp (godziny)",
+  "1–168. Counted from the moment the schedule is saved.":
+    "1–168. Liczone od momentu zapisania harmonogramu.",
+  "Day":
+    "Dzień",
+  "Time (UTC)":
+    "Godzina (UTC)",
+  "Scans start within about a minute of this time. Missed runs are not replayed.":
+    "Skan startuje mniej więcej w ciągu minuty od tej godziny. Pominięte uruchomienia nie są powtarzane.",
+  "Replace with the modules selected on the Dashboard":
+    "Zastąp modułami wybranymi na pulpicie",
+  "New schedules use the modules selected on the Dashboard.":
+    "Nowy harmonogram używa modułów wybranych na pulpicie.",
+  "Results of every finished scheduled scan are sent to DefectDojo automatically when it is configured.":
+    "Wyniki każdego zakończonego skanu z harmonogramu są automatycznie wysyłane do DefectDojo, jeśli jest skonfigurowane.",
+  "Save schedule":
+    "Zapisz harmonogram",
+  "Remove schedule":
+    "Usuń harmonogram",
+  "Schedule saved":
+    "Zapisano harmonogram",
+  "Schedule not saved":
+    "Nie zapisano harmonogramu",
+  "Could not save the schedule.":
+    "Nie udało się zapisać harmonogramu.",
+  "Schedule removed":
+    "Usunięto harmonogram",
+  "Schedule not removed":
+    "Nie usunięto harmonogramu",
+  "Could not remove the schedule.":
+    "Nie udało się usunąć harmonogramu.",
+  "scheduled":
+    "z harmonogramu",
+  "Groups unavailable":
+    "Grupy niedostępne",
+  "Could not load groups.":
+    "Nie udało się wczytać grup.",
+  "Added to group":
+    "Dodano do grupy",
+  "Removed from group":
+    "Usunięto z grupy",
+  "Group not updated":
+    "Nie zaktualizowano grupy",
+  "Could not update the group.":
+    "Nie udało się zaktualizować grupy.",
+  "Group name required":
+    "Wymagana nazwa grupy",
+  "Type a name for the new group.":
+    "Wpisz nazwę nowej grupy.",
+  "Add to group":
+    "Dodaj do grupy",
+  "No group":
+    "Bez grupy",
+  "New group…":
+    "Nowa grupa…",
+  "New group name":
+    "Nazwa nowej grupy",
+  "Every host in the file joins this group. CSV files can also set groups per row in a group column (several names separated by ;).":
+    "Każdy host z pliku trafi do tej grupy. W CSV można też podać grupy dla wiersza w kolumnie group (kilka nazw rozdzielonych ;).",
+  "Filter":
+    "Filtr",
+  "Address, comment, or group":
+    "Adres, komentarz lub grupa",
+  "All hosts":
+    "Wszystkie hosty",
+  "Add selected to group":
+    "Dodaj zaznaczone do grupy",
+  "Choose group…":
+    "Wybierz grupę…",
+  "Add":
+    "Dodaj",
+  "Remove from this group":
+    "Usuń z tej grupy",
+  "shown":
+    "widocznych",
+  "No matching hosts":
+    "Brak pasujących hostów",
+  "Change the filter or choose another group.":
+    "Zmień filtr albo wybierz inną grupę.",
+  "Show only this group":
+    "Pokaż tylko tę grupę",
 };
 
 export function useLanguage() {
