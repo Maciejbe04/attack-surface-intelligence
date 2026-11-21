@@ -1,0 +1,292 @@
+# Plan MVP Attack Surface Intelligence
+
+## Cel
+
+System ma cyklicznie i bezpiecznie obserwować dużą infrastrukturę, wykrywać aktywne hosty oraz usługi, identyfikować technologie HTTP/HTTPS i pokazywać zmiany między kolejnymi skanami.
+
+MVP obejmuje:
+
+- import IP, CIDR i domen ręcznie oraz z CSV/JSON;
+- import wyników skanów z CSV/JSON;
+- obsługę ponad 10 000 adresów;
+- harmonogramy, okna czasowe, ograniczanie tempa i wznawianie;
+- wykrywanie hostów, portów i podstawowych usług;
+- fingerprinting HTTP/HTTPS, TLS, CMS i technologii;
+- deklaratywne, bezpieczne sygnatury;
+- historię i porównywanie obserwacji;
+- RBAC z czterema poziomami dostępu;
+- trwałe ręczne edycje wyników;
+- szyfrowanie danych wrażliwych;
+- dashboard oraz eksport CSV/JSON;
+- opcjonalną integrację z DefectDojo.
+
+System służy wyłącznie do discovery. Nie wykonuje logowania, brute force ani prób wykorzystania podatności.
+
+## Stos technologiczny
+
+- Go: API, scheduler i workery;
+- React/TypeScript: interfejs użytkownika;
+- PostgreSQL: główne źródło prawdy;
+- Redis: sesje, kolejka i koordynacja zadań;
+- Docker Compose: lokalne uruchamianie całego stosu;
+- nmap: discovery i identyfikacja usług.
+
+Oficjalnie wspierane platformy:
+
+- Linux `amd64`;
+- Linux `arm64`;
+- macOS Intel przez Docker Desktop;
+- macOS Apple Silicon przez Docker Desktop.
+
+## Model danych i trwałe edycje
+
+Podstawowe encje:
+
+- `targets`;
+- `scan_profiles`;
+- `schedules`;
+- `scan_runs`;
+- `scan_attempts`;
+- `scan_batches`;
+- `observations`;
+- `fingerprint_evidence`;
+- `signatures`;
+- `manual_overrides`;
+- `users`;
+- `roles`;
+- `audit_log`.
+
+Surowa obserwacja skanera jest niemutowalna. Edycje użytkownika zapisują się jako osobny `manual_override`. Widok prezentowany użytkownikowi składa aktualną obserwację z ręcznym nadpisaniem, dlatego kolejny skan nie usuwa notatek, tagów ani korekt analityka.
+
+Konfigurację można edytować podczas aktywnego skanu. Rozpoczęty przebieg korzysta z własnego snapshotu konfiguracji, a zmiany obowiązują od następnego przebiegu.
+
+Import wyników korzysta z tego samego pipeline normalizacji i walidacji co wyniki workerów. Źródło obserwacji jest oznaczone jako `scanner` albo `import`.
+
+## RBAC i uwierzytelnianie
+
+System posiada cztery role:
+
+- `admin`: użytkownicy, role, sekrety, konfiguracja oraz pełny dostęp;
+- `operator`: dodawanie, usuwanie i modyfikacja celów, skanów i sygnatur;
+- `analyst`: odczyt oraz edycja wyników, tagów, notatek i overrides;
+- `viewer`: wyłącznie odczyt.
+
+Uprawnienia są egzekwowane przez API, a nie tylko przez interfejs. Każda zmiana konfiguracji, wyniku, sygnatury lub roli trafia do `audit_log`.
+
+Hasła są haszowane Argon2id. Losowe identyfikatory sesji są przechowywane w Redisie i przekazywane w cookie `HttpOnly`, `Secure`, `SameSite=Strict`. Sesje mają czas bezczynności i maksymalny czas życia. Próby logowania są ograniczane tempem i audytowane.
+
+## Szyfrowanie danych
+
+Wrażliwe dane są szyfrowane envelope encryption z AES-256-GCM. Dotyczy to:
+
+- wartości cookies;
+- surowych nagłówków;
+- bannerów;
+- treści evidence;
+- ręcznych notatek;
+- danych i tokenów integracji.
+
+Jawne pozostają jedynie metadane wymagane do indeksowania, np. kod HTTP, nazwa technologii czy nazwa cookie bez wartości.
+
+Zaszyfrowana wartość zawiera wersję klucza, nonce, ciphertext oraz tag. Rotacja klucza działa partiami bez zatrzymywania systemu. Klucze są montowane jako lokalne sekrety, nie trafiają do obrazu ani repozytorium.
+
+Backup PostgreSQL jest szyfrowany osobnym kluczem i cyklicznie testowany przez odtworzenie do tymczasowej bazy.
+
+## Skanowanie, okna i estymacja
+
+Scheduler:
+
+1. rozwija CIDR i domeny;
+2. waliduje oraz deduplikuje cele;
+3. zapisuje snapshot konfiguracji;
+4. dzieli zakres na idempotentne batche;
+5. publikuje zadania do Redis;
+6. śledzi postęp, deadline i checkpointy.
+
+Każdy przebieg posiada `window_start` oraz `deadline`. Po zakończeniu okna scheduler zatrzymuje aktywne procesy, oznacza pozostałe batche jako `paused` i wznawia je w następnym oknie bez powtarzania ukończonej pracy.
+
+nmap działa w osobnej grupie procesów. Najpierw otrzymuje sygnał łagodnego zakończenia, a po upływie grace period jest bezwarunkowo kończony. Wynik częściowy nie wpływa na status `MISSING` ani `GONE`.
+
+ETA wykorzystuje EWMA przepustowości poprzednich batchy dla danego profilu skanu. Rozmiar batcha jest dynamiczny:
+
+```text
+zmierzone IP/s × pozostały czas × współczynnik bezpieczeństwa
+```
+
+Dashboard pokazuje czas trwania, postęp, prognozę zakończenia i informację, czy skan zmieści się w skonfigurowanym oknie.
+
+## Bezpieczeństwo skanera
+
+- Cele muszą należeć do zatwierdzonej allowlisty CIDR lub domen.
+- Przed uruchomieniem użytkownik widzi liczbę rozwiniętych adresów.
+- Obowiązują limity liczby IP, portów, równoległości i rozmiaru importu.
+- Domeny są rozwiązywane przy każdym przebiegu.
+- Każdy rozwiązany adres jest ponownie sprawdzany względem allowlisty bezpośrednio przed połączeniem.
+- HTTP używa wyłącznie `HEAD` i `GET`.
+- Ograniczone są przekierowania, rozmiar body i czas zapytania.
+- Przekierowania poza zatwierdzony zakres nie są śledzone.
+- Sygnatury mogą używać wyłącznie ścieżek względnych.
+- Regexy mają limity czasu oraz długości wejścia.
+- Worker nie otrzymuje socketu Dockera ani administracyjnych danych logowania do bazy.
+
+Worker przy starcie testuje dostępność raw sockets. Na zgodnym Linuksie używa skanu SYN. Na Docker Desktop albo przy braku wymaganych możliwości automatycznie przechodzi na TCP connect scan. Użyty tryb jest zapisywany w metadanych przebiegu.
+
+## Fingerprinting
+
+Worker zbiera:
+
+- port, protokół i nazwę usługi;
+- status i tytuł HTTP;
+- przekierowania;
+- nagłówki;
+- nazwy cookies;
+- certyfikat TLS;
+- favicon hash;
+- ograniczone fragmenty HTML;
+- wyniki bezpiecznych ścieżek, np. `/login`, `/admin` lub `/version`.
+
+Każda detekcja przechowuje dowody i score `0–100`. Domyślne wagi:
+
+- charakterystyczny nagłówek: `30`;
+- nazwa cookie: `20`;
+- favicon hash: `40`;
+- fragment HTML: `20`;
+- jednoznaczny banner lub stopka: `30`.
+
+Zgodne i niezależne sygnały sumują się do maksymalnie 100. Pojedynczy słaby sygnał nie może uzyskać wysokiej pewności.
+
+Poziomy:
+
+- `low`: 1–39;
+- `medium`: 40–69;
+- `high`: 70–100.
+
+Customowe sygnatury są deklaratywne i mogą sprawdzać nagłówek, nazwę cookie, fragment HTML, favicon hash, status dozwolonej ścieżki lub ograniczony regex wersji.
+
+## Historia i stany
+
+Cykl życia jest liczony osobno dla:
+
+- hosta;
+- portu i usługi;
+- endpointu HTTP;
+- technologii;
+- certyfikatu.
+
+Zamknięcie pojedynczego portu nie oznacza zniknięcia hosta.
+
+Stany:
+
+- `NEW`: element pojawił się po raz pierwszy;
+- `CHANGED`: zmienił się istotny atrybut;
+- `MISSING`: pierwszy pełny pomiar bez odpowiedzi;
+- `FLAKY`: odpowiedzi przeplatają się z poprawnymi brakami;
+- `GONE`: domyślnie trzy kolejne pełne pomiary bez odpowiedzi.
+
+Nieudany, anulowany lub częściowy skan nie obniża stanu obserwowanego elementu.
+
+## Dashboard i integracje
+
+Dashboard pokazuje:
+
+- nowe, zmienione i znikające hosty oraz usługi;
+- hosty niestabilne;
+- wykryte technologie;
+- certyfikaty zbliżające się do wygaśnięcia;
+- wyniki customowych sygnatur;
+- czas, ETA i postęp skanów.
+
+Import i eksport CSV/JSON używa wersjonowanego schematu. Wybrane obserwacje mogą być przesyłane do DefectDojo jako finding informacyjny z idempotency key i evidence.
+
+## Lokalne uruchomienie i wiele architektur
+
+`compose.yml` nie wymusza `linux/amd64`, nie używa `network_mode: host`, ścieżek właściwych dla pojedynczego systemu ani binariów kopiowanych z hosta.
+
+API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika zależności wymagających CGO. Frontend buduje się do statycznych zasobów niezależnych od CPU.
+
+`docker buildx bake` buduje obrazy `linux/amd64` i `linux/arm64`. Emulacja QEMU służy do walidacji, natomiast lokalnie uruchamiany jest natywny wariant.
+
+Świeża instalacja wymaga jedynie:
+
+- Git;
+- Docker Engine z Compose albo Docker Desktop;
+- udokumentowanej minimalnej ilości RAM i miejsca.
+
+Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis ani nmap.
+
+## Kryteria akceptacji
+
+- Import ręczny, CSV i JSON obsługuje cele oraz wyniki.
+- 10 000 adresów jest walidowane i kolejkowane bez blokowania interfejsu.
+- Duplikaty są raportowane i pomijane.
+- Edycje są dostępne podczas aktywnego skanu zgodnie z rolą.
+- Manual override pozostaje po kolejnym skanie.
+- Koniec okna nie pozostawia procesów potomnych.
+- Ukończone batche nie są powtarzane po wznowieniu.
+- Dashboard pokazuje czas, postęp i ETA.
+- Nieudany pomiar nie powoduje `MISSING` ani `GONE`.
+- Test obejmuje nowy host, usługę, zmianę technologii, zmianę certyfikatu, pojedynczy brak, `FLAKY` i `GONE`.
+- Viewer nie wykonuje zapisu.
+- Analyst nie zarządza celami ani harmonogramem.
+- Operator nie zarządza użytkownikami.
+- W bazie nie występują jawne wartości wrażliwych pól.
+- Zaszyfrowany backup można poprawnie odtworzyć.
+- Ten sam commit przechodzi smoke test na `linux/amd64` i `linux/arm64`.
+- Demo wykonuje dwa przebiegi oraz eksport CSV/JSON.
+
+## Plan realizacji
+
+1. Utworzenie monorepo i wieloarchitekturowego Docker Compose.
+2. Model PostgreSQL, migracje, logowanie, sesje i RBAC.
+3. Formularze oraz import celów i wyników CSV/JSON.
+4. Scheduler, kolejka, batche, checkpointy i okna czasowe.
+5. Discovery nmap oraz HTTP/TLS fingerprinting.
+6. Deklaratywne sygnatury i score pewności.
+7. Historia, diff oraz stany `NEW/CHANGED/MISSING/FLAKY/GONE`.
+8. Dashboard, trwałe edycje i eksport.
+9. Szyfrowanie, backup i rotacja kluczy.
+10. Test ponad 10 000 adresów, demo, dokumentacja i prezentacja.
+
+## Docelowa struktura repozytorium
+
+```text
+apps/
+  api/
+  worker/
+  web/
+internal/
+  crypto/
+  diff/
+  domain/
+  fingerprint/
+  scanner/
+deploy/docker/
+docs/
+schemas/
+signatures/
+tests/lab/
+demo/
+presentation/
+scripts/
+compose.yml
+compose.demo.yml
+docker-bake.hcl
+```
+
+## Dokumentacja końcowa
+
+- `README.md`: instalacja, inicjalizacja sekretów i szybki test;
+- `docs/architecture.md`: komponenty, sieci i przepływ danych;
+- `docs/data-model.md`: obserwacje, historia i overrides;
+- `docs/api.md`: API oraz OpenAPI;
+- `docs/scanning-policy.md`: limity i zasady bezpieczeństwa;
+- `docs/signatures.md`: format własnych sygnatur;
+- `docs/import-export.md`: wersjonowane formaty CSV/JSON;
+- `docs/rbac.md`: macierz uprawnień;
+- `docs/encryption.md`: pola, klucze i rotacja;
+- `docs/security.md`: threat model i ograniczenia;
+- `docs/operations.md`: healthchecki i skalowanie workerów;
+- `docs/backup-restore.md`: backup i test odtworzenia;
+- `docs/local-platforms.md`: Linux/macOS, amd64/arm64 i tryby nmap;
+- `docs/demo-script.md`: demonstracja krok po kroku;
+- `presentation/`: prezentacja do 10 slajdów.
