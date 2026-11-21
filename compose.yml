@@ -38,9 +38,9 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:size=16m
-      - /var/cache/nginx:size=16m
-      - /var/run:size=8m
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,uid=101,gid=101,mode=0755
+      - /var/run:size=8m,uid=101,gid=101,mode=0755
     mem_limit: 128m
     pids_limit: 128
     healthcheck:
@@ -62,9 +62,9 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:size=16m
-      - /var/cache/nginx:size=16m
-      - /var/run:size=8m
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,uid=101,gid=101,mode=0755
+      - /var/run:size=8m,uid=101,gid=101,mode=0755
     mem_limit: 128m
     pids_limit: 64
     healthcheck:
@@ -112,8 +112,8 @@ services:
       start_period: 30s
 
   scheduler:
-    build: *backend-build
     image: surfacex-api:local
+    pull_policy: never
     restart: unless-stopped
     command:
       [
@@ -213,7 +213,7 @@ services:
       start_period: 40s
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:15-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-surfacex}
@@ -257,9 +257,10 @@ services:
       start_period: 5s
 
   backup:
-    build: *backend-build
     image: surfacex-api:local
+    pull_policy: never
     restart: unless-stopped
+    user: "0:0"
     command: ["/app/deploy/docker/backup-loop.sh"]
     environment:
       <<: *api-env

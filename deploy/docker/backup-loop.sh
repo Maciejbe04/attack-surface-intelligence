@@ -13,15 +13,19 @@ while true; do
   STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
   RAW="${OUT_DIR}/surfacex-${STAMP}.sql"
   ENC="${RAW}.enc"
-  PGPASSWORD="${PASSWORD}" pg_dump \
+  if PGPASSWORD="${PASSWORD}" pg_dump \
     -h "${POSTGRES_HOST:-postgres}" \
     -U "${POSTGRES_USER:-surfacex}" \
     -d "${POSTGRES_DB:-surfacex}" \
-    -f "${RAW}"
-  openssl enc -aes-256-cbc -pbkdf2 -salt \
-    -pass "file:${BACKUP_KEY_FILE}" \
-    -in "${RAW}" -out "${ENC}"
-  rm -f "${RAW}"
-  echo "wrote ${ENC}"
+    -f "${RAW}"; then
+    openssl enc -aes-256-cbc -pbkdf2 -salt \
+      -pass "file:${BACKUP_KEY_FILE}" \
+      -in "${RAW}" -out "${ENC}"
+    rm -f "${RAW}"
+    echo "wrote ${ENC}"
+  else
+    echo "pg_dump failed; will retry after interval" >&2
+    rm -f "${RAW}"
+  fi
   sleep "${INTERVAL}"
 done

@@ -21,8 +21,10 @@ chmod +x scripts/init-secrets.sh deploy/docker/*.sh
 docker compose up --build
 ```
 
-UI: [http://localhost:8080](http://localhost:8080)  
-API health: [http://localhost:8080/api/health/](http://localhost:8080/api/health/)
+UI: [http://localhost:8080](http://localhost:8080) (albo port z `GATEWAY_HTTP_PORT` w `.env`)  
+API health: `/api/health/` na tym samym porcie  
+
+Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
 
 Zatrzymanie bez usuwania wolumenów:
 
