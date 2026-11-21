@@ -1293,26 +1293,56 @@ html.theme-high-contrast .module-tile__drawer {
   background: var(--aws-info-bg);
   border-radius: var(--radius);
   margin-bottom: var(--space-l);
+  color: var(--aws-text);
 }
 
 .flash--ok {
   border-color: var(--aws-success);
-  background: #f2f8f0;
+  background: var(--aws-toast-ok-bg);
 }
 
 .flash--error {
   border-color: var(--aws-danger);
-  background: #fdf2f1;
+  background: var(--aws-toast-error-bg);
 }
 
 .flash strong {
   display: block;
   margin-bottom: 2px;
+  color: var(--aws-text);
 }
 
 .flash p {
   margin: 0;
   color: var(--aws-text-secondary);
+}
+
+html.theme-dark .flash--error {
+  border-color: #f85149;
+  background: #3d1515;
+  color: #ffdcd8;
+}
+
+html.theme-dark .flash--error strong {
+  color: #ffb4ae;
+}
+
+html.theme-dark .flash--error p {
+  color: #ffc9c4;
+}
+
+html.theme-dark .flash--ok {
+  border-color: #3fb950;
+  background: #122117;
+  color: #aff5b4;
+}
+
+html.theme-dark .flash--ok strong {
+  color: #7ee787;
+}
+
+html.theme-dark .flash--ok p {
+  color: #aff5b4;
 }
 
 .status-dot {
