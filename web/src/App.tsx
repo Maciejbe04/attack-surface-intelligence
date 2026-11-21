@@ -87,12 +87,12 @@ const STATUS_LABELS: Record<ScanStatus, string> = {
 };
 
 const DEFECTDOJO_STATUS_LABELS: Record<DefectDojoExportStatus, string> = {
-  none: "DefectDojo idle",
-  pending: "DefectDojo queued",
-  sending: "Sending to DefectDojo",
-  sent: "Sent to DefectDojo",
-  failed: "DefectDojo failed",
-  skipped: "DefectDojo skipped",
+  none: "DD idle",
+  pending: "DD queued",
+  sending: "DD sending",
+  sent: "DD sent",
+  failed: "DD failed",
+  skipped: "DD skipped",
 };
 
 function ScanTable({
@@ -152,23 +152,35 @@ function ScanTable({
               <td className="scan-targets">
                 {scan.targets.length > 0 ? scan.targets.join(", ") : "—"}
               </td>
-              <td>
-                {scan.modules
-                  .map((module) => `${module.id} (${summarizeFilters(module.filters)})`)
-                  .join("; ")}
+              <td className="scan-modules">
+                <div
+                  className="scan-modules__list"
+                  title={scan.modules
+                    .map((module) => `${module.id} (${summarizeFilters(module.filters)})`)
+                    .join("; ")}
+                >
+                  {scan.modules.length > 0
+                    ? scan.modules.map((module) => module.id).join(", ")
+                    : "—"}
+                </div>
               </td>
-              <td>
-                <span className={`status-badge status-badge--${scan.status}`}>
-                  {t(STATUS_LABELS[scan.status])}
-                </span>
-                {defectdojoStatus !== "none" && (
-                  <span
-                    className={`status-badge status-badge--dd-${defectdojoStatus}`}
-                    title={scan.defectdojo_export_detail || undefined}
-                  >
-                    {t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])}
+              <td className="scan-status-cell">
+                <div className="scan-status">
+                  <span className={`status-badge status-badge--${scan.status}`}>
+                    {t(STATUS_LABELS[scan.status])}
                   </span>
-                )}
+                  {defectdojoStatus !== "none" && (
+                    <span
+                      className={`status-badge status-badge--dd-${defectdojoStatus}`}
+                      title={
+                        scan.defectdojo_export_detail ||
+                        t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])
+                      }
+                    >
+                      {t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])}
+                    </span>
+                  )}
+                </div>
                 {scan.error && <span className="scan-error">{scan.error}</span>}
               </td>
               <td>
