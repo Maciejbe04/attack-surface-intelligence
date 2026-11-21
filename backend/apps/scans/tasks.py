@@ -62,6 +62,20 @@ def reconcile_batches(self) -> dict[str, Any]:
     )
 
 
+@shared_task(
+    bind=True,
+    name="scans.dispatch_schedules",
+    autoretry_for=(TransientWorkerAPIError,),
+    retry_backoff=True,
+    retry_backoff_max=30,
+    retry_jitter=True,
+    max_retries=3,
+)
+def dispatch_schedules(self) -> dict[str, Any]:
+    """Ask the API to queue scans for due group schedules (the worker has no DB access)."""
+    return _api_request("POST", "/api/internal/schedules/dispatch/", {})
+
+
 def _api_request(
     method: str,
     path: str,

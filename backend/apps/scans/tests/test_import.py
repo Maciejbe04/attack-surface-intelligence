@@ -53,7 +53,7 @@ class TargetImportAPITests(TestCase):
             b"192.0.2.10\n192.0.2.11\nnot a host!!\n",
             content_type="text/plain",
         )
-        with patch("apps.scans.views.execute_batch.apply_async") as publish:
+        with patch("apps.scans.services.execute_batch.apply_async") as publish:
             with self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(
                     reverse("target-import"),

@@ -3,11 +3,50 @@ import { ModuleFilterValues } from "../modules";
 
 export type TargetType = "ip" | "cidr" | "domain";
 
+export type TargetGroupRef = {
+  id: number;
+  name: string;
+};
+
 export type Target = {
   id: number;
   address: string;
   type: TargetType;
   comment: string;
+  groups: TargetGroupRef[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScheduleFrequency = "hourly" | "daily" | "weekly";
+
+export type GroupSchedule = {
+  enabled: boolean;
+  frequency: ScheduleFrequency;
+  interval_hours: number;
+  /** "HH:MM", UTC */
+  time_of_day: string;
+  /** 0 = Monday … 6 = Sunday */
+  weekday: number;
+  modules: ScanModule[];
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_run_id: number | null;
+  last_status: string;
+};
+
+export type GroupScheduleInput = Pick<
+  GroupSchedule,
+  "enabled" | "frequency" | "interval_hours" | "time_of_day" | "weekday" | "modules"
+>;
+
+export type TargetGroup = {
+  id: number;
+  name: string;
+  description: string;
+  owner: string;
+  target_count: number;
+  schedule: GroupSchedule | null;
   created_at: string;
   updated_at: string;
 };
@@ -73,6 +112,9 @@ export type Scan = {
   error: string;
   defectdojo_export_status: DefectDojoExportStatus;
   defectdojo_export_detail: string;
+  group_id: number | null;
+  group_name: string | null;
+  scheduled: boolean;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -168,6 +210,77 @@ export function listTargets(signal?: AbortSignal): Promise<Target[]> {
   return request<Target[]>("/api/targets/", { signal });
 }
 
+/** Server-side typeahead: exact and prefix matches on the address come first. */
+export function searchTargets(
+  query: string,
+  limit = 8,
+  signal?: AbortSignal,
+): Promise<Target[]> {
+  const params = new URLSearchParams({ search: query, limit: String(limit) });
+  return request<Target[]>(`/api/targets/?${params.toString()}`, { signal });
+}
+
+export function listGroups(signal?: AbortSignal): Promise<TargetGroup[]> {
+  return request<TargetGroup[]>("/api/groups/", { signal });
+}
+
+export function createGroup(
+  group: { name: string; description?: string },
+  signal?: AbortSignal,
+): Promise<TargetGroup> {
+  return request<TargetGroup>("/api/groups/", {
+    method: "POST",
+    body: JSON.stringify(group),
+    signal,
+  });
+}
+
+export function deleteGroup(id: number, signal?: AbortSignal): Promise<void> {
+  return request<void>(`/api/groups/${id}/`, { method: "DELETE", signal });
+}
+
+export function updateGroupMembers(
+  id: number,
+  action: "add" | "remove",
+  targetIds: number[],
+  signal?: AbortSignal,
+): Promise<TargetGroup & { changed_count: number }> {
+  return request<TargetGroup & { changed_count: number }>(`/api/groups/${id}/targets/`, {
+    method: "POST",
+    body: JSON.stringify({ action, target_ids: targetIds }),
+    signal,
+  });
+}
+
+export function scanGroup(
+  id: number,
+  modules: ScanModule[],
+  clientRequestId: string,
+  signal?: AbortSignal,
+): Promise<ScanDetail> {
+  return request<ScanDetail>(`/api/groups/${id}/scan/`, {
+    method: "POST",
+    body: JSON.stringify({ modules, client_request_id: clientRequestId }),
+    signal,
+  });
+}
+
+export function saveGroupSchedule(
+  id: number,
+  schedule: GroupScheduleInput,
+  signal?: AbortSignal,
+): Promise<TargetGroup> {
+  return request<TargetGroup>(`/api/groups/${id}/schedule/`, {
+    method: "PUT",
+    body: JSON.stringify(schedule),
+    signal,
+  });
+}
+
+export function deleteGroupSchedule(id: number, signal?: AbortSignal): Promise<TargetGroup> {
+  return request<TargetGroup>(`/api/groups/${id}/schedule/`, { method: "DELETE", signal });
+}
+
 export function createTarget(
   target: Pick<Target, "address" | "type" | "comment">,
   signal?: AbortSignal,
@@ -187,6 +300,7 @@ export type TargetImportResult = {
   skipped_duplicates_in_file: number;
   target_ids: number[];
   targets: Target[];
+  groups: (TargetGroupRef & { created: boolean; added_count: number })[];
   scan: ScanDetail | null;
 };
 
@@ -196,6 +310,10 @@ export async function importTargetsFile(
     startScan?: boolean;
     modules?: ScanModule[];
     clientRequestId?: string;
+    /** Put every imported host into this existing group … */
+    groupId?: number;
+    /** … or into a group with this name (created when missing). */
+    groupName?: string;
   } = {},
   signal?: AbortSignal,
 ): Promise<TargetImportResult> {
@@ -207,6 +325,11 @@ export async function importTargetsFile(
   }
   if (options.clientRequestId) {
     body.append("client_request_id", options.clientRequestId);
+  }
+  if (options.groupId !== undefined) {
+    body.append("group_id", String(options.groupId));
+  } else if (options.groupName) {
+    body.append("group_name", options.groupName);
   }
 
   let response: Response;

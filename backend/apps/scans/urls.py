@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import internal_views, views
+from . import group_views, internal_views, views
 
 urlpatterns = [
     path("targets/", views.TargetListCreateView.as_view(), name="target-list"),
@@ -13,6 +13,27 @@ urlpatterns = [
         "targets/<int:target_id>/",
         views.TargetDetailView.as_view(),
         name="target-detail",
+    ),
+    path("groups/", group_views.GroupListCreateView.as_view(), name="group-list"),
+    path(
+        "groups/<int:group_id>/",
+        group_views.GroupDetailView.as_view(),
+        name="group-detail",
+    ),
+    path(
+        "groups/<int:group_id>/targets/",
+        group_views.GroupTargetsView.as_view(),
+        name="group-targets",
+    ),
+    path(
+        "groups/<int:group_id>/scan/",
+        group_views.GroupScanView.as_view(),
+        name="group-scan",
+    ),
+    path(
+        "groups/<int:group_id>/schedule/",
+        group_views.GroupScheduleView.as_view(),
+        name="group-schedule",
     ),
     path("scans/", views.ScanListCreateView.as_view(), name="scan-list"),
     path(
@@ -34,6 +55,11 @@ urlpatterns = [
         "internal/batches/reconcile/",
         internal_views.BatchReconcileView.as_view(),
         name="internal-batch-reconcile",
+    ),
+    path(
+        "internal/schedules/dispatch/",
+        internal_views.ScheduleDispatchView.as_view(),
+        name="internal-schedule-dispatch",
     ),
     path(
         "internal/batches/<int:batch_id>/claim/",

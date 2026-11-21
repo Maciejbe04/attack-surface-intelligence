@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ScanBatch, ScanEvent, ScanRun, Target
+from .models import GroupSchedule, ScanBatch, ScanEvent, ScanRun, Target, TargetGroup
 
 
 @admin.register(Target)
@@ -68,3 +68,18 @@ class ScanEventAdmin(admin.ModelAdmin):
     list_filter = ("level", "source")
     search_fields = ("message",)
     readonly_fields = ("created_at",)
+
+
+@admin.register(TargetGroup)
+class TargetGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner", "created_at")
+    search_fields = ("name", "description", "owner__username")
+    filter_horizontal = ("targets",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(GroupSchedule)
+class GroupScheduleAdmin(admin.ModelAdmin):
+    list_display = ("group", "enabled", "frequency", "next_run_at", "last_run_at", "last_status")
+    list_filter = ("enabled", "frequency")
+    readonly_fields = ("next_run_at", "last_run_at", "last_run", "last_status", "created_at", "updated_at")

@@ -18,6 +18,7 @@ class ParsedTarget:
     address: str
     target_type: str
     comment: str = ""
+    groups: tuple[str, ...] = ()
 
 
 @dataclass
@@ -38,6 +39,20 @@ def detect_target_type(address: str) -> str:
         return "domain"
 
 
+def split_group_names(value: object) -> tuple[str, ...]:
+    """Group cell: several names separated by ';' or '|'. Whitespace is collapsed."""
+    if isinstance(value, list):
+        parts = [str(item) for item in value]
+    else:
+        parts = str(value or "").replace("|", ";").split(";")
+    names: list[str] = []
+    for part in parts:
+        name = " ".join(part.split())
+        if name and name.lower() not in {existing.lower() for existing in names}:
+            names.append(name)
+    return tuple(names)
+
+
 def _add_target(
     bucket: dict[str, ParsedTarget],
     *,
@@ -46,6 +61,7 @@ def _add_target(
     comment: str,
     errors: list[str],
     line_label: str,
+    groups: tuple[str, ...] = (),
 ) -> None:
     raw = address.strip()
     if not raw or raw.startswith("#"):
@@ -63,6 +79,20 @@ def _add_target(
         return
     key = normalized.lower()
     if key in bucket:
+        # The same host listed twice may carry different groups: keep them all.
+        if groups:
+            existing = bucket[key]
+            merged = existing.groups + tuple(
+                name
+                for name in groups
+                if name.lower() not in {item.lower() for item in existing.groups}
+            )
+            bucket[key] = ParsedTarget(
+                address=existing.address,
+                target_type=existing.target_type,
+                comment=existing.comment,
+                groups=merged,
+            )
         return
     if len(bucket) >= MAX_IMPORT_TARGETS:
         if len(errors) < MAX_IMPORT_ERRORS:
@@ -74,6 +104,7 @@ def _add_target(
         address=normalized,
         target_type=chosen_type,
         comment=(comment or "")[:500],
+        groups=groups,
     )
 
 
@@ -140,6 +171,14 @@ def parse_csv(content: str) -> ImportParseResult:
         ),
         None,
     )
+    group_key = next(
+        (
+            field_map[name]
+            for name in ("group", "groups", "group_name")
+            if name in field_map
+        ),
+        None,
+    )
 
     for index, row in enumerate(reader, start=2):
         _add_target(
@@ -149,6 +188,7 @@ def parse_csv(content: str) -> ImportParseResult:
             comment=str(row.get(comment_key) or "") if comment_key else "",
             errors=errors,
             line_label=f"row {index}",
+            groups=split_group_names(row.get(group_key)) if group_key else (),
         )
         if len(bucket) >= MAX_IMPORT_TARGETS and any(
             "limited to" in item for item in errors
@@ -214,6 +254,7 @@ def parse_json(content: str) -> ImportParseResult:
             comment=str(comment or ""),
             errors=errors,
             line_label=f"item {index}",
+            groups=split_group_names(item.get("groups", item.get("group", ""))),
         )
         if len(bucket) >= MAX_IMPORT_TARGETS and any(
             "limited to" in entry for entry in errors

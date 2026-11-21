@@ -79,7 +79,7 @@ class PublicScanAPITests(TestCase):
             "client_request_id": "request-1",
         }
 
-        with patch("apps.scans.views.execute_batch.apply_async") as publish:
+        with patch("apps.scans.services.execute_batch.apply_async") as publish:
             with self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(reverse("scan-list"), payload, format="json")
 
@@ -96,7 +96,7 @@ class PublicScanAPITests(TestCase):
             queue="scan",
         )
 
-        with patch("apps.scans.views.execute_batch.apply_async") as publish:
+        with patch("apps.scans.services.execute_batch.apply_async") as publish:
             response = self.client.post(reverse("scan-list"), payload, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ScanRun.objects.count(), 1)
@@ -111,7 +111,7 @@ class PublicScanAPITests(TestCase):
         self.client.force_login(self.operator)
 
         with patch(
-            "apps.scans.views.execute_batch.apply_async",
+            "apps.scans.services.execute_batch.apply_async",
             side_effect=ConnectionError("broker unavailable"),
         ):
             with self.captureOnCommitCallbacks(execute=True):
