@@ -7,51 +7,92 @@ from typing import Any
 
 from .models import Observation, ScanRun
 
-# Per-port curiosity 1–3 (3 = most analytically interesting / sensitive).
-# Explicit scores for known services; other open ports default to 2.
-PORT_CURIOSITY_SCORE: dict[int, int] = {
-    # 3 — remote access / cleartext / data stores
-    21: 3,  # FTP
-    22: 3,  # SSH
-    23: 3,  # Telnet
-    445: 3,  # SMB
-    3389: 3,  # RDP
-    5900: 3,  # VNC
-    3306: 3,  # MySQL
-    5432: 3,  # PostgreSQL
-    6379: 3,  # Redis
-    27017: 3,  # MongoDB
-    1433: 3,  # MSSQL
-    1521: 3,  # Oracle
-    2375: 3,  # Docker API
-    2376: 3,  # Docker TLS
-    # 2 — directory / mail / alternate HTTP
-    25: 2,  # SMTP
-    110: 2,  # POP3
-    143: 2,  # IMAP
-    389: 2,  # LDAP
-    636: 2,  # LDAPS
-    8080: 2,
-    8443: 2,
-    9200: 2,  # Elasticsearch
-    11211: 2,  # Memcached
-    # 1 — common lower priority
-    53: 1,  # DNS
-    80: 1,  # HTTP
-    443: 1,  # HTTPS
+# Per-port curiosity in discovery style: high / medium / low / info.
+# Explicit levels for known services; other open ports default to low.
+CuriosityLevel = str  # "high" | "medium" | "low" | "info"
+
+PORT_CURIOSITY_LEVEL: dict[int, CuriosityLevel] = {
+    # high — remote access / cleartext / data stores
+    21: "high",  # FTP
+    22: "high",  # SSH
+    23: "high",  # Telnet
+    445: "high",  # SMB
+    3389: "high",  # RDP
+    5900: "high",  # VNC
+    3306: "high",  # MySQL
+    5432: "high",  # PostgreSQL
+    6379: "high",  # Redis
+    27017: "high",  # MongoDB
+    1433: "high",  # MSSQL
+    1521: "high",  # Oracle
+    2375: "high",  # Docker API
+    2376: "high",  # Docker TLS
+    # medium — directory / mail / alternate HTTP
+    25: "medium",  # SMTP
+    110: "medium",  # POP3
+    143: "medium",  # IMAP
+    389: "medium",  # LDAP
+    636: "medium",  # LDAPS
+    8080: "medium",
+    8443: "medium",
+    9200: "medium",  # Elasticsearch
+    11211: "medium",  # Memcached
+    # info — common lower priority
+    53: "info",  # DNS
+    80: "info",  # HTTP
+    443: "info",  # HTTPS
+}
+
+_CURIOSITY_RANK: dict[str, int] = {
+    "high": 4,
+    "medium": 3,
+    "low": 2,
+    "info": 1,
+}
+
+_LEGACY_NUMERIC_CURIOSITY: dict[int, CuriosityLevel] = {
+    3: "high",
+    2: "medium",
+    1: "info",
 }
 
 _BORING_PORTS = {80, 443}
+_INTERESTING_LEVELS = {"high", "medium"}
 _INTERESTING_PORTS = {
-    port for port, score in PORT_CURIOSITY_SCORE.items() if score >= 2
+    port
+    for port, level in PORT_CURIOSITY_LEVEL.items()
+    if level in _INTERESTING_LEVELS
 }
 
 
-def port_curiosity_score(port: int | None) -> int | None:
-    """Return 1–3 for an open port number; None if port unknown."""
+def normalize_curiosity_level(value: Any) -> CuriosityLevel | None:
+    """Normalize stored curiosity (string level or legacy 1–3) to a level label."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _LEGACY_NUMERIC_CURIOSITY.get(int(value))
+    text = str(value).strip().lower()
+    if text in _CURIOSITY_RANK:
+        return text
+    try:
+        return _LEGACY_NUMERIC_CURIOSITY.get(int(text))
+    except (TypeError, ValueError):
+        return None
+
+
+def curiosity_rank(level: CuriosityLevel | None) -> int:
+    if not level:
+        return 0
+    return int(_CURIOSITY_RANK.get(level, 0))
+
+
+def port_curiosity_score(port: int | None) -> CuriosityLevel | None:
+    """Return high/medium/low/info for an open port number; None if port unknown."""
     if port is None:
         return None
-    return int(PORT_CURIOSITY_SCORE.get(int(port), 2))
+    return PORT_CURIOSITY_LEVEL.get(int(port), "low")
 
 _ABSENT = {
     Observation.Lifecycle.MISSING,
@@ -163,7 +204,7 @@ def _cert_expiring(obs: Observation, *, within_days: int = 30) -> bool:
 
 
 def annotate_port_curiosity(run: ScanRun) -> int:
-    """Write attrs.curiosity (1–3) onto open port observations. Returns updated count."""
+    """Write attrs.curiosity (high/medium/low/info) onto open port observations."""
     updated = 0
     for obs in run.observations.filter(entity_type=Observation.EntityType.PORT):
         if not _is_open_port(obs):
@@ -175,18 +216,23 @@ def annotate_port_curiosity(run: ScanRun) -> int:
                 updated += 1
             continue
         port = _port_num(obs.attrs or {})
-        score = port_curiosity_score(port)
+        level = port_curiosity_score(port)
         attrs = dict(obs.attrs or {})
-        if score is None:
+        if level is None:
             if "curiosity" in attrs:
                 attrs.pop("curiosity", None)
                 obs.attrs = attrs
                 obs.save(update_fields=("attrs", "updated_at"))
                 updated += 1
             continue
-        if attrs.get("curiosity") == score:
+        if normalize_curiosity_level(attrs.get("curiosity")) == level:
+            if attrs.get("curiosity") != level:
+                attrs["curiosity"] = level
+                obs.attrs = attrs
+                obs.save(update_fields=("attrs", "updated_at"))
+                updated += 1
             continue
-        attrs["curiosity"] = score
+        attrs["curiosity"] = level
         obs.attrs = attrs
         obs.save(update_fields=("attrs", "updated_at"))
         updated += 1
@@ -203,8 +249,8 @@ def compute_curiosity_summary(run: ScanRun) -> dict[str, Any]:
     interesting_examples: list[dict[str, Any]] = []
     for obs in open_ports:
         port = _port_num(obs.attrs or {})
-        score = port_curiosity_score(port)
-        if port is None or score is None or score < 2:
+        level = port_curiosity_score(port)
+        if port is None or level not in _INTERESTING_LEVELS:
             continue
         interesting_examples.append(
             {
@@ -212,12 +258,15 @@ def compute_curiosity_summary(run: ScanRun) -> dict[str, Any]:
                 "port": port,
                 "protocol": (obs.attrs or {}).get("protocol") or "tcp",
                 "service": (obs.attrs or {}).get("service") or "",
-                "curiosity": score,
-                "sensitive": score >= 3,
+                "curiosity": level,
+                "sensitive": level == "high",
             }
         )
     interesting_examples.sort(
-        key=lambda item: (-int(item.get("curiosity") or 0), item.get("port") or 0)
+        key=lambda item: (
+            -curiosity_rank(normalize_curiosity_level(item.get("curiosity"))),
+            item.get("port") or 0,
+        )
     )
     interesting_examples = interesting_examples[:8]
 

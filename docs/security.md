@@ -38,7 +38,7 @@ Po `deadline_at` unfinished batche → `PAUSED`. Cancel-check i progress stosuj�
 
 - Sesje Django DB (Redis = cache/Celery), nie Redis session store.
 - Rotacja kluczy AES opisana w docs; pełny job rotacji nie jest jeszcze wdrożony.
-- Pusta allowlista = brak egzekucji (operator musi dodać wpisy przed skanem produkcyjnym).
+- Pusta allowlista = brak egzekucji (admin musi dodać wpisy przed skanem produkcyjnym).
 - Backup: AES-256-CBC (OpenSSL) osobnym kluczem — zob. `docs/backup-restore.md`.
 
 ## Audyt

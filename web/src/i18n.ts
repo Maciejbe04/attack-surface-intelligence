@@ -62,8 +62,12 @@ const PL: Record<string, string> = {
     "Tworzenie i zmiana celów, grup oraz skanów.",
   "Export findings and manage allowlist.":
     "Eksport findings i zarządzanie allowlistą.",
+  "Export findings. Read allowlist (admin manages it).":
+    "Eksport findings. Podgląd allowlisty (zarządza admin).",
   "Cannot manage users or system admin settings.":
     "Bez zarządzania użytkownikami i ustawieniami admina.",
+  "Cannot manage users, allowlist, or system admin settings.":
+    "Bez zarządzania użytkownikami, allowlistą i ustawieniami admina.",
   "Read targets, groups, scans, and findings.":
     "Podgląd celów, grup, skanów i findings.",
   "Export findings (JSON / CSV / DefectDojo).":
@@ -552,6 +556,32 @@ const PL: Record<string, string> = {
     "Filtr",
   "Address, comment, or group":
     "Adres, komentarz lub grupa",
+  "Scan #, target, group, or module":
+    "Nr skanu, cel, grupa lub moduł",
+  "All statuses":
+    "Wszystkie statusy",
+  "All groups":
+    "Wszystkie grupy",
+  "Clear filters":
+    "Wyczyść filtry",
+  "No scans match filters":
+    "Brak skanów dla filtrów",
+  "Try another status, group, or search term.":
+    "Zmień status, grupę albo frazę wyszukiwania.",
+  "Group name or description":
+    "Nazwa grupy lub opis",
+  "All schedules":
+    "Wszystkie harmonogramy",
+  Scheduled: "Zaplanowane",
+  "Schedule enabled": "Harmonogram włączony",
+  "Schedule paused": "Harmonogram wstrzymany",
+  "Any host count": "Dowolna liczba hostów",
+  "With hosts": "Z hostami",
+  "Empty groups": "Puste grupy",
+  "No groups match filters":
+    "Brak grup dla filtrów",
+  "Try another schedule, host count, or search term.":
+    "Zmień harmonogram, liczbę hostów albo frazę wyszukiwania.",
   "All hosts":
     "Wszystkie hosty",
   "Add selected to group":
@@ -612,13 +642,28 @@ const PL: Record<string, string> = {
   Details: "Szczegóły",
   "Latest findings": "Ostatnie findings",
   "Latest completed": "Ostatni ukończony",
-  "Analytical curiosity": "Ciekawość analityczna",
-  Curiosity: "CIEKAWOSĆ",
+  "Analytical curiosity": "Ciekawość",
+  Curiosity: "Ciekawość",
+  "From the last finished scan.": "Z ostatniego skończonego skanu.",
+  "Scan runs": "Przebiegi skanów",
+  "Scan pages": "Strony skanów",
+  Previous: "Poprzednia",
+  Next: "Następna",
+  "Page {page} of {pages}": "Strona {page} z {pages}",
+  "Showing {from}–{to} of {total}": "Widok {from}–{to} z {total}",
+
   "Curiosity 1–3 (3 = highest priority)":
     "Ciekawość 1–3 (3 = najwyższy priorytet)",
+  "Curiosity: high / medium / low / info":
+    "Ciekawość: high / medium / low / info",
+  high: "high",
+  medium: "medium",
+  low: "low",
+  info: "info",
   "Priority signals from the latest completed discovery scan.":
-    "Sygnały priorytetu z ostatniego ukończonego skanu discovery.",
-  "Top services": "Najczęstsze usługi",
+    "Z ostatniego skończonego skanu.",
+  "Top services": "Usługi",
+  Services: "Usługi",
   "{n} host(s) have open ports": "{n} host(ów) ma otwarte porty",
   "{n} open port(s) observed": "{n} otwartych port(ów)",
   "{n} non-standard or sensitive port(s)": "{n} niestandardowych / wrażliwych port(ów)",
@@ -627,6 +672,17 @@ const PL: Record<string, string> = {
     "{n} technolog(ii) z pewnością medium/high",
   "{n} certificate(s) expire within 30 days":
     "{n} certyfikat(ów) wygasa w ciągu 30 dni",
+  "Hosts with open ports": "Hosty z otwartymi portami",
+  "Hosts up": "Hosty",
+  "Open ports": "Porty",
+  "Sensitive / non-standard ports": "Wrażliwe / niestandardowe porty",
+  "Odd ports": "Dziwne porty",
+  "Admin / login / staging hints": "Wskazówki admin / login / staging",
+  "Login paths": "Ścieżki logowania",
+  "Medium/high-confidence tech": "Tech z pewnością medium/high",
+  "Known tech": "Wykryty tech",
+  "Certs expiring ≤30 days": "Certy wygasające ≤30 dni",
+  "Certs soon": "Certy wygasają",
   "Scan window": "Okno skanu",
   "Off (no deadline)": "Wyłączone (bez deadline)",
   "Optional deadline; unfinished batches pause and can be resumed.":

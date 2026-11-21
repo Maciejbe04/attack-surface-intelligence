@@ -46,8 +46,8 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 
 | Metoda | Ścieżka | Role | Opis |
 |---|---|---|---|
-| GET/POST | `/api/allowlist/` | admin/operator | lista / dodanie wpisu |
-| PATCH/DELETE | `/api/allowlist/{id}/` | admin/operator | edycja / usunięcie |
+| GET/POST | `/api/allowlist/` | GET: authenticated; POST: admin | lista / dodanie wpisu |
+| PATCH/DELETE | `/api/allowlist/{id}/` | admin | edycja / usunięcie |
 | POST | `/api/overrides/` | admin/operator/analyst | upsert manual override |
 | DELETE | `/api/overrides/{id}/` | admin/operator/analyst | usunięcie |
 | GET | `/api/audit/` | admin | ostatnie wpisy audytu |

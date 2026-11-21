@@ -47,21 +47,43 @@ function attrsPreview(attrs: Record<string, unknown>): string {
   return parts.slice(0, 4).join(" · ") || "—";
 }
 
-function curiosityFromAttrs(attrs: Record<string, unknown> | undefined): number | null {
+type CuriosityLevel = "high" | "medium" | "low" | "info";
+
+function curiosityFromAttrs(attrs: Record<string, unknown> | undefined): CuriosityLevel | null {
   if (!attrs || attrs.curiosity == null || attrs.curiosity === "") return null;
-  const value = Number(attrs.curiosity);
-  if (!Number.isFinite(value) || value < 1 || value > 3) return null;
-  return Math.round(value);
+  const raw = attrs.curiosity;
+  if (typeof raw === "number") {
+    if (raw === 3) return "high";
+    if (raw === 2) return "medium";
+    if (raw === 1) return "info";
+    return null;
+  }
+  const value = String(raw).trim().toLowerCase();
+  if (value === "high" || value === "medium" || value === "low" || value === "info") {
+    return value;
+  }
+  if (value === "3") return "high";
+  if (value === "2") return "medium";
+  if (value === "1") return "info";
+  return null;
 }
 
-function CuriosityBadge({ value, t }: { value: number | null; t: Translate }) {
+function CuriosityBadge({ value, t }: { value: CuriosityLevel | null; t: Translate }) {
   if (value == null) return <span className="field-help">—</span>;
+  const label =
+    value === "high"
+      ? t("high")
+      : value === "medium"
+        ? t("medium")
+        : value === "low"
+          ? t("low")
+          : t("info");
   return (
     <span
       className={`curiosity-badge curiosity-badge--${value}`}
-      title={t("Curiosity 1–3 (3 = highest priority)")}
+      title={t("Curiosity: high / medium / low / info")}
     >
-      {value}
+      {label}
     </span>
   );
 }

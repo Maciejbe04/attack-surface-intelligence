@@ -307,9 +307,9 @@ class NormalizeLifecycleTests(TestCase):
             int(o.attrs["port"]): o.attrs.get("curiosity")
             for o in run.observations.filter(entity_type=Observation.EntityType.PORT)
         }
-        self.assertEqual(port_rows.get(80), 1)
-        self.assertEqual(port_rows.get(22), 3)
-        self.assertEqual(port_rows.get(8080), 2)
+        self.assertEqual(port_rows.get(80), "info")
+        self.assertEqual(port_rows.get(22), "high")
+        self.assertEqual(port_rows.get(8080), "medium")
 
     def test_observations_and_diff_api(self) -> None:
         first = self._run_with_batch(

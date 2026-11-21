@@ -18,7 +18,8 @@ Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
 | Logowanie / własna sesja | tak | tak | tak | tak |
 | Zarządzanie użytkownikami i rolami | tak | nie | nie | nie |
 | Rotacja kluczy i sekrety systemowe | tak | nie | nie | nie |
-| Zarządzanie allowlistą | tak | tak | nie | nie |
+| Zarządzanie allowlistą | tak | nie | nie | nie |
+| Podgląd allowlisty | tak | tak | tak | tak |
 | CRUD celów | tak | tak | nie | nie |
 | CRUD profili i harmonogramów | tak | tak | nie | nie |
 | Start / stop / wznowienie skanu | tak | tak | nie | nie |

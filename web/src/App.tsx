@@ -125,6 +125,144 @@ const STATUS_LABELS: Record<ScanStatus, string> = {
   cancelled: "Cancelled",
 };
 
+const SCANS_PAGE_SIZE = 15;
+
+function ScanFiltersBar({
+  query,
+  statusFilter,
+  groupFilter,
+  groupOptions,
+  idPrefix,
+  t,
+  onQueryChange,
+  onStatusChange,
+  onGroupChange,
+  onClear,
+}: {
+  query: string;
+  statusFilter: "" | ScanStatus | "paused";
+  groupFilter: string;
+  groupOptions: string[];
+  idPrefix: string;
+  t: Translate;
+  onQueryChange: (value: string) => void;
+  onStatusChange: (value: "" | ScanStatus | "paused") => void;
+  onGroupChange: (value: string) => void;
+  onClear: () => void;
+}) {
+  const active = Boolean(query || statusFilter || groupFilter);
+  return (
+    <div className="target-filters scan-filters">
+      <div className="target-filters__field">
+        <label htmlFor={`${idPrefix}-filter-query`}>{t("Filter")}</label>
+        <input
+          id={`${idPrefix}-filter-query`}
+          className="input"
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder={t("Scan #, target, group, or module")}
+        />
+      </div>
+      <div className="target-filters__field">
+        <label htmlFor={`${idPrefix}-filter-status`}>{t("Status")}</label>
+        <select
+          id={`${idPrefix}-filter-status`}
+          className="input input--select"
+          value={statusFilter}
+          onChange={(e) => onStatusChange(e.target.value as "" | ScanStatus | "paused")}
+        >
+          <option value="">{t("All statuses")}</option>
+          {(Object.keys(STATUS_LABELS) as ScanStatus[]).map((status) => (
+            <option key={status} value={status}>
+              {t(STATUS_LABELS[status])}
+            </option>
+          ))}
+          <option value="paused">{t("Paused")}</option>
+        </select>
+      </div>
+      <div className="target-filters__field">
+        <label htmlFor={`${idPrefix}-filter-group`}>{t("Group")}</label>
+        <select
+          id={`${idPrefix}-filter-group`}
+          className="input input--select"
+          value={groupFilter}
+          onChange={(e) => onGroupChange(e.target.value)}
+        >
+          <option value="">{t("All groups")}</option>
+          <option value={NO_GROUP}>{t("No group")}</option>
+          {groupOptions.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {active && (
+        <div className="target-filters__field target-filters__field--action">
+          <label className="sr-only">{t("Clear filters")}</label>
+          <button type="button" className="btn" onClick={onClear}>
+            {t("Clear filters")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScanPager({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPageChange,
+  t,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  t: Translate;
+}) {
+  if (total <= pageSize) return null;
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div className="pager" role="navigation" aria-label={t("Scan pages")}>
+      <span className="pager__summary field-help">
+        {t("Showing {from}–{to} of {total}")
+          .replace("{from}", String(from))
+          .replace("{to}", String(to))
+          .replace("{total}", String(total))}
+      </span>
+      <div className="pager__actions">
+        <button
+          type="button"
+          className="btn"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          {t("Previous")}
+        </button>
+        <span className="pager__status mono" aria-live="polite">
+          {t("Page {page} of {pages}")
+            .replace("{page}", String(page))
+            .replace("{pages}", String(pageCount))}
+        </span>
+        <button
+          type="button"
+          className="btn"
+          disabled={page >= pageCount}
+          onClick={() => onPageChange(page + 1)}
+        >
+          {t("Next")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ScanTable({
   scans,
   emptyTitle,
@@ -540,12 +678,69 @@ export function App() {
   const [consoleLoading, setConsoleLoading] = useState(false);
   const [consoleReloadKey, setConsoleReloadKey] = useState(0);
   const [scanWindowSeconds, setScanWindowSeconds] = useState<number | "">("");
+  const [scansPage, setScansPage] = useState(1);
+  const [scanQuery, setScanQuery] = useState("");
+  const [scanStatusFilter, setScanStatusFilter] = useState<"" | ScanStatus | "paused">("");
+  const [scanGroupFilter, setScanGroupFilter] = useState("");
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
   const canMutate = user?.role === "admin" || user?.role === "operator";
   const canExport =
     user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
+
+  const scanGroupOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const scan of scans) {
+      if (scan.group_name) names.add(scan.group_name);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [scans]);
+
+  const filteredScans = useMemo(() => {
+    const query = scanQuery.trim().toLowerCase();
+    return scans.filter((scan) => {
+      if (scanStatusFilter === "paused") {
+        if (!scan.resume_available) return false;
+      } else if (scanStatusFilter && scan.status !== scanStatusFilter) {
+        return false;
+      }
+      if (scanGroupFilter === NO_GROUP) {
+        if (scan.group_name) return false;
+      } else if (scanGroupFilter && scan.group_name !== scanGroupFilter) {
+        return false;
+      }
+      if (!query) return true;
+      const haystack = [
+        String(scan.id),
+        scan.group_name || "",
+        scan.targets.join(" "),
+        scan.modules.map((module) => module.id).join(" "),
+        scan.error || "",
+        STATUS_LABELS[scan.status] || scan.status,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [scans, scanQuery, scanStatusFilter, scanGroupFilter]);
+
+  const scansPageCount = Math.max(1, Math.ceil(filteredScans.length / SCANS_PAGE_SIZE));
+  const scansPageSafe = Math.min(Math.max(1, scansPage), scansPageCount);
+  const pagedScans = filteredScans.slice(
+    (scansPageSafe - 1) * SCANS_PAGE_SIZE,
+    scansPageSafe * SCANS_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    if (scansPage !== scansPageSafe) {
+      setScansPage(scansPageSafe);
+    }
+  }, [scansPage, scansPageSafe]);
+
+  useEffect(() => {
+    setScansPage(1);
+  }, [scanQuery, scanStatusFilter, scanGroupFilter]);
 
   const pushToast = useCallback((kind: Toast["kind"], title: string, message: string) => {
     let id = "";
@@ -1187,6 +1382,7 @@ export function App() {
         });
         openScanConsole(result.scan.id);
         setScanRefreshKey((value) => value + 1);
+        setScansPage(1);
         setNav("scans");
       }
       if (result.parse_errors.length > 0) {
@@ -1363,6 +1559,7 @@ export function App() {
     setConsoleScan({ ...scan, events: scan.events ?? [], batches: scan.batches ?? [] });
     openScanConsole(scan.id);
     setScanRefreshKey((value) => value + 1);
+    setScansPage(1);
     setNav("scans");
   }
 
@@ -1530,7 +1727,10 @@ export function App() {
             type="button"
             className={`sidenav__item ${nav === "scans" ? "is-active" : ""}`}
             aria-current={nav === "scans" ? "page" : undefined}
-            onClick={() => setNav("scans")}
+            onClick={() => {
+              setScansPage(1);
+              setNav("scans");
+            }}
           >
             {t("Scans")}
           </button>
@@ -1692,14 +1892,41 @@ export function App() {
               <CuriosityInsightsFromScans scans={scans} t={t} />
 
               <section className="panel">
-                <div className="panel__header">
+                <div className="panel__header panel__header--split">
                   <h2>{t("Recent probe jobs")}</h2>
+                  <span className="field-help">
+                    {filteredScans.length === scans.length
+                      ? `${Math.min(filteredScans.length, SCANS_PAGE_SIZE)} / ${scans.length}`
+                      : `${Math.min(filteredScans.length, SCANS_PAGE_SIZE)} ${t("shown")} · ${filteredScans.length} / ${scans.length}`}
+                  </span>
                 </div>
+                <ScanFiltersBar
+                  idPrefix="dashboard-scans"
+                  query={scanQuery}
+                  statusFilter={scanStatusFilter}
+                  groupFilter={scanGroupFilter}
+                  groupOptions={scanGroupOptions}
+                  t={t}
+                  onQueryChange={setScanQuery}
+                  onStatusChange={setScanStatusFilter}
+                  onGroupChange={setScanGroupFilter}
+                  onClear={() => {
+                    setScanQuery("");
+                    setScanStatusFilter("");
+                    setScanGroupFilter("");
+                  }}
+                />
                 <div className="table-wrap">
                   <ScanTable
-                    scans={scans.slice(0, 10)}
-                    emptyTitle="No probe jobs"
-                    emptyMessage="Select modules and run a discovery probe against a host."
+                    scans={filteredScans.slice(0, SCANS_PAGE_SIZE)}
+                    emptyTitle={
+                      scans.length === 0 ? "No probe jobs" : "No scans match filters"
+                    }
+                    emptyMessage={
+                      scans.length === 0
+                        ? "Select modules and run a discovery probe against a host."
+                        : "Try another status, group, or search term."
+                    }
                     canMutate={canMutate}
                     cancellingIds={cancellingIds}
                     focusedScanId={consoleScanId}
@@ -2292,11 +2519,41 @@ export function App() {
                 <p>{t("Queued discovery jobs from the dashboard and target list.")}</p>
               </header>
               <div className="panel">
+                <div className="panel__header panel__header--split">
+                  <h2>{t("Scan runs")}</h2>
+                  <span className="field-help">
+                    {filteredScans.length === scans.length
+                      ? `${scans.length} ${t("total")}`
+                      : `${filteredScans.length} / ${scans.length} ${t("total")}`}
+                  </span>
+                </div>
+                <ScanFiltersBar
+                  idPrefix="scans"
+                  query={scanQuery}
+                  statusFilter={scanStatusFilter}
+                  groupFilter={scanGroupFilter}
+                  groupOptions={scanGroupOptions}
+                  t={t}
+                  onQueryChange={setScanQuery}
+                  onStatusChange={setScanStatusFilter}
+                  onGroupChange={setScanGroupFilter}
+                  onClear={() => {
+                    setScanQuery("");
+                    setScanStatusFilter("");
+                    setScanGroupFilter("");
+                  }}
+                />
                 <div className="table-wrap" aria-busy={dataLoading}>
                   <ScanTable
-                    scans={scans}
-                    emptyTitle="No scan runs yet"
-                    emptyMessage="Use Dashboard modules to probe a host."
+                    scans={pagedScans}
+                    emptyTitle={
+                      scans.length === 0 ? "No scan runs yet" : "No scans match filters"
+                    }
+                    emptyMessage={
+                      scans.length === 0
+                        ? "Use Dashboard modules to probe a host."
+                        : "Try another status, group, or search term."
+                    }
                     canMutate={canMutate}
                     cancellingIds={cancellingIds}
                     focusedScanId={consoleScanId}
@@ -2307,6 +2564,14 @@ export function App() {
                     t={t}
                   />
                 </div>
+                <ScanPager
+                  page={scansPageSafe}
+                  pageCount={scansPageCount}
+                  total={filteredScans.length}
+                  pageSize={SCANS_PAGE_SIZE}
+                  onPageChange={setScansPage}
+                  t={t}
+                />
               </div>
 
               <ScanConsole
@@ -2342,7 +2607,7 @@ export function App() {
           {nav === "allowlist" && (
             <AllowlistPanel
               active
-              canManage={user?.role === "admin" || user?.role === "operator"}
+              canManage={user?.role === "admin"}
               t={t}
             />
           )}

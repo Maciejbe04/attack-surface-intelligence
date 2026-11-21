@@ -67,19 +67,18 @@ class RunnerTests(SimpleTestCase):
         self.assertGreaterEqual(result["signatures"][0]["confidence"], 40)
 
     def test_http_probe_preserves_saved_domain_for_vhost_and_tls_sni(self) -> None:
-        modules = validate_modules([{"id": "http-fingerprint", "filters": {}}])
+        modules = validate_modules(
+            [{"id": "http-fingerprint", "filters": {"ports": "443", "schemes": "https"}}]
+        )
         httpx_inputs: list[bytes] = []
+        commands: list[list[str]] = []
 
         def fake_run(arguments, **kwargs):
-            if arguments[0] == "nmap":
-                return NMAP_XML, b""
-            httpx_inputs.append(kwargs["input_data"])
+            commands.append(arguments)
+            httpx_inputs.append(kwargs.get("input_data") or b"")
             return b"", b""
 
-        with (
-            patch("apps.scans.runner._run_command", side_effect=fake_run),
-            patch("apps.scans.runner._supports_syn_scan", return_value=False),
-        ):
+        with patch("apps.scans.runner._run_command", side_effect=fake_run):
             execute_scan(
                 {
                     "target": {"address": "app.example.test", "type": "domain"},
@@ -89,7 +88,38 @@ class RunnerTests(SimpleTestCase):
                 report_progress=lambda progress, message="": None,
             )
 
+        self.assertEqual([cmd[0] for cmd in commands], ["httpx"])
         self.assertEqual(httpx_inputs, [b"https://app.example.test:443\n"])
+
+    def test_tls_only_skips_nmap_and_runs_httpx_tls_grab(self) -> None:
+        modules = validate_modules([{"id": "tls-cert", "filters": {"ports": "443"}}])
+        commands: list[list[str]] = []
+
+        def fake_run(arguments, **kwargs):
+            commands.append(arguments)
+            return (
+                b'{"url":"https://192.0.2.50:443","status_code":200,'
+                b'"tls":{"subject_cn":"192.0.2.50","issuer_cn":"lab",'
+                b'"not_after":"2027-01-01T00:00:00Z"}}\n',
+                b"",
+            )
+
+        with patch("apps.scans.runner._run_command", side_effect=fake_run):
+            result = execute_scan(
+                {
+                    "target": {"address": "192.0.2.50", "type": "ip"},
+                    "modules": modules,
+                },
+                should_cancel=lambda: False,
+                report_progress=lambda progress, message="": None,
+            )
+
+        self.assertEqual([cmd[0] for cmd in commands], ["httpx"])
+        self.assertIn("-tls-grab", commands[0])
+        self.assertEqual(result["metadata"]["scan_mode"], "skipped")
+        self.assertEqual(result["metadata"]["nmap_arguments"], [])
+        self.assertEqual(result["hosts"], [])
+        self.assertEqual(result["http"][0]["tls"]["subject_cn"], "192.0.2.50")
 
     def test_subprocess_is_started_without_a_shell(self) -> None:
         process = Mock()

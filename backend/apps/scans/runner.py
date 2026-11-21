@@ -158,10 +158,8 @@ def _nmap_arguments(
     host = selected.get("host-discovery")
     port = selected.get("port-scan")
     service_enabled = "service-detect" in selected or full is not None
-    http_phase = bool(
-        {"http-fingerprint", "tls-cert", "signatures"} & set(selected)
-    )
-    has_port_phase = port is not None or service_enabled or full is not None or http_phase
+    # HTTP/TLS/signatures alone never reach here (_needs_nmap gates execute_scan).
+    has_port_phase = port is not None or service_enabled or full is not None
     scan_mode = "syn" if _supports_syn_scan() else "connect"
 
     if not has_port_phase:
@@ -183,22 +181,6 @@ def _nmap_arguments(
             ports = _port_profile(port["profile"], port["customPorts"])
             timing = port["timing"]
             max_rate = port["maxRate"]
-        elif http_phase:
-            requested_ports: set[int] = set()
-            if "http-fingerprint" in selected:
-                requested_ports.update(
-                    int(value)
-                    for value in selected["http-fingerprint"]["ports"].split(",")
-                )
-            if "tls-cert" in selected:
-                requested_ports.update(
-                    int(value) for value in selected["tls-cert"]["ports"].split(",")
-                )
-            if not requested_ports:
-                requested_ports.update(HTTP_PORTS)
-            ports = ",".join(str(value) for value in sorted(requested_ports))
-            timing = "T3"
-            max_rate = 200
         else:
             ports = FAST_PORTS
             timing = "T3"
@@ -261,6 +243,16 @@ def _parse_nmap(output: bytes) -> list[dict[str, Any]]:
     return hosts
 
 
+_NMAP_MODULE_IDS = frozenset(
+    {"host-discovery", "port-scan", "service-detect", "full-pipeline"}
+)
+
+
+def _needs_nmap(selected: dict[str, dict[str, Any]]) -> bool:
+    """nmap only for discovery/port/service/full — not for bare HTTP/TLS/signatures."""
+    return bool(_NMAP_MODULE_IDS & set(selected))
+
+
 def _http_endpoints(
     target: str,
     hosts: list[dict[str, Any]],
@@ -307,6 +299,9 @@ def _http_endpoints(
         if tls_filters:
             ports.update(int(value) for value in tls_filters["ports"].split(","))
         if full:
+            ports.update((80, 443, 8080, 8443))
+        # signatures-only (no fingerprint/tls filters): still probe common web ports
+        if not ports and "signatures" in selected:
             ports.update((80, 443, 8080, 8443))
         schemes = http_filters["schemes"] if http_filters else "both"
         for port in ports:
@@ -395,26 +390,35 @@ def execute_scan(
     if should_cancel():
         raise ScanCancelled("Scan cancellation requested.")
 
-    nmap_arguments, scan_mode = _nmap_arguments(target, target_type, selected)
-    report_progress(
-        5,
-        f"Starting nmap ({scan_mode}) for {target}: {' '.join(nmap_arguments[:-1])} <target>",
-    )
-    nmap_output, _ = _run_command(
-        nmap_arguments,
-        input_data=None,
-        should_cancel=should_cancel,
-    )
-    hosts = _parse_nmap(nmap_output)
-    open_ports = sum(
-        len(host.get("ports", []))
-        for host in hosts
-        if isinstance(host.get("ports"), list)
-    )
-    report_progress(
-        55,
-        f"nmap finished for {target}: {len(hosts)} host(s), {open_ports} open port(s).",
-    )
+    hosts: list[dict[str, Any]] = []
+    nmap_arguments: list[str] = []
+    scan_mode = "skipped"
+    if _needs_nmap(selected):
+        nmap_arguments, scan_mode = _nmap_arguments(target, target_type, selected)
+        report_progress(
+            5,
+            f"Starting nmap ({scan_mode}) for {target}: {' '.join(nmap_arguments[:-1])} <target>",
+        )
+        nmap_output, _ = _run_command(
+            nmap_arguments,
+            input_data=None,
+            should_cancel=should_cancel,
+        )
+        hosts = _parse_nmap(nmap_output)
+        open_ports = sum(
+            len(host.get("ports", []))
+            for host in hosts
+            if isinstance(host.get("ports"), list)
+        )
+        report_progress(
+            55,
+            f"nmap finished for {target}: {len(hosts)} host(s), {open_ports} open port(s).",
+        )
+    else:
+        report_progress(
+            55,
+            f"nmap skipped for {target} (HTTP/TLS/signature modules only).",
+        )
 
     needs_http = bool(
         {"http-fingerprint", "tls-cert", "signatures", "full-pipeline"} & set(selected)
@@ -453,7 +457,9 @@ def execute_scan(
         "target": {"address": target, "type": target_type},
         "metadata": {
             "scan_mode": scan_mode,
-            "nmap_arguments": nmap_arguments[:-1] + ["<target>"],
+            "nmap_arguments": (
+                nmap_arguments[:-1] + ["<target>"] if nmap_arguments else []
+            ),
             "httpx_arguments": _httpx_arguments(selected) if needs_http else [],
             "redirects_followed": False,
         },

@@ -12,6 +12,15 @@ def role_for(user: User) -> str:
         return "viewer"
 
 
+class IsAdmin(BasePermission):
+    message = "Admin role required."
+
+    def has_permission(self, request: Request, view: object) -> bool:
+        return bool(
+            request.user.is_authenticated and role_for(request.user) == "admin"
+        )
+
+
 class IsAdminOrOperator(BasePermission):
     message = "Admin or operator role required."
 

@@ -56,7 +56,7 @@ from .models import (
 from .modules import validate_modules
 from .normalize import diff_runs, previous_completed_run, same_scan_scope
 from .overrides import overrides_for_keys
-from .permissions import CanExportFindings, IsAdminOrOperator
+from .permissions import CanExportFindings, IsAdmin, IsAdminOrOperator
 from .serializers import (
     AllowlistEntrySerializer,
     AuditLogSerializer,
@@ -905,7 +905,7 @@ class AllowlistListCreateView(APIView):
 
     def get_permissions(self):
         if self.request.method == "POST":
-            return [IsAuthenticated(), IsAdminOrOperator()]
+            return [IsAuthenticated(), IsAdmin()]
         return super().get_permissions()
 
     def get(self, request: Request) -> Response:
@@ -938,7 +938,7 @@ class AllowlistListCreateView(APIView):
 
 
 class AllowlistDetailView(APIView):
-    permission_classes = (IsAuthenticated, IsAdminOrOperator)
+    permission_classes = (IsAuthenticated, IsAdmin)
 
     def patch(self, request: Request, entry_id: int) -> Response:
         entry = get_object_or_404(

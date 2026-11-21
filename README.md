@@ -34,7 +34,10 @@ Backup / restore check:
 ./scripts/restore-test.sh
 ```
 
+`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Hostowo: `http://127.0.0.1:18088`.
+
 `.env.example` ustawia `COMPOSE_PROFILES=defectdojo`, więc DefectDojo startuje razem ze stosem.
+
 Jeśli kolega ma stare `.env` bez tej linii, DefectDojo **nie wstanie** mimo działającego Compose — wtedy:
 
 ```bash

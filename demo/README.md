@@ -1,5 +1,9 @@
 # Lab demo SurfaceX
 
+## Lokalny Compose (`lab-target`)
+
+Usługa `lab-target` jest na stałe w `compose.yml` (sieć `scanner`): HTTP `80`/`8080`, TLS `443`, `/admin`, `/login`. Przy starcie API (`SEED_LAB_TARGET=1`) seeduje się grupa **`lab-local`** z hostami `lab-target.surfacex.local` i `172.30.0.10` (cel + allowlista). Skanuj grupę `lab-local` z UI. Host: `http://127.0.0.1:18088`.
+
 Scenariusz jury na trzech małych LXC ze stroną statyczną (`lab-lxc`).
 
 ## Hosty labowe (Proxmox / lxcvnet)

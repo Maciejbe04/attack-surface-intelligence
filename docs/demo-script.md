@@ -11,7 +11,7 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
    - host A `10.99.0.70` — Lab Alpha (nginx);
    - host B `10.99.0.71` — Lab Bravo;
    - host C `10.99.0.72` — Lab Charlie (do wyłączenia przed drugim skanem).
-3. Allowlista: wpisy IP `10.99.0.70–72` (admin/operator).
+3. Allowlista: wpisy IP `10.99.0.70–72` (tylko admin; operator ma podgląd).
 4. Import celów z [`demo/targets.json`](../demo/targets.json) albo użyj grupy `lab-lxc`.
 5. Zaloguj się jako `operator` (albo `admin`).
 
@@ -23,7 +23,7 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
    - hosty `NEW`;
    - fingerprint / confidence (np. nginx / lab headers);
    - evidence HTTP;
-   - **Ciekawość analityczna** na dashboardzie (np. N hostów z otwartymi portami, porty wrażliwe, hinty admin/login).
+   - **Ciekawość** na dashboardzie (hosty, porty, login paths).
 4. Jako `analyst` dodaj notatkę/override do hosta A (`10.99.0.70`).
 
 ## Zmiana środowiska

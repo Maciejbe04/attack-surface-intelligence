@@ -157,7 +157,7 @@ export function AllowlistPanel({ active, canManage, t }: Props) {
                   <tr>
                     <th scope="col">{t("Value")}</th>
                     <th scope="col">{t("Type")}</th>
-                    <th scope="col">{t("Actions")}</th>
+                    {canManage && <th scope="col">{t("Actions")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -165,8 +165,8 @@ export function AllowlistPanel({ active, canManage, t }: Props) {
                     <tr key={entry.id}>
                       <td className="mono">{entry.value}</td>
                       <td className="mono">{entry.type}</td>
-                      <td className="scan-actions">
-                        {canManage && (
+                      {canManage && (
+                        <td className="scan-actions">
                           <button
                             type="button"
                             className="btn btn--danger"
@@ -175,8 +175,8 @@ export function AllowlistPanel({ active, canManage, t }: Props) {
                           >
                             {t("Delete")}
                           </button>
-                        )}
-                      </td>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

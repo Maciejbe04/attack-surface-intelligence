@@ -4,25 +4,33 @@ import { Translate } from "./i18n";
 function highlightLabel(item: CuriosityHighlight, t: Translate): string {
   switch (item.id) {
     case "hosts_with_open_ports":
-      return t("{n} host(s) have open ports").replace("{n}", String(item.count));
+      return t("Hosts up");
     case "open_ports_total":
-      return t("{n} open port(s) observed").replace("{n}", String(item.count));
+      return t("Open ports");
     case "interesting_ports":
-      return t("{n} non-standard or sensitive port(s)").replace("{n}", String(item.count));
+      return t("Odd ports");
     case "admin_or_login_hints":
-      return t("{n} admin / login / staging hint(s)").replace("{n}", String(item.count));
+      return t("Login paths");
     case "high_confidence_tech":
-      return t("{n} medium/high-confidence technolog(ies)").replace("{n}", String(item.count));
+      return t("Known tech");
     case "expiring_certs":
-      return t("{n} certificate(s) expire within 30 days").replace("{n}", String(item.count));
+      return t("Certs soon");
     default:
-      return item.text;
+      return item.text.replace(/^\d+\s*/, "");
   }
+}
+
+function severityLabel(severity: string, t: Translate): string {
+  if (severity === "high") return t("high");
+  if (severity === "medium") return t("medium");
+  if (severity === "low") return t("low");
+  return t("info");
 }
 
 function severityClass(severity: string): string {
   if (severity === "high") return "curiosity-card--high";
   if (severity === "medium") return "curiosity-card--medium";
+  if (severity === "low") return "curiosity-card--low";
   return "curiosity-card--info";
 }
 
@@ -65,34 +73,47 @@ export function CuriosityInsights({
   if (cards.length === 0) return null;
 
   return (
-    <section className="panel curiosity-panel" aria-label={t("Analytical curiosity")}>
+    <section className="panel curiosity-panel" aria-label={t("Curiosity")}>
       <div className="panel__header panel__header--split">
-        <h2>{t("Analytical curiosity")}</h2>
+        <div className="curiosity-panel__title">
+          <h2>{t("Curiosity")}</h2>
+          <p className="curiosity-panel__lede">{t("From the last finished scan.")}</p>
+        </div>
         {scanId != null && (
-          <span className="field-help">
-            {t("Latest completed")} #{scanId}
+          <span className="curiosity-panel__meta mono">
+            {t("Scan")} #{scanId}
           </span>
         )}
       </div>
-      <div className="panel__body">
-        <p className="field-help" style={{ marginTop: 0 }}>
-          {t("Priority signals from the latest completed discovery scan.")}
-        </p>
+      <div className="panel__body curiosity-panel__body">
         <div className="curiosity-grid">
           {cards.map((item) => (
-            <div key={item.id} className={`curiosity-card ${severityClass(item.severity)}`}>
-              <strong className="mono curiosity-card__count">{item.count}</strong>
+            <article
+              key={item.id}
+              className={`curiosity-card ${severityClass(item.severity)}`}
+            >
+              <div className="curiosity-card__top">
+                <strong className="mono curiosity-card__count">{item.count}</strong>
+                <span className={`curiosity-pill curiosity-pill--${item.severity || "info"}`}>
+                  {severityLabel(item.severity || "info", t)}
+                </span>
+              </div>
               <span className="curiosity-card__label">{highlightLabel(item, t)}</span>
-            </div>
+            </article>
           ))}
         </div>
         {curiosity.top_services && curiosity.top_services.length > 0 && (
-          <p className="field-help curiosity-services">
-            {t("Top services")}:{" "}
-            {curiosity.top_services
-              .map((row) => `${row.service} (${row.count})`)
-              .join(" · ")}
-          </p>
+          <div className="curiosity-services">
+            <span className="curiosity-services__label">{t("Services")}</span>
+            <ul className="curiosity-services__list">
+              {curiosity.top_services.map((row) => (
+                <li key={row.service} className="curiosity-chip mono">
+                  {row.service}
+                  <span className="curiosity-chip__count">{row.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </section>

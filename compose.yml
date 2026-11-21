@@ -23,6 +23,7 @@ x-api-env: &api-env
   CSRF_PROTECT: ${CSRF_PROTECT:-0}
   BOOTSTRAP_ADMIN_USER: ${BOOTSTRAP_ADMIN_USER:-admin}
   BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme}
+  SEED_LAB_TARGET: ${SEED_LAB_TARGET:-1}
   APP_NAME: ${APP_NAME:-SurfaceX}
   APP_VERSION: ${APP_VERSION:-0.1.0}
   WEB_VERSION: ${WEB_VERSION:-0.1.0}
@@ -229,6 +230,8 @@ services:
       api:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      lab-target:
         condition: service_healthy
     networks:
       - backend
@@ -520,6 +523,35 @@ services:
       retries: 20
       start_period: 5s
 
+  lab-target:
+    build:
+      context: ./deploy/lab-target
+    image: surfacex-lab-target:local
+    hostname: lab-target.surfacex.local
+    restart: unless-stopped
+    ports:
+      - "${LAB_HTTP_PORT:-18088}:80"
+    networks:
+      scanner:
+        ipv4_address: 172.30.0.10
+        aliases:
+          - lab-target.surfacex.local
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+      - /var/cache/nginx:size=8m,uid=101,gid=101,mode=0755
+      - /var/run:size=4m,uid=101,gid=101,mode=0755
+    mem_limit: 64m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   backup:
     image: surfacex-api:local
     pull_policy: never
@@ -552,6 +584,9 @@ networks:
   backend:
     internal: true
   scanner:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
   defectdojo:
     internal: true
 

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   GroupSchedule,
   GroupScheduleInput,
@@ -87,8 +87,40 @@ export function GroupsPanel({
   const [renameName, setRenameName] = useState("");
   const [renameDescription, setRenameDescription] = useState("");
   const [renamePending, setRenamePending] = useState(false);
+  const [groupQuery, setGroupQuery] = useState("");
+  const [scheduleFilter, setScheduleFilter] = useState<
+    "" | "scheduled" | "enabled" | "paused" | "none"
+  >("");
+  const [hostsFilter, setHostsFilter] = useState<"" | "with_hosts" | "empty">("");
 
   const editing = groups.find((group) => group.id === editingId) ?? null;
+
+  const filteredGroups = useMemo(() => {
+    const query = groupQuery.trim().toLowerCase();
+    return groups.filter((group) => {
+      if (hostsFilter === "with_hosts" && group.target_count <= 0) return false;
+      if (hostsFilter === "empty" && group.target_count > 0) return false;
+
+      const schedule = group.schedule;
+      if (scheduleFilter === "none" && schedule) return false;
+      if (scheduleFilter === "scheduled" && !schedule) return false;
+      if (scheduleFilter === "enabled" && !(schedule && schedule.enabled)) return false;
+      if (scheduleFilter === "paused" && !(schedule && !schedule.enabled)) return false;
+
+      if (!query) return true;
+      const haystack = [
+        group.name,
+        group.description || "",
+        schedule ? describeSchedule(schedule, t) : "",
+        schedule?.last_status || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [groups, groupQuery, scheduleFilter, hostsFilter, t]);
+
+  const filtersActive = Boolean(groupQuery || scheduleFilter || hostsFilter);
 
   async function onCreate(event: FormEvent) {
     event.preventDefault();
@@ -324,7 +356,9 @@ export function GroupsPanel({
       <section className="panel">
         <div className="table-toolbar">
           <div className="table-toolbar__count">
-            {groups.length} {t("groups")}
+            {filteredGroups.length === groups.length
+              ? `${groups.length} ${t("groups")}`
+              : `${filteredGroups.length} / ${groups.length} ${t("groups")}`}
           </div>
           {canMutate && (
             <label className="table-toolbar__window">
@@ -345,14 +379,82 @@ export function GroupsPanel({
             </label>
           )}
         </div>
+        <div className="target-filters">
+          <div className="target-filters__field">
+            <label htmlFor="groups-filter-query">{t("Filter")}</label>
+            <input
+              id="groups-filter-query"
+              className="input"
+              type="search"
+              value={groupQuery}
+              onChange={(event) => setGroupQuery(event.target.value)}
+              placeholder={t("Group name or description")}
+            />
+          </div>
+          <div className="target-filters__field">
+            <label htmlFor="groups-filter-schedule">{t("Schedule")}</label>
+            <select
+              id="groups-filter-schedule"
+              className="input input--select"
+              value={scheduleFilter}
+              onChange={(event) =>
+                setScheduleFilter(
+                  event.target.value as "" | "scheduled" | "enabled" | "paused" | "none",
+                )
+              }
+            >
+              <option value="">{t("All schedules")}</option>
+              <option value="scheduled">{t("Scheduled")}</option>
+              <option value="enabled">{t("Schedule enabled")}</option>
+              <option value="paused">{t("Schedule paused")}</option>
+              <option value="none">{t("Not scheduled")}</option>
+            </select>
+          </div>
+          <div className="target-filters__field">
+            <label htmlFor="groups-filter-hosts">{t("Hosts")}</label>
+            <select
+              id="groups-filter-hosts"
+              className="input input--select"
+              value={hostsFilter}
+              onChange={(event) =>
+                setHostsFilter(event.target.value as "" | "with_hosts" | "empty")
+              }
+            >
+              <option value="">{t("Any host count")}</option>
+              <option value="with_hosts">{t("With hosts")}</option>
+              <option value="empty">{t("Empty groups")}</option>
+            </select>
+          </div>
+          {filtersActive && (
+            <div className="target-filters__field target-filters__field--action">
+              <label className="sr-only">{t("Clear filters")}</label>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setGroupQuery("");
+                  setScheduleFilter("");
+                  setHostsFilter("");
+                }}
+              >
+                {t("Clear filters")}
+              </button>
+            </div>
+          )}
+        </div>
         <div className="table-wrap" aria-busy={loading}>
           {groups.length === 0 ? (
             <div className="empty">
               <strong>{t("No groups")}</strong>
               {t("Create a group here, add hosts from the Targets page, or assign a group when importing a file.")}
             </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="empty">
+              <strong>{t("No groups match filters")}</strong>
+              {t("Try another schedule, host count, or search term.")}
+            </div>
           ) : (
-            <table className="hosts">
+            <table className="hosts hosts--groups">
               <caption className="sr-only">{t("Host groups")}</caption>
               <thead>
                 <tr>
@@ -365,7 +467,7 @@ export function GroupsPanel({
                 </tr>
               </thead>
               <tbody>
-                {groups.map((group) => {
+                {filteredGroups.map((group) => {
                   const busy = busyId === group.id;
                   const schedule = group.schedule;
                   return (
@@ -437,7 +539,7 @@ export function GroupsPanel({
                       <td className="schedule-last">
                         {schedule?.last_status || "—"}
                       </td>
-                      <td className="scan-actions">
+                      <td className="group-actions">
                         <button type="button" className="btn btn--normal" onClick={() => onShowHosts(group.id)}>
                           {t("Show hosts")}
                         </button>

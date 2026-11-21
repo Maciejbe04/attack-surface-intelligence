@@ -20,8 +20,8 @@ const ROLE_PERMISSIONS: Record<(typeof ROLES)[number], string[]> = {
   ],
   operator: [
     "Create and change targets, groups, and scans.",
-    "Export findings and manage allowlist.",
-    "Cannot manage users or system admin settings.",
+    "Export findings. Read allowlist (admin manages it).",
+    "Cannot manage users, allowlist, or system admin settings.",
   ],
   analyst: [
     "Read targets, groups, scans, and findings.",
