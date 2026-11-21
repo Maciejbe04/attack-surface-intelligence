@@ -15,6 +15,14 @@ type Props = {
   onRun: () => void;
 };
 
+const CATEGORY_LABEL: Record<ProbeModule["category"], string> = {
+  discovery: "Discovery",
+  http: "HTTP",
+  tls: "TLS",
+  signatures: "Signatures",
+  pipeline: "Pipeline",
+};
+
 function FilterControl({
   moduleId,
   field,
@@ -90,7 +98,7 @@ function FilterControl({
   );
 }
 
-function ModuleCard({
+function ModuleTile({
   module,
   enabled,
   expanded,
@@ -107,43 +115,120 @@ function ModuleCard({
   onToggleExpanded: () => void;
   onFilterChange: (key: string, value: string | number | boolean) => void;
 }) {
+  const titleId = `module-title-${module.id}`;
+  const filtersId = `module-filters-${module.id}`;
+  const filterPreview = summarizeFilters(filters);
+  const hasFilters = module.filters.length > 0;
+
   return (
-    <article className={`module-card ${enabled ? "is-selected" : ""} ${expanded ? "is-open" : ""}`}>
-      <div className="module-card__head">
-        <label className="module-card__enable">
-          <input type="checkbox" checked={enabled} onChange={onToggleEnabled} />
-          <span className="module-card__body">
-            <span className="module-card__name">{module.name}</span>
-            <span className="module-card__summary">{module.summary}</span>
-            <span className="module-card__tool">{module.tool}</span>
-          </span>
-        </label>
-        <button
-          type="button"
-          className="btn btn--normal module-card__expand"
-          aria-expanded={expanded}
-          onClick={onToggleExpanded}
-        >
-          {expanded ? "Hide filters" : "Filters"}
-        </button>
+    <article
+      className={[
+        "module-tile",
+        `module-tile--${module.category}`,
+        enabled ? "is-selected" : "",
+        expanded ? "is-open" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-labelledby={titleId}
+    >
+      <div className="module-tile__face">
+        <div className="module-tile__top">
+          <span className="module-tile__category">{CATEGORY_LABEL[module.category]}</span>
+          <label className="module-tile__check">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={onToggleEnabled}
+              aria-describedby={`${titleId}-summary`}
+            />
+            <span className="sr-only">Enable {module.name}</span>
+          </label>
+        </div>
+
+        <h3 className="module-tile__name" id={titleId}>
+          {module.name}
+        </h3>
+        <p className="module-tile__summary" id={`${titleId}-summary`}>
+          {module.summary}
+        </p>
+        <p className="module-tile__tool mono">{module.tool}</p>
+
+        <div className="module-tile__actions">
+          <button
+            type="button"
+            className="btn btn--normal module-tile__filters-btn"
+            aria-expanded={expanded}
+            aria-controls={filtersId}
+            disabled={!hasFilters && !expanded}
+            onClick={onToggleExpanded}
+          >
+            {expanded ? "Hide filters" : hasFilters ? "Filters" : "No filters"}
+          </button>
+          {enabled && (
+            <span className="module-tile__status" aria-hidden="true">
+              On
+            </span>
+          )}
+        </div>
+
+        {!expanded && hasFilters && (
+          <p className="module-tile__chip mono" title={filterPreview}>
+            {filterPreview}
+          </p>
+        )}
       </div>
 
-      {expanded && (
-        <div className="module-card__filters">
-          {module.filters.length === 0 ? (
-            <p className="field-help">No configurable filters for this module yet.</p>
-          ) : (
-            module.filters.map((field) => (
-              <FilterControl
-                key={field.key}
-                moduleId={module.id}
-                field={field}
-                value={filters[field.key] ?? field.default}
-                onChange={onFilterChange}
-              />
-            ))
-          )}
-          <p className="module-card__preview mono">Active: {summarizeFilters(filters)}</p>
+      {expanded && hasFilters && (
+        <div
+          className="module-drawer-backdrop"
+          onMouseDown={onToggleExpanded}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onToggleExpanded();
+          }}
+        >
+          <aside
+            className="module-drawer"
+            id={filtersId}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${titleId}-drawer`}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="module-drawer__header">
+              <div>
+                <span className="module-tile__category">{CATEGORY_LABEL[module.category]}</span>
+                <h2 id={`${titleId}-drawer`}>{module.name} filters</h2>
+                <p>{module.summary}</p>
+              </div>
+              <button
+                type="button"
+                className="module-drawer__close"
+                aria-label={`Close ${module.name} filters`}
+                onClick={onToggleExpanded}
+                autoFocus
+              >
+                ×
+              </button>
+            </header>
+            <div className="module-drawer__body">
+              {module.filters.map((field) => (
+                <FilterControl
+                  key={field.key}
+                  moduleId={module.id}
+                  field={field}
+                  value={filters[field.key] ?? field.default}
+                  onChange={onFilterChange}
+                />
+              ))}
+            </div>
+            <footer className="module-drawer__footer">
+              <p className="module-tile__preview mono">Active: {filterPreview}</p>
+              <button type="button" className="btn btn--primary" onClick={onToggleExpanded}>
+                Done
+              </button>
+            </footer>
+          </aside>
         </div>
       )}
     </article>
@@ -169,27 +254,29 @@ export function ModulePanel({
           </button>
         </div>
       </div>
-      <div className="module-list">
+      <div className="module-grid" role="list">
         {PROBE_MODULES.map((mod) => {
           const cfg = state[mod.id];
           if (!cfg) return null;
           return (
-            <ModuleCard
-              key={mod.id}
-              module={mod}
-              enabled={cfg.enabled}
-              expanded={cfg.expanded}
-              filters={cfg.filters}
-              onToggleEnabled={() => onToggleEnabled(mod.id)}
-              onToggleExpanded={() => onToggleExpanded(mod.id)}
-              onFilterChange={(key, value) => onFilterChange(mod.id, key, value)}
-            />
+            <div key={mod.id} role="listitem" className="module-grid__item">
+              <ModuleTile
+                module={mod}
+                enabled={cfg.enabled}
+                expanded={cfg.expanded}
+                filters={cfg.filters}
+                onToggleEnabled={() => onToggleEnabled(mod.id)}
+                onToggleExpanded={() => onToggleExpanded(mod.id)}
+                onFilterChange={(key, value) => onFilterChange(mod.id, key, value)}
+              />
+            </div>
           );
         })}
       </div>
       <div className="panel__footer">
         <span className="table-toolbar__count">
-          {enabledCount} module{enabledCount === 1 ? "" : "s"} selected · filters are per module
+          {enabledCount} module{enabledCount === 1 ? "" : "s"} selected · filters open in a side
+          panel
         </span>
       </div>
     </section>

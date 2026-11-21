@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
+import { AppFooter } from "./AppFooter";
 import { Logo } from "./Logo";
 import { ModulePanel } from "./ModulePanel";
 import {
@@ -7,6 +8,8 @@ import {
   ModuleRegistryState,
   summarizeFilters,
 } from "./modules";
+import { useHighContrast } from "./useHighContrast";
+import { APP_NAME, APP_VERSION } from "./version";
 
 type HostTarget = {
   id: string;
@@ -88,8 +91,12 @@ function loadJobs(): ProbeJob[] {
 
 function LoginScreen({
   onAuthenticated,
+  highContrast,
+  onToggleContrast,
 }: {
   onAuthenticated: (user: AuthUser) => void;
+  highContrast: boolean;
+  onToggleContrast: () => void;
 }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -151,15 +158,18 @@ function LoginScreen({
 
   return (
     <div className="login-page">
-      <div className="login-card panel">
+      <a className="skip-link" href="#login-form">
+        Skip to sign-in form
+      </a>
+      <main className="login-card panel" id="login-form" aria-labelledby="login-title">
         <div className="panel__header">
-          <h2>{mfaToken ? "Multi-factor authentication" : "Sign in"}</h2>
+          <h2 id="login-title">{mfaToken ? "Multi-factor authentication" : "Sign in"}</h2>
         </div>
         <div className="panel__body">
           <div className="login-brand">
             <Logo />
           </div>
-          <p className="field-help" style={{ marginBottom: 16 }}>
+          <p className="field-help" style={{ marginBottom: 16 }} id="login-help">
             {mfaToken
               ? "Enter the 6-digit code from your authenticator app."
               : "Use your console username and password."}
@@ -187,7 +197,7 @@ function LoginScreen({
           )}
 
           {!mfaToken ? (
-            <form onSubmit={submitPassword}>
+            <form onSubmit={submitPassword} aria-describedby="login-help">
               <div className="form-row">
                 <label htmlFor="username">Username</label>
                 <input
@@ -197,6 +207,7 @@ function LoginScreen({
                   onChange={(e) => setUsername(e.target.value)}
                   autoComplete="username"
                   required
+                  aria-required="true"
                 />
               </div>
               <div className="form-row">
@@ -209,16 +220,17 @@ function LoginScreen({
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   required
+                  aria-required="true"
                 />
               </div>
               <div className="actions">
-                <button type="submit" className="btn btn--primary" disabled={busy}>
+                <button type="submit" className="btn btn--primary" disabled={busy} aria-busy={busy}>
                   {busy ? "Signing in…" : "Sign in"}
                 </button>
               </div>
             </form>
           ) : (
-            <form onSubmit={submitMfa}>
+            <form onSubmit={submitMfa} aria-describedby="login-help">
               <div className="form-row">
                 <label htmlFor="mfa">MFA code</label>
                 <div>
@@ -232,8 +244,12 @@ function LoginScreen({
                     onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
                     autoComplete="one-time-code"
                     required
+                    aria-required="true"
+                    aria-describedby="mfa-help"
                   />
-                  <p className="field-help">TOTP from Google Authenticator, 1Password, or Authy.</p>
+                  <p className="field-help" id="mfa-help">
+                    TOTP from Google Authenticator, 1Password, or Authy.
+                  </p>
                 </div>
               </div>
               <div className="actions">
@@ -241,6 +257,7 @@ function LoginScreen({
                   type="submit"
                   className="btn btn--primary"
                   disabled={busy || mfaCode.length < 6}
+                  aria-busy={busy}
                 >
                   {busy ? "Verifying…" : "Verify"}
                 </button>
@@ -260,12 +277,18 @@ function LoginScreen({
             </form>
           )}
         </div>
+      </main>
+      <AppFooter highContrast={highContrast} onToggleContrast={onToggleContrast} />
+      <div id="a11y-help" className="sr-only" tabIndex={-1}>
+        {APP_NAME} version {APP_VERSION}. Keyboard users can tab through form fields. Screen
+        reader users: alerts are announced automatically. Use High contrast for stronger colors.
       </div>
     </div>
   );
 }
 
 export function App() {
+  const { highContrast, toggleHighContrast } = useHighContrast();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("dashboard");
@@ -377,7 +400,6 @@ export function App() {
         [id]: {
           ...current,
           enabled: !current.enabled,
-          expanded: !current.enabled ? true : current.expanded,
         },
       };
       if (id !== "full-pipeline" && next["full-pipeline"]?.enabled) {
@@ -391,7 +413,15 @@ export function App() {
     setModuleState((prev) => {
       const current = prev[id];
       if (!current) return prev;
-      return { ...prev, [id]: { ...current, expanded: !current.expanded } };
+      return Object.fromEntries(
+        Object.entries(prev).map(([moduleId, config]) => [
+          moduleId,
+          {
+            ...config,
+            expanded: moduleId === id ? !current.expanded : false,
+          },
+        ]),
+      );
     });
   }
 
@@ -484,32 +514,49 @@ export function App() {
 
   if (bootstrapping) {
     return (
-      <div className="login-page">
-        <p className="field-help">Loading console…</p>
+      <div className="login-page" role="status" aria-live="polite">
+        <p className="field-help">Loading {APP_NAME} console…</p>
       </div>
     );
   }
 
   if (!user) {
-    return <LoginScreen onAuthenticated={setUser} />;
+    return (
+      <LoginScreen
+        onAuthenticated={setUser}
+        highContrast={highContrast}
+        onToggleContrast={toggleHighContrast}
+      />
+    );
   }
 
   return (
     <div className="app">
-      <header className="topnav">
-        <a className="topnav__brand" href="/">
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
+      <header className="topnav" role="banner">
+        <a className="topnav__brand" href="/" aria-label={`${APP_NAME} home`}>
           <Logo />
         </a>
-        <span className="topnav__meta">
+        <span className="topnav__meta" aria-label="Signed-in account">
           {user.username} · {user.role}
           {user.mfa_enabled ? " · MFA" : ""}
         </span>
+        <button
+          type="button"
+          className="btn btn--normal topnav__contrast"
+          aria-pressed={highContrast}
+          onClick={toggleHighContrast}
+        >
+          {highContrast ? "Standard contrast" : "High contrast"}
+        </button>
         <button type="button" className="btn btn--normal topnav__signout" onClick={signOut}>
           Sign out
         </button>
       </header>
 
-      <div className="toast-stack" aria-live="polite">
+      <div className="toast-stack" aria-live="polite" aria-relevant="additions">
         {toasts.map((toast) => (
           <div
             key={toast.id}
@@ -533,11 +580,14 @@ export function App() {
       </div>
 
       <div className="layout">
-        <nav className="sidenav" aria-label="Console">
-          <div className="sidenav__section">Attack surface</div>
+        <nav className="sidenav" aria-label="Primary">
+          <div className="sidenav__section" id="nav-section-label">
+            Attack surface
+          </div>
           <button
             type="button"
             className={`sidenav__item ${nav === "dashboard" ? "is-active" : ""}`}
+            aria-current={nav === "dashboard" ? "page" : undefined}
             onClick={() => setNav("dashboard")}
           >
             Dashboard
@@ -545,6 +595,7 @@ export function App() {
           <button
             type="button"
             className={`sidenav__item ${nav === "targets" ? "is-active" : ""}`}
+            aria-current={nav === "targets" ? "page" : undefined}
             onClick={() => setNav("targets")}
           >
             Targets
@@ -552,13 +603,14 @@ export function App() {
           <button
             type="button"
             className={`sidenav__item ${nav === "scans" ? "is-active" : ""}`}
+            aria-current={nav === "scans" ? "page" : undefined}
             onClick={() => setNav("scans")}
           >
             Scans
           </button>
         </nav>
 
-        <main className="content">
+        <main className="content" id="main-content" tabIndex={-1}>
           {nav === "dashboard" && (
             <>
               <header className="page-header">
@@ -620,12 +672,13 @@ export function App() {
                     </div>
                   ) : (
                     <table className="hosts">
+                      <caption className="sr-only">Recent probe jobs</caption>
                       <thead>
                         <tr>
-                          <th>Host</th>
-                          <th>Modules</th>
-                          <th>Status</th>
-                          <th>Queued</th>
+                          <th scope="col">Host</th>
+                          <th scope="col">Modules</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Queued</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -747,9 +800,10 @@ export function App() {
                     </div>
                   ) : (
                     <table className="hosts">
+                      <caption className="sr-only">Target hosts for discovery</caption>
                       <thead>
                         <tr>
-                          <th className="col-check">
+                          <th className="col-check" scope="col">
                             <input
                               type="checkbox"
                               checked={allSelected}
@@ -760,9 +814,9 @@ export function App() {
                               aria-label="Select all hosts"
                             />
                           </th>
-                          <th>Host / IP</th>
-                          <th>Type</th>
-                          <th>Added</th>
+                          <th scope="col">Host / IP</th>
+                          <th scope="col">Type</th>
+                          <th scope="col">Added</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -810,12 +864,13 @@ export function App() {
                     </div>
                   ) : (
                     <table className="hosts">
+                      <caption className="sr-only">Queued discovery scan runs</caption>
                       <thead>
                         <tr>
-                          <th>Host</th>
-                          <th>Modules</th>
-                          <th>Status</th>
-                          <th>Queued</th>
+                          <th scope="col">Host</th>
+                          <th scope="col">Modules</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Queued</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -839,6 +894,13 @@ export function App() {
             </>
           )}
         </main>
+      </div>
+
+      <AppFooter highContrast={highContrast} onToggleContrast={toggleHighContrast} />
+      <div id="a11y-help" className="sr-only" tabIndex={-1}>
+        Keyboard: Tab moves focus, Enter activates buttons, Escape dismisses toasts when focused.
+        Navigation uses aria-current for the active page. Status messages use live regions.
+        Enable High contrast from the header or footer for stronger colors and borders.
       </div>
     </div>
   );
