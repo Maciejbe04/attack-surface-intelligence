@@ -13,6 +13,16 @@ REQUIRED_SECRETS=(
   defectdojo_credential_key
 )
 
+if [[ -f .env ]]; then
+  if ! grep -Eq '^[[:space:]]*COMPOSE_PROFILES=.*defectdojo' .env; then
+    echo "==> Adding COMPOSE_PROFILES=defectdojo to .env"
+    printf '\n# Added by start-defectdojo.sh — required for plain docker compose up\nCOMPOSE_PROFILES=defectdojo\n' >>.env
+  fi
+elif [[ -f .env.example ]]; then
+  echo "==> Creating .env from .env.example"
+  cp .env.example .env
+fi
+
 echo "==> Generating / refreshing local secrets"
 ./scripts/init-secrets.sh
 
