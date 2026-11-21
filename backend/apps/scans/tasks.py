@@ -10,6 +10,7 @@ from typing import Any
 
 import redis
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 
 from .runner import ScanCancelled, ScanRunnerError, execute_scan
@@ -183,6 +184,18 @@ def execute_batch(self, batch_id: int, delivery_id: str) -> dict[str, Any]:
         return {"status": "failed"}
     except TransientWorkerAPIError:
         raise
+    except SoftTimeLimitExceeded:
+        # The running command was already terminated by _run_command's cleanup.
+        _api_request(
+            "POST",
+            f"/api/internal/batches/{batch_id}/fail/",
+            {
+                **identity,
+                "error": "Batch exceeded the worker time limit.",
+                "cancelled": False,
+            },
+        )
+        return {"status": "failed"}
     except Exception as exc:
         _api_request(
             "POST",

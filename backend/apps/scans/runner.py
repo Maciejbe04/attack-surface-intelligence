@@ -10,6 +10,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from .validation import normalize_target
@@ -27,6 +28,49 @@ MAX_RESULT_BYTES = 1800 * 1024
 MAX_OBSERVATIONS = 2000
 COMMAND_TIMEOUT_SECONDS = 180
 TERMINATE_GRACE_SECONDS = 5
+# Smallest time slot worth starting a command in; below this the phase is skipped.
+MIN_COMMAND_SECONDS = 10
+# Share of the batch time budget reserved for the HTTP phase when it is needed.
+HTTP_PHASE_BUDGET_SHARE = 0.3
+
+
+@dataclass(frozen=True)
+class ScanLimits:
+    """Global safety limits shared by every scan, whatever the user picked in the UI.
+
+    ``max_rate_total`` / ``http_rate_total`` cap the traffic of the whole
+    scanner. They are split evenly between ``worker_slots`` (all Celery worker
+    processes that can scan at the same time), so N parallel batches together
+    never exceed the totals. ``batch_time_budget`` bounds all commands of one
+    batch and must stay below the Celery soft time limit.
+    """
+
+    max_rate_total: int = 300
+    http_rate_total: int = 100
+    worker_slots: int = 2
+    batch_time_budget: int = 240
+
+    @property
+    def nmap_rate_per_slot(self) -> int:
+        return max(1, self.max_rate_total // max(1, self.worker_slots))
+
+    @property
+    def http_rate_per_slot(self) -> int:
+        return max(1, self.http_rate_total // max(1, self.worker_slots))
+
+    @classmethod
+    def from_settings(cls) -> "ScanLimits":
+        from django.conf import settings
+
+        defaults = cls()
+        return cls(
+            max_rate_total=int(getattr(settings, "SCAN_MAX_RATE_TOTAL", defaults.max_rate_total)),
+            http_rate_total=int(getattr(settings, "SCAN_HTTP_RATE_TOTAL", defaults.http_rate_total)),
+            worker_slots=int(getattr(settings, "SCAN_WORKER_SLOTS", defaults.worker_slots)),
+            batch_time_budget=int(
+                getattr(settings, "SCAN_BATCH_TIME_BUDGET", defaults.batch_time_budget)
+            ),
+        )
 
 
 class ScanRunnerError(RuntimeError):
@@ -140,7 +184,11 @@ def _nmap_arguments(
     address: str,
     target_type: str,
     selected: dict[str, dict[str, Any]],
+    limits: ScanLimits | None = None,
+    time_budget: int | None = None,
 ) -> tuple[list[str], str]:
+    limits = limits or ScanLimits()
+    rate_cap = limits.nmap_rate_per_slot
     arguments = ["nmap"]
     try:
         is_ipv6 = (
@@ -173,6 +221,7 @@ def _nmap_arguments(
             arguments.append(f"-PS{host['tcpPorts'] if host else '80,443'}")
         if host:
             arguments.extend(["--host-timeout", f"{host['timeoutSec']}s"])
+        arguments.extend(["--max-rate", str(rate_cap)])
     else:
         arguments.extend(["-Pn", "-sS" if scan_mode == "syn" else "-sT"])
         if full:
@@ -207,7 +256,10 @@ def _nmap_arguments(
             arguments.extend(["--top-ports", "1000"])
         else:
             arguments.extend(["-p", ports])
-        arguments.extend([f"-{timing}", "--max-rate", str(max_rate)])
+        arguments.extend([f"-{timing}", "--max-rate", str(min(max_rate, rate_cap))])
+        if target_type != "cidr" and time_budget is not None:
+            # Let nmap stop on its own (and still print XML) before we kill it.
+            arguments.extend(["--host-timeout", f"{max(5, time_budget - 5)}s"])
         if service_enabled:
             intensity = selected.get("service-detect", {}).get("intensity", 5)
             arguments.extend(["-sV", "--version-intensity", str(intensity)])
@@ -319,11 +371,16 @@ def _http_endpoints(
     return sorted(endpoints)[:MAX_OBSERVATIONS]
 
 
-def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
+def _httpx_arguments(
+    selected: dict[str, dict[str, Any]],
+    limits: ScanLimits | None = None,
+) -> list[str]:
+    limits = limits or ScanLimits()
     http_filters = selected.get("http-fingerprint", {})
     full = selected.get("full-pipeline")
     timeout = http_filters.get("timeoutSec", 5)
-    rate_limit = http_filters.get("rateLimit", 50)
+    rate_limit = min(http_filters.get("rateLimit", 50), limits.http_rate_per_slot)
+    threads = max(1, min(50, rate_limit))
     arguments = [
         "httpx",
         "-silent",
@@ -338,7 +395,7 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
         "-rate-limit",
         str(rate_limit),
         "-threads",
-        "50",
+        str(threads),
     ]
     if http_filters.get("techDetect", full is not None):
         arguments.append("-tech-detect")
@@ -392,7 +449,14 @@ def execute_scan(
     *,
     should_cancel: Callable[[], bool],
     report_progress: Callable[[int, str], None],
+    limits: ScanLimits | None = None,
 ) -> dict[str, Any]:
+    limits = limits or ScanLimits.from_settings()
+    deadline = time.monotonic() + limits.batch_time_budget
+
+    def remaining() -> int:
+        return int(deadline - time.monotonic())
+
     target_data = job.get("target")
     modules = job.get("modules")
     if not isinstance(target_data, dict) or not isinstance(modules, list):
@@ -407,16 +471,29 @@ def execute_scan(
     if should_cancel():
         raise ScanCancelled("Scan cancellation requested.")
 
-    nmap_arguments, scan_mode = _nmap_arguments(target, target_type, selected)
+    needs_http = bool(
+        {"http-fingerprint", "tls-cert", "signatures", "full-pipeline"} & set(selected)
+    )
+    http_reserve = int(limits.batch_time_budget * HTTP_PHASE_BUDGET_SHARE) if needs_http else 0
+    nmap_timeout = min(COMMAND_TIMEOUT_SECONDS, remaining() - http_reserve)
+    if nmap_timeout < MIN_COMMAND_SECONDS:
+        raise ScanRunnerError("Batch time budget is too small to run nmap.")
+
+    nmap_arguments, scan_mode = _nmap_arguments(
+        target, target_type, selected, limits=limits, time_budget=nmap_timeout
+    )
     report_progress(
         5,
         f"Starting nmap ({scan_mode}) for {target}: {' '.join(nmap_arguments[:-1])} <target>",
     )
+    nmap_started = time.monotonic()
     nmap_output, _ = _run_command(
         nmap_arguments,
         input_data=None,
         should_cancel=should_cancel,
+        timeout=nmap_timeout,
     )
+    nmap_seconds = round(time.monotonic() - nmap_started, 1)
     hosts = _parse_nmap(nmap_output)
     open_ports = sum(
         len(host.get("ports", []))
@@ -428,24 +505,30 @@ def execute_scan(
         f"nmap finished for {target}: {len(hosts)} host(s), {open_ports} open port(s).",
     )
 
-    needs_http = bool(
-        {"http-fingerprint", "tls-cert", "signatures", "full-pipeline"} & set(selected)
-    )
     http_records: list[dict[str, Any]] = []
     endpoints: list[str] = []
+    http_skipped_reason = ""
+    httpx_seconds = 0.0
+    httpx_arguments = _httpx_arguments(selected, limits) if needs_http else []
     if needs_http:
         endpoints = _http_endpoints(target, hosts, selected)
-        if endpoints:
-            httpx_args = _httpx_arguments(selected)
+        http_timeout = min(COMMAND_TIMEOUT_SECONDS, remaining())
+        if endpoints and http_timeout < MIN_COMMAND_SECONDS:
+            http_skipped_reason = "Batch time budget exhausted before the HTTP phase."
+            report_progress(90, f"HTTP fingerprinting skipped for {target}: time budget exhausted.")
+        elif endpoints:
             report_progress(
                 60,
-                f"Starting httpx for {len(endpoints)} endpoint(s): {' '.join(httpx_args)}",
+                f"Starting httpx for {len(endpoints)} endpoint(s): {' '.join(httpx_arguments)}",
             )
+            httpx_started = time.monotonic()
             httpx_output, _ = _run_command(
-                httpx_args,
+                httpx_arguments,
                 input_data=("\n".join(endpoints) + "\n").encode("utf-8"),
                 should_cancel=should_cancel,
+                timeout=http_timeout,
             )
+            httpx_seconds = round(time.monotonic() - httpx_started, 1)
             http_records = _parse_httpx(httpx_output)
             report_progress(
                 90,
@@ -466,8 +549,15 @@ def execute_scan(
         "metadata": {
             "scan_mode": scan_mode,
             "nmap_arguments": nmap_arguments[:-1] + ["<target>"],
-            "httpx_arguments": _httpx_arguments(selected) if needs_http else [],
+            "httpx_arguments": httpx_arguments,
             "redirects_followed": False,
+            "limits": {
+                "nmap_max_rate": limits.nmap_rate_per_slot,
+                "http_rate_limit": limits.http_rate_per_slot,
+                "batch_time_budget": limits.batch_time_budget,
+            },
+            "timing": {"nmap_seconds": nmap_seconds, "httpx_seconds": httpx_seconds},
+            "http_skipped": http_skipped_reason,
         },
         "hosts": hosts,
         "http": http_records,

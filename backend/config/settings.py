@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.health",
     "apps.scans",
     "apps.accounts",
+    "apps.mfa",
 ]
 
 MIDDLEWARE = [
@@ -87,6 +88,12 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+# Password checks go through a backend that refuses to run while the caller is
+# locked out after repeated failures (apps/accounts/throttle.py).
+AUTHENTICATION_BACKENDS = ["apps.accounts.backends.ThrottledModelBackend"]
+# nginx in front of the API overwrites X-Real-IP with the real client address.
+TRUST_X_REAL_IP = os.environ.get("TRUST_X_REAL_IP", "1") == "1"
 
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
@@ -186,7 +193,19 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Global scan safety limits (apps.scans.runner.ScanLimits). Totals are split
+# evenly between all worker processes that can scan at once (SCAN_WORKER_SLOTS),
+# so parallel batches together never exceed them, whatever the UI filters say.
+SCAN_MAX_RATE_TOTAL = int(os.environ.get("SCAN_MAX_RATE_TOTAL", "300"))  # nmap packets/s
+SCAN_HTTP_RATE_TOTAL = int(os.environ.get("SCAN_HTTP_RATE_TOTAL", "100"))  # httpx requests/s
+SCAN_WORKER_SLOTS = int(os.environ.get("SCAN_WORKER_SLOTS", os.environ.get("WORKER_CONCURRENCY", "2")))
+# All commands of one batch must finish inside this budget; it stays 30 s below
+# the Celery soft limit so the worker can still report the result.
+SCAN_BATCH_TIME_BUDGET = CELERY_TASK_SOFT_TIME_LIMIT - 30
+
 APP_DATA_KEY = read_secret("app_data_key")
+# Old keys (comma separated) kept only to decrypt data during key rotation.
+APP_DATA_KEY_PREVIOUS = read_secret("app_data_key_previous")
 SESSION_HMAC = read_secret("session_hmac")
 WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
@@ -222,3 +241,7 @@ DEFECTDOJO_TIMEOUT_SECONDS = max(
     5,
     min(120, int(os.environ.get("DEFECTDOJO_TIMEOUT_SECONDS", "30"))),
 )
+
+# MFA backend (apps.mfa) stays dormant until MFA_ENABLED=1. See docs/mfa-backend.md.
+MFA_ENABLED = os.environ.get("MFA_ENABLED", "0") == "1"
+MFA_ISSUER = os.environ.get("MFA_ISSUER", "SurfaceX")
