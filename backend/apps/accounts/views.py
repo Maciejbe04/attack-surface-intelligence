@@ -10,7 +10,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from .mfa import consume_pending_mfa, issue_pending_mfa, verify_totp
+from . import throttle
+from .mfa import (
+    discard_pending_mfa,
+    get_pending_mfa,
+    issue_pending_mfa,
+    register_pending_mfa_failure,
+    verify_totp,
+)
 from .models import UserProfile
 
 
@@ -50,6 +57,12 @@ def login_view(request: Request) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    if throttle.is_locked(username, throttle.client_ip(request)):
+        return Response(
+            {"detail": "Too many failed sign-in attempts. Try again in 15 minutes."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
     user = authenticate(request, username=username, password=password)
     if user is None:
         return Response(
@@ -79,31 +92,40 @@ def login_view(request: Request) -> Response:
 def mfa_verify(request: Request) -> Response:
     token = str(request.data.get("mfa_token", "")).strip()
     code = str(request.data.get("code", "")).strip()
-    pending = consume_pending_mfa(token)
+    pending = get_pending_mfa(token)
     if pending is None:
         return Response(
             {"detail": "MFA challenge expired or invalid. Sign in again."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    try:
-        user = User.objects.get(pk=pending.user_id)
-    except User.DoesNotExist:
-        return Response({"detail": "User not found."}, status=status.HTTP_401_UNAUTHORIZED)
+    user = User.objects.filter(pk=pending.user_id, is_active=True).first()
+    if user is None:
+        discard_pending_mfa(token)
+        return Response(
+            {"detail": "MFA challenge expired or invalid. Sign in again."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
 
     profile, _ = UserProfile.objects.get_or_create(user=user)
     if not verify_totp(profile.mfa_secret, code):
-        # re-issue so UX can retry without full password again within TTL window
-        new_token = issue_pending_mfa(user.id, user.username)
+        # Same token, limited attempts: a wrong code never mints a fresh token,
+        # so the 6-digit code cannot be brute-forced without the password.
+        if not register_pending_mfa_failure(token):
+            return Response(
+                {"detail": "Too many invalid codes. Sign in again."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         return Response(
             {
                 "detail": "Invalid authentication code.",
                 "mfa_required": True,
-                "mfa_token": new_token,
+                "mfa_token": token,
             },
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
+    discard_pending_mfa(token)
     login(request, user)
     return Response({"mfa_required": False, "user": _serialize_user(user)})
 
