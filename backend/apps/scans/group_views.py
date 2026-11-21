@@ -134,7 +134,10 @@ class GroupScanView(APIView):
 
     def post(self, request: Request, group_id: int) -> Response:
         group = _get_group(request, group_id)
-        serializer = GroupScanSerializer(data=request.data)
+        serializer = GroupScanSerializer(
+            data=request.data,
+            context={"request": request},
+        )
         serializer.is_valid(raise_exception=True)
         targets = list(group.targets.filter(owner_id=group.owner_id).order_by("id"))
         if not targets:

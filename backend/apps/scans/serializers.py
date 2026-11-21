@@ -34,10 +34,12 @@ def is_admin(user: User) -> bool:
         return False
 
 
-def validate_window_seconds_for_user(user: User, value: int | None) -> int | None:
+def validate_window_seconds_for_user(user: User | None, value: int | None) -> int | None:
     if value is None:
         return value
     window = int(value)
+    if user is None:
+        return window
     if window > max_window_seconds_for_user(user):
         raise serializers.ValidationError(
             f"Scan windows longer than {NON_ADMIN_MAX_WINDOW_SECONDS // 3600}h require admin."
@@ -309,7 +311,9 @@ class ScanCreateSerializer(serializers.Serializer):
         return value
 
     def validate_window_seconds(self, value: int | None) -> int | None:
-        return validate_window_seconds_for_user(self.context["request"].user, value)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request is not None else None
+        return validate_window_seconds_for_user(user, value)
 
     def validate_modules(self, value: object) -> list[dict]:
         return validate_modules(value)
@@ -428,7 +432,9 @@ class GroupScanSerializer(serializers.Serializer):
     )
 
     def validate_window_seconds(self, value: int | None) -> int | None:
-        return validate_window_seconds_for_user(self.context["request"].user, value)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request is not None else None
+        return validate_window_seconds_for_user(user, value)
 
     def validate_modules(self, value: object) -> list[dict]:
         return validate_modules(value)
