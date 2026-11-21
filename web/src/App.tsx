@@ -34,6 +34,7 @@ import {
 import { HostSearch } from "./HostSearch";
 import { newUuid } from "./uuid";
 import { AppFooter } from "./AppFooter";
+import { CuriosityInsightsFromScans } from "./CuriosityInsights";
 import { FindingsPanel, LifecycleKpis } from "./FindingsPanel";
 import { Language, Translate, useLanguage } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
@@ -1688,6 +1689,7 @@ export function App() {
               />
 
               <LifecycleKpis scans={scans} t={t} />
+              <CuriosityInsightsFromScans scans={scans} t={t} />
 
               <section className="panel">
                 <div className="panel__header">

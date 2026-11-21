@@ -7,6 +7,7 @@ from typing import Any
 from django.db import transaction
 
 from .crypto import seal, seal_json
+from .curiosity import compute_curiosity_summary, port_curiosity_score
 from .models import FingerprintEvidence, Observation, ScanBatch, ScanRun
 
 
@@ -60,15 +61,24 @@ def extract_observation_rows(
             if port_num is None:
                 continue
             key = f"port:{host_addr}:{proto}/{port_num}"
+            port_int = int(port_num) if str(port_num).isdigit() else port_num
+            state = port.get("state") or port.get("status") or "open"
             attrs = {
                 "address": host_addr,
-                "port": int(port_num) if str(port_num).isdigit() else port_num,
+                "port": port_int,
                 "protocol": proto,
-                "state": port.get("state") or port.get("status") or "open",
+                "state": state,
                 "service": port.get("service") or port.get("name") or "",
                 "product": port.get("product") or "",
                 "version": port.get("version") or "",
             }
+            if str(state).lower() in {"open", "open|filtered", ""}:
+                try:
+                    score = port_curiosity_score(int(port_int))
+                except (TypeError, ValueError):
+                    score = None
+                if score is not None:
+                    attrs["curiosity"] = score
             rows.append(
                 {
                     "entity_type": Observation.EntityType.PORT,
@@ -367,6 +377,7 @@ def finalize_run_lifecycle(run: ScanRun) -> dict[str, int]:
 
     summary = dict(run.result_summary or {})
     summary["lifecycle"] = counts
+    summary["curiosity"] = compute_curiosity_summary(run)
     run.result_summary = summary
     run.save(update_fields=("result_summary", "updated_at"))
     return counts

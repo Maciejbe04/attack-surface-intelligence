@@ -161,6 +161,31 @@ export type DefectDojoExportStatus =
   | "failed"
   | "skipped";
 
+export type CuriosityHighlight = {
+  id: string;
+  severity: string;
+  text: string;
+  count: number;
+};
+
+export type CuriositySummary = {
+  hosts_with_open_ports: number;
+  open_ports_total: number;
+  interesting_ports: number;
+  interesting_port_examples?: Array<{
+    address: string;
+    port: number;
+    protocol: string;
+    service: string;
+    sensitive?: boolean;
+  }>;
+  admin_or_login_hints: number;
+  high_confidence_tech: number;
+  expiring_certs: number;
+  top_services?: Array<{ service: string; count: number }>;
+  highlights: CuriosityHighlight[];
+};
+
 export type Scan = {
   id: number;
   status: ScanStatus;
@@ -173,6 +198,7 @@ export type Scan = {
   progress: number;
   result_summary: Record<string, unknown> & {
     lifecycle?: Partial<Record<ObservationLifecycle, number>>;
+    curiosity?: CuriositySummary;
     paused?: number;
   };
   error: string;

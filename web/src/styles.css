@@ -1637,3 +1637,82 @@ table.hosts .mono {
 .diff-attr-list li + li {
   margin-top: 2px;
 }
+
+.curiosity-panel {
+  margin-bottom: 1rem;
+}
+
+.curiosity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.curiosity-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--aws-color-border, #d1d5db);
+  border-radius: 8px;
+  background: var(--aws-color-background-container, #fff);
+}
+
+.curiosity-card__count {
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.curiosity-card__label {
+  color: var(--aws-color-text-body, #414d5c);
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.curiosity-card--high {
+  border-color: #f4b4b4;
+  background: #fff6f6;
+}
+
+.curiosity-card--medium {
+  border-color: #f0d39a;
+  background: #fffaf0;
+}
+
+.curiosity-card--info {
+  border-color: #b7d4f0;
+  background: #f5f9fd;
+}
+
+.curiosity-services {
+  margin: 0.85rem 0 0;
+}
+
+.curiosity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.curiosity-badge--1 {
+  color: #375a7f;
+  background: #eef5fc;
+  border-color: #b7d4f0;
+}
+
+.curiosity-badge--2 {
+  color: #8c5a00;
+  background: #fff4de;
+  border-color: #f0d59a;
+}
+
+.curiosity-badge--3 {
+  color: #8b1a1a;
+  background: #fdecec;
+  border-color: #f4b4b4;
+}

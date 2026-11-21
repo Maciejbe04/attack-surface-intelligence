@@ -286,6 +286,7 @@ def _aggregate_run(run: ScanRun) -> None:
         finished=Count("id", filter=Q(status__in=FINISHED_BATCH_STATUSES)),
     )
     previous_lifecycle = (run.result_summary or {}).get("lifecycle")
+    previous_curiosity = (run.result_summary or {}).get("curiosity")
     previous_ewma = (run.result_summary or {}).get("ewma_batches_per_min")
     run.progress = round(stats["progress"] or 0)
     run.completed_batches = stats["completed"]
@@ -298,6 +299,8 @@ def _aggregate_run(run: ScanRun) -> None:
     }
     if previous_lifecycle is not None:
         run.result_summary["lifecycle"] = previous_lifecycle
+    if previous_curiosity is not None:
+        run.result_summary["curiosity"] = previous_curiosity
     if previous_ewma is not None:
         run.result_summary["ewma_batches_per_min"] = previous_ewma
 

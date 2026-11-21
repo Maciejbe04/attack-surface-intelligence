@@ -14,6 +14,7 @@ import {
   ScanDiffObservation,
   upsertOverride,
 } from "./api/scans";
+import { CuriosityInsights } from "./CuriosityInsights";
 import { Translate } from "./i18n";
 
 const LIFECYCLES: Array<ObservationLifecycle | ""> = [
@@ -44,6 +45,25 @@ function attrsPreview(attrs: Record<string, unknown>): string {
     }
   }
   return parts.slice(0, 4).join(" · ") || "—";
+}
+
+function curiosityFromAttrs(attrs: Record<string, unknown> | undefined): number | null {
+  if (!attrs || attrs.curiosity == null || attrs.curiosity === "") return null;
+  const value = Number(attrs.curiosity);
+  if (!Number.isFinite(value) || value < 1 || value > 3) return null;
+  return Math.round(value);
+}
+
+function CuriosityBadge({ value, t }: { value: number | null; t: Translate }) {
+  if (value == null) return <span className="field-help">—</span>;
+  return (
+    <span
+      className={`curiosity-badge curiosity-badge--${value}`}
+      title={t("Curiosity 1–3 (3 = highest priority)")}
+    >
+      {value}
+    </span>
+  );
 }
 
 function attrDiffLines(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
@@ -289,6 +309,14 @@ export function FindingsPanel({
   }
 
   return (
+    <>
+      {finished && (
+        <CuriosityInsights
+          curiosity={scan.result_summary?.curiosity}
+          scanId={scan.id}
+          t={t}
+        />
+      )}
     <section className="panel">
       <div className="panel__header">
         <h2>{t("Findings / Changes")}</h2>
@@ -492,6 +520,7 @@ export function FindingsPanel({
                       <th scope="col">{t("Lifecycle")}</th>
                       <th scope="col">{t("Type")}</th>
                       <th scope="col">{t("Entity")}</th>
+                      <th scope="col">{t("Curiosity")}</th>
                       <th scope="col">{t("Details")}</th>
                       <th scope="col">{t("Override")}</th>
                     </tr>
@@ -506,6 +535,12 @@ export function FindingsPanel({
                         </td>
                         <td className="mono">{row.entity_type}</td>
                         <td className="mono">{row.entity_key}</td>
+                        <td>
+                          <CuriosityBadge
+                            value={curiosityFromAttrs(row.effective_attrs || row.attrs)}
+                            t={t}
+                          />
+                        </td>
                         <td>
                           {attrsPreview(row.effective_attrs || row.attrs)}
                           {(row.tags?.length || row.notes) && (
@@ -594,6 +629,7 @@ export function FindingsPanel({
         )}
       </div>
     </section>
+    </>
   );
 }
 

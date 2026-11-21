@@ -253,6 +253,64 @@ class NormalizeLifecycleTests(TestCase):
             third.observations.filter(lifecycle=Observation.Lifecycle.MISSING).exists()
         )
 
+    def test_curiosity_summary_counts_open_ports_and_highlights(self) -> None:
+        from datetime import datetime, timedelta, timezone as dt_tz
+
+        soon = (datetime.now(dt_tz.utc) + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        run = self._run_with_batch(
+            {
+                "hosts": [
+                    {
+                        "address": "192.0.2.50",
+                        "status": "up",
+                        "ports": [
+                            {"port": 80, "protocol": "tcp", "state": "open", "service": "http"},
+                            {"port": 22, "protocol": "tcp", "state": "open", "service": "ssh"},
+                            {"port": 8080, "protocol": "tcp", "state": "open", "service": "http-proxy"},
+                        ],
+                    }
+                ],
+                "http": [
+                    {
+                        "url": "http://192.0.2.50/admin",
+                        "status_code": 200,
+                        "title": "Admin panel",
+                        "tech": ["nginx"],
+                        "tls": {
+                            "subject_cn": "192.0.2.50",
+                            "issuer_cn": "lab",
+                            "not_after": soon,
+                        },
+                    }
+                ],
+                "signatures": [
+                    {
+                        "technology": "nginx",
+                        "endpoint": "http://192.0.2.50/admin",
+                        "confidence": 75,
+                        "level": "high",
+                    }
+                ],
+            }
+        )
+        curiosity = (run.result_summary or {}).get("curiosity") or {}
+        self.assertEqual(curiosity.get("hosts_with_open_ports"), 1)
+        self.assertEqual(curiosity.get("open_ports_total"), 3)
+        self.assertGreaterEqual(curiosity.get("interesting_ports"), 2)
+        self.assertGreaterEqual(curiosity.get("admin_or_login_hints"), 1)
+        self.assertGreaterEqual(curiosity.get("high_confidence_tech"), 1)
+        self.assertGreaterEqual(curiosity.get("expiring_certs"), 1)
+        highlight_ids = {item["id"] for item in curiosity.get("highlights") or []}
+        self.assertIn("hosts_with_open_ports", highlight_ids)
+        self.assertIn("open_ports_total", highlight_ids)
+        port_rows = {
+            int(o.attrs["port"]): o.attrs.get("curiosity")
+            for o in run.observations.filter(entity_type=Observation.EntityType.PORT)
+        }
+        self.assertEqual(port_rows.get(80), 1)
+        self.assertEqual(port_rows.get(22), 3)
+        self.assertEqual(port_rows.get(8080), 2)
+
     def test_observations_and_diff_api(self) -> None:
         first = self._run_with_batch(
             {

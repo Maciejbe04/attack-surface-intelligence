@@ -612,6 +612,21 @@ const PL: Record<string, string> = {
   Details: "Szczegóły",
   "Latest findings": "Ostatnie findings",
   "Latest completed": "Ostatni ukończony",
+  "Analytical curiosity": "Ciekawość analityczna",
+  Curiosity: "CIEKAWOSĆ",
+  "Curiosity 1–3 (3 = highest priority)":
+    "Ciekawość 1–3 (3 = najwyższy priorytet)",
+  "Priority signals from the latest completed discovery scan.":
+    "Sygnały priorytetu z ostatniego ukończonego skanu discovery.",
+  "Top services": "Najczęstsze usługi",
+  "{n} host(s) have open ports": "{n} host(ów) ma otwarte porty",
+  "{n} open port(s) observed": "{n} otwartych port(ów)",
+  "{n} non-standard or sensitive port(s)": "{n} niestandardowych / wrażliwych port(ów)",
+  "{n} admin / login / staging hint(s)": "{n} wskazówek admin / login / staging",
+  "{n} medium/high-confidence technolog(ies)":
+    "{n} technolog(ii) z pewnością medium/high",
+  "{n} certificate(s) expire within 30 days":
+    "{n} certyfikat(ów) wygasa w ciągu 30 dni",
   "Scan window": "Okno skanu",
   "Off (no deadline)": "Wyłączone (bez deadline)",
   "Optional deadline; unfinished batches pause and can be resumed.":

@@ -22,7 +22,8 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
 3. Po zakończeniu wskaż:
    - hosty `NEW`;
    - fingerprint / confidence (np. nginx / lab headers);
-   - evidence HTTP.
+   - evidence HTTP;
+   - **Ciekawość analityczna** na dashboardzie (np. N hostów z otwartymi portami, porty wrażliwe, hinty admin/login).
 4. Jako `analyst` dodaj notatkę/override do hosta A (`10.99.0.70`).
 
 ## Zmiana środowiska
