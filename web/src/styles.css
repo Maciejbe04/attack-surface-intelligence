@@ -103,9 +103,11 @@ a:hover {
 /* Shell */
 
 .app {
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .dashboard-loader {
@@ -264,6 +266,7 @@ a:hover {
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
   gap: var(--space-m);
   padding: 10px var(--space-l);
   border-top: 1px solid var(--aws-border-light);
@@ -432,18 +435,20 @@ html.theme-high-contrast a {
 .topnav {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: var(--space-l);
   min-height: 52px;
   padding: 10px var(--space-l);
   background: var(--aws-nav);
   color: #fff;
   animation: topnav-enter 280ms ease-out both;
-  z-index: 2;
+  z-index: 20;
 }
 
 .topnav__brand {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   min-width: 220px;
   margin-right: var(--space-s);
   color: #fff;
@@ -978,13 +983,16 @@ html.theme-high-contrast .module-tile__drawer {
 .layout {
   display: grid;
   grid-template-columns: 220px 1fr;
+  flex: 1 1 auto;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidenav {
   background: var(--aws-panel);
   border-right: 1px solid var(--aws-border-light);
   padding: var(--space-l) 0;
+  overflow-y: auto;
   animation: sidenav-enter 320ms ease-out both;
 }
 
@@ -1021,6 +1029,8 @@ html.theme-high-contrast .module-tile__drawer {
 
 .content {
   padding: var(--space-xl);
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .content--enter {
@@ -1745,6 +1755,7 @@ table.hosts .mono {
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .sidenav {
@@ -1753,6 +1764,7 @@ table.hosts .mono {
     display: flex;
     gap: var(--space-s);
     overflow-x: auto;
+    overflow-y: hidden;
     padding: var(--space-s) var(--space-l);
   }
 
