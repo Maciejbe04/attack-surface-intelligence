@@ -189,7 +189,7 @@ ProjectDiscovery httpx jest podstawowym narzędziem MVP, ponieważ:
 - ma mniejszy narzut uruchomieniowy niż stos Ruby;
 - dostarcza wystarczające dane HTTP/TLS i wstępne fingerprinty technologii.
 
-Uwaga: ProjectDiscovery httpx to osobne narzędzie Go. Nie mylić go z pakietem Pythona o nazwie `httpx`.
+Uwaga: ProjectDiscovery httpx to zewnętrzne CLI w obrazie workera. Nie mylić go z pakietem Pythona o nazwie `httpx`.
 
 WhatWeb posiada rozbudowany system pluginów i może zapewnić głębsze rozpoznanie części CMS-ów lub starszych technologii, ale:
 
