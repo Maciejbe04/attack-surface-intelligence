@@ -214,35 +214,41 @@ a:hover {
   padding: 0 2px;
 }
 
-.module-grid {
+.module-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  gap: 10px;
   padding: 16px;
 }
 
 .module-card {
-  display: grid;
-  grid-template-columns: 18px 1fr;
-  gap: 10px;
-  align-items: start;
-  padding: 12px;
   border: 1px solid var(--aws-border-light);
   border-radius: var(--radius);
   background: #fff;
-  cursor: pointer;
-}
-
-.module-card:hover {
-  border-color: #0073bb;
 }
 
 .module-card.is-selected {
   border-color: #0073bb;
-  background: var(--aws-selected);
+  background: #fbfdff;
 }
 
-.module-card input {
+.module-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+}
+
+.module-card__enable {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: start;
+  cursor: pointer;
+  flex: 1;
+}
+
+.module-card__enable input {
   margin-top: 3px;
 }
 
@@ -264,6 +270,50 @@ a:hover {
   color: #0073bb;
   font-size: 12px;
   font-family: "Amazon Ember Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.module-card__expand {
+  flex: 0 0 auto;
+  height: 28px;
+  font-size: 12px;
+}
+
+.module-card__filters {
+  border-top: 1px solid var(--aws-border-light);
+  padding: 12px 16px 14px;
+  background: var(--aws-table-header);
+  display: grid;
+  gap: 12px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.filter-row--bool {
+  grid-template-columns: 18px 1fr;
+  align-items: start;
+  cursor: pointer;
+}
+
+.filter-row__label {
+  display: block;
+  font-weight: 700;
+}
+
+.input--select {
+  max-width: 320px;
+  appearance: auto;
+}
+
+.module-card__preview {
+  margin: 0;
+  color: var(--aws-text-secondary);
+  font-size: 12px;
+  word-break: break-word;
 }
 
 .layout {
@@ -615,7 +665,7 @@ table.hosts .mono {
 
   .sidenav__item.is-active {
     border-left: 0;
-    border-bottom: 3px solid var(--aws-orange);
+    border-bottom: 3px solid var(--brand-yellow);
     padding-left: var(--space-l);
   }
 

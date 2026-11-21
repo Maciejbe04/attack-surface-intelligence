@@ -1,7 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 import { Logo } from "./Logo";
-import { PROBE_MODULES, ProbeModuleId } from "./modules";
+import { ModulePanel } from "./ModulePanel";
+import {
+  createInitialModuleState,
+  ModuleRegistryState,
+  summarizeFilters,
+} from "./modules";
 
 type HostTarget = {
   id: string;
@@ -22,7 +27,7 @@ type Toast = {
 type ProbeJob = {
   id: string;
   host: string;
-  modules: ProbeModuleId[];
+  modules: Array<{ id: string; filters: Record<string, string | number | boolean> }>;
   createdAt: string;
   status: "queued";
 };
@@ -272,8 +277,8 @@ export function App() {
   const [flash, setFlash] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [probeHost, setProbeHost] = useState("");
-  const [moduleIds, setModuleIds] = useState<Set<ProbeModuleId>>(
-    () => new Set(["host-discovery", "port-scan", "http-fingerprint"]),
+  const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
+    createInitialModuleState(),
   );
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
@@ -350,16 +355,57 @@ export function App() {
     });
   }
 
-  function toggleModule(id: ProbeModuleId) {
-    setModuleIds((prev) => {
-      const next = new Set(prev);
-      if (id === "full-pipeline") {
-        return next.has(id) ? new Set() : new Set<ProbeModuleId>(["full-pipeline"]);
+  function toggleModuleEnabled(id: string) {
+    setModuleState((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+
+      if (id === "full-pipeline" && !current.enabled) {
+        const next: ModuleRegistryState = {};
+        for (const [key, cfg] of Object.entries(prev)) {
+          next[key] = {
+            ...cfg,
+            enabled: key === "full-pipeline",
+            expanded: key === "full-pipeline" ? true : cfg.expanded,
+          };
+        }
+        return next;
       }
-      next.delete("full-pipeline");
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+
+      const next: ModuleRegistryState = {
+        ...prev,
+        [id]: {
+          ...current,
+          enabled: !current.enabled,
+          expanded: !current.enabled ? true : current.expanded,
+        },
+      };
+      if (id !== "full-pipeline" && next["full-pipeline"]?.enabled) {
+        next["full-pipeline"] = { ...next["full-pipeline"], enabled: false };
+      }
       return next;
+    });
+  }
+
+  function toggleModuleExpanded(id: string) {
+    setModuleState((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+      return { ...prev, [id]: { ...current, expanded: !current.expanded } };
+    });
+  }
+
+  function updateModuleFilter(id: string, key: string, value: string | number | boolean) {
+    setModuleState((prev) => {
+      const current = prev[id];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          filters: { ...current.filters, [key]: value },
+        },
+      };
     });
   }
 
@@ -414,15 +460,17 @@ export function App() {
       pushToast("error", "Host required", "Select or enter a host / IP to probe.");
       return;
     }
-    if (moduleIds.size === 0) {
+    const selected = Object.entries(moduleState)
+      .filter(([, cfg]) => cfg.enabled)
+      .map(([id, cfg]) => ({ id, filters: cfg.filters }));
+    if (selected.length === 0) {
       pushToast("error", "No modules", "Select at least one discovery module.");
       return;
     }
-    const modules = Array.from(moduleIds);
     const job: ProbeJob = {
       id: crypto.randomUUID(),
       host,
-      modules,
+      modules: selected,
       createdAt: new Date().toISOString(),
       status: "queued",
     };
@@ -430,7 +478,7 @@ export function App() {
     pushToast(
       "ok",
       "Probe queued",
-      `${host} · ${modules.length} module${modules.length === 1 ? "" : "s"} (worker wiring next).`,
+      `${host} · ${selected.length} module${selected.length === 1 ? "" : "s"} with filters (worker wiring next).`,
     );
   }
 
@@ -552,43 +600,13 @@ export function App() {
                 </div>
               </section>
 
-              <section className="panel">
-                <div className="panel__header">
-                  <h2>Discovery modules</h2>
-                  <div className="actions">
-                    <button type="button" className="btn btn--primary" onClick={runProbe}>
-                      Run selected
-                    </button>
-                  </div>
-                </div>
-                <div className="module-grid">
-                  {PROBE_MODULES.map((mod) => {
-                    const checked = moduleIds.has(mod.id);
-                    return (
-                      <label
-                        key={mod.id}
-                        className={`module-card ${checked ? "is-selected" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleModule(mod.id)}
-                        />
-                        <span className="module-card__body">
-                          <span className="module-card__name">{mod.name}</span>
-                          <span className="module-card__summary">{mod.summary}</span>
-                          <span className="module-card__tool">{mod.tool}</span>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="panel__footer">
-                  <span className="table-toolbar__count">
-                    {moduleIds.size} module{moduleIds.size === 1 ? "" : "s"} selected
-                  </span>
-                </div>
-              </section>
+              <ModulePanel
+                state={moduleState}
+                onToggleEnabled={toggleModuleEnabled}
+                onToggleExpanded={toggleModuleExpanded}
+                onFilterChange={updateModuleFilter}
+                onRun={runProbe}
+              />
 
               <section className="panel">
                 <div className="panel__header">
@@ -614,7 +632,11 @@ export function App() {
                         {jobs.map((job) => (
                           <tr key={job.id}>
                             <td className="mono">{job.host}</td>
-                            <td>{job.modules.join(", ")}</td>
+                            <td>
+                              {job.modules
+                                .map((m) => `${m.id} (${summarizeFilters(m.filters)})`)
+                                .join("; ")}
+                            </td>
                             <td>{job.status}</td>
                             <td>{new Date(job.createdAt).toLocaleString()}</td>
                           </tr>
@@ -800,7 +822,11 @@ export function App() {
                         {jobs.map((job) => (
                           <tr key={job.id}>
                             <td className="mono">{job.host}</td>
-                            <td>{job.modules.join(", ")}</td>
+                            <td>
+                              {job.modules
+                                .map((m) => `${m.id} (${summarizeFilters(m.filters)})`)
+                                .join("; ")}
+                            </td>
                             <td>{job.status}</td>
                             <td>{new Date(job.createdAt).toLocaleString()}</td>
                           </tr>
