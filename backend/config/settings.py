@@ -203,6 +203,15 @@ SCAN_WORKER_SLOTS = int(os.environ.get("SCAN_WORKER_SLOTS", os.environ.get("WORK
 # the Celery soft limit so the worker can still report the result.
 SCAN_BATCH_TIME_BUDGET = CELERY_TASK_SOFT_TIME_LIMIT - 30
 
+# Scan scope allowlist (apps/scans/scope.py). Comma separated; empty = no limit.
+# Example: SCAN_ALLOWED_NETWORKS=10.0.0.0/8,172.16.0.0/12  SCAN_ALLOWED_DOMAINS=lab.agh.edu.pl
+SCAN_ALLOWED_NETWORKS = os.environ.get("SCAN_ALLOWED_NETWORKS", "")
+SCAN_ALLOWED_DOMAINS = os.environ.get("SCAN_ALLOWED_DOMAINS", "")
+# Large CIDRs are split into batches of this size (a /16 becomes 256 x /24).
+SCAN_BATCH_PREFIX_V4 = int(os.environ.get("SCAN_BATCH_PREFIX_V4", "24"))
+SCAN_BATCH_PREFIX_V6 = int(os.environ.get("SCAN_BATCH_PREFIX_V6", "120"))
+SCAN_MAX_BATCHES_PER_RUN = int(os.environ.get("SCAN_MAX_BATCHES_PER_RUN", "2048"))
+
 APP_DATA_KEY = read_secret("app_data_key")
 # Old keys (comma separated) kept only to decrypt data during key rotation.
 APP_DATA_KEY_PREVIOUS = read_secret("app_data_key_previous")

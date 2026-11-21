@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404
@@ -20,6 +21,7 @@ from .defectdojo import (
 from .events import append_scan_event
 from .models import ScanBatch, ScanEvent, ScanRun, Target
 from .permissions import CanExportFindings, IsAdminOrOperator
+from .scope import split_into_batches
 from .serializers import (
     ScanCreateSerializer,
     ScanRunListSerializer,
@@ -142,6 +144,25 @@ class ScanListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         client_request_id = serializer.validated_data.get("client_request_id", "")
 
+        # Large CIDR ranges become several batches (e.g. /16 -> 256 x /24), each
+        # scanned and timed separately within the per-batch time budget.
+        planned = [
+            (target, address)
+            for target in serializer.context["targets"]
+            for address in split_into_batches(target.address, target.target_type)
+        ]
+        max_batches = int(getattr(settings, "SCAN_MAX_BATCHES_PER_RUN", 2048))
+        if len(planned) > max_batches:
+            return Response(
+                {
+                    "detail": (
+                        f"This scan would create {len(planned)} batches; the limit is "
+                        f"{max_batches}. Select fewer or smaller ranges."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         with transaction.atomic():
             if client_request_id:
                 existing = (
@@ -161,7 +182,7 @@ class ScanListCreateView(APIView):
                         owner=request.user,
                         modules_snapshot=serializer.validated_data["modules"],
                         client_request_id=client_request_id,
-                        total_batches=len(serializer.context["targets"]),
+                        total_batches=len(planned),
                     )
             except IntegrityError:
                 run = ScanRun.objects.get(
@@ -175,10 +196,10 @@ class ScanListCreateView(APIView):
                     ScanBatch(
                         run=run,
                         target=target,
-                        target_address=target.address,
+                        target_address=address,
                         target_type=target.target_type,
                     )
-                    for target in serializer.context["targets"]
+                    for target, address in planned
                 ]
             )
             for batch in batches:

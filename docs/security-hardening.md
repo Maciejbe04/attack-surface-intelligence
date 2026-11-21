@@ -56,3 +56,14 @@ python manage.py test apps --settings=config.settings_test
 ```
 
 Nowe testy są w plikach `apps/scans/tests/test_limits.py`, `apps/accounts/tests/test_security.py` i `apps/mfa/tests/test_admin_guard.py`.
+
+## 4. Discovery: aktywne hosty, duże zakresy, allowlista, dowody HTTP
+
+Zmiany z gałęzi `feature/discovery-fixes`.
+
+- **Fałszywie aktywne hosty.** Skan portów na zakresie CIDR używał `-Pn`, więc nmap uznawał każdy adres za aktywny i cały zakres trafiał do wyników. Teraz zakres najpierw przechodzi wykrywanie hostów (`-PE -PS22,80,443,3389,8080 -PA80` albo ustawienia modułu Host discovery). Pojedynczy zapisany host nadal jest skanowany z `-Pn`, bo może ignorować ping. Parser odrzuca hosty, które są „up” tylko przez `-Pn` i nie mają otwartego portu, oraz hosty „down”.
+- **Duże zakresy.** CIDR większy niż `/24` (`SCAN_BATCH_PREFIX_V4`) jest dzielony na osobne paczki, np. /16 daje 256 × /24. Każda paczka ma własny czas, postęp i budżet czasu. Limit zakresu wzrósł z 4096 do 65 536 adresów, a skan może mieć najwyżej `SCAN_MAX_BATCHES_PER_RUN` paczek (domyślnie 2048).
+- **Allowlista** (`apps/scans/scope.py`). `SCAN_ALLOWED_NETWORKS` (CIDR) i `SCAN_ALLOWED_DOMAINS` (sufiksy domen) w `.env`; puste oznacza brak ograniczeń. Cel spoza zakresu jest odrzucany przy zapisie (400). Worker sprawdza go jeszcze raz tuż przed skanem: rozwiązuje domenę i odmawia, jeśli którykolwiek adres jest poza dozwolonymi sieciami. **Przed demo ustawić na zakresy labu AGH.**
+- **Dowody HTTP.** httpx zbiera teraz nagłówki odpowiedzi, hash favicony (mmh3) i adres przekierowania (`-include-response-header -favicon -location`); przekierowania nadal nie są śledzone. Ciasteczka zapisujemy bez wartości: nazwa oraz flagi `Secure`, `HttpOnly` i `SameSite`, bo wartości to dane sesyjne. Treść odpowiedzi nie jest zapisywana. Klucze w JSON z httpx (`header`) potwierdzone w teście jednostkowym, ale **nie sprawdzone na prawdziwym httpx 1.6.9**.
+
+Bez zmian: widoczność danych według właściciela. Testy Mateusza wymagają, żeby użytkownik widział tylko własne cele i skany, więc to decyzja dla zespołu (rola „Odczyt” w obecnej wersji nie widzi cudzych skanów).

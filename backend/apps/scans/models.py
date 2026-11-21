@@ -123,9 +123,9 @@ class ScanBatch(models.Model):
         ordering = ("id",)
         constraints = [
             models.UniqueConstraint(
-                fields=("run", "target"),
+                fields=("run", "target", "target_address"),
                 condition=Q(target__isnull=False),
-                name="scans_batch_run_target_uniq",
+                name="scans_batch_run_target_address_uniq",
             )
         ]
 
