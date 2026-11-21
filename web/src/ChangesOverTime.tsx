@@ -21,9 +21,18 @@ const RANGE_MS: Record<Exclude<RangeKey, "all">, number> = {
   "30d": 30 * 24 * 60 * 60 * 1000,
 };
 
-function formatTick(iso: string): string {
+function formatTick(iso: string, compact = false): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    const date = new Date(iso);
+    if (compact) {
+      return date.toLocaleString(undefined, {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+    return date.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
       hour: "2-digit",
@@ -89,6 +98,7 @@ export function ChangesOverTime({
   }, [allPoints, range]);
 
   const maxTotal = Math.max(1, ...points.map((point) => point.total));
+  const compactLabels = points.length > 8;
 
   return (
     <section className="panel changes-over-time" aria-label={t("Changes over time")}>
@@ -165,7 +175,9 @@ export function ChangesOverTime({
                     </div>
                   </div>
                   <span className="changes-over-time__label mono">{point.label}</span>
-                  <span className="changes-over-time__when">{formatTick(point.finishedAt)}</span>
+                  <span className="changes-over-time__when">
+                    {formatTick(point.finishedAt, compactLabels)}
+                  </span>
                 </button>
               );
             })}

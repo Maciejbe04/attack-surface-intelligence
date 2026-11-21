@@ -768,13 +768,13 @@ export function LifecycleKpis({
   if (!counts) return null;
   return (
     <div className="findings-kpis findings-kpis--dashboard" aria-label={t("Latest findings")}>
-      <span className="field-help">
+      <span className="findings-kpis__label">
         {t("Latest completed")} #{latest!.id}
       </span>
       {(["NEW", "CHANGED", "GONE"] as ObservationLifecycle[]).map((key) => (
         <div key={key} className="findings-kpi">
           <span className={`lifecycle-badge lifecycle-badge--${key}`}>{key}</span>
-          <strong className="mono">{counts[key] ?? 0}</strong>
+          <strong className="findings-kpi__count mono">{counts[key] ?? 0}</strong>
         </div>
       ))}
     </div>

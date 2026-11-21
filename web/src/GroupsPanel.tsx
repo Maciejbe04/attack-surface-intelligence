@@ -142,9 +142,8 @@ export function GroupsPanel({
   }
 
   const [scanWindowSeconds, setScanWindowSeconds] = useState<number>(3600);
-  const windowOptions = isAdmin ? [1800, 3600, 7200] : [1800, 3600];
-  const effectiveWindowSeconds =
-    !isAdmin && scanWindowSeconds > 3600 ? 3600 : scanWindowSeconds;
+  const windowOptions = [1800, 3600, 7200];
+  const effectiveWindowSeconds = isAdmin ? scanWindowSeconds : 3600;
 
   async function onScanNow(group: TargetGroup) {
     const modules = currentModules();
@@ -363,7 +362,7 @@ export function GroupsPanel({
               ? `${groups.length} ${t("groups")}`
               : `${filteredGroups.length} / ${groups.length} ${t("groups")}`}
           </div>
-          {canMutate && (
+          {canMutate && isAdmin && (
             <label className="table-toolbar__window">
               <span className="field-help">{t("Scan window")}</span>
               <select
@@ -379,6 +378,11 @@ export function GroupsPanel({
                 ))}
               </select>
             </label>
+          )}
+          {canMutate && !isAdmin && (
+            <span className="table-toolbar__window field-help">
+              {t("1h default · visible only for admin")}
+            </span>
           )}
         </div>
         <div className="target-filters">

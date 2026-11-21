@@ -372,11 +372,17 @@ html.theme-high-contrast {
   --aws-table-header: #eeeeee;
   --aws-row-hover: #ffff99;
   --aws-selected: #ffff66;
+  --aws-input-bg: #ffffff;
+  --aws-btn-bg: #ffffff;
+  --aws-toast-bg: #ffffff;
+  --aws-module-muted: #ffffcc;
+  color-scheme: light;
 }
 
-html.theme-high-contrast body {
-  background: #fff;
-  color: #000;
+html.theme-high-contrast body,
+html.theme-high-contrast.theme-dark body {
+  background: #fff !important;
+  color: #000 !important;
 }
 
 html.theme-high-contrast .topnav {
@@ -419,6 +425,55 @@ html.theme-high-contrast .flash--error {
 
 html.theme-high-contrast a {
   text-decoration: underline;
+}
+
+/* High contrast must win over dark-mode hardcoded surfaces (black-on-black). */
+html.theme-high-contrast .app,
+html.theme-high-contrast .layout,
+html.theme-high-contrast .content,
+html.theme-high-contrast .sidenav,
+html.theme-high-contrast .panel,
+html.theme-high-contrast .panel__header,
+html.theme-high-contrast .panel__body,
+html.theme-high-contrast .app-footer,
+html.theme-high-contrast .findings-kpis,
+html.theme-high-contrast .findings-kpis--dashboard,
+html.theme-high-contrast .changes-over-time__chart,
+html.theme-high-contrast .module-tile,
+html.theme-high-contrast .module-tile__drawer {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.theme-high-contrast .form-row label,
+html.theme-high-contrast .field-help,
+html.theme-high-contrast .page-header h1,
+html.theme-high-contrast .page-header p,
+html.theme-high-contrast .panel__header h2,
+html.theme-high-contrast .panel__header h3,
+html.theme-high-contrast .sidenav__item,
+html.theme-high-contrast .sidenav__section,
+html.theme-high-contrast .app-footer,
+html.theme-high-contrast .mono,
+html.theme-high-contrast strong,
+html.theme-high-contrast p,
+html.theme-high-contrast td,
+html.theme-high-contrast th {
+  color: #000000 !important;
+}
+
+html.theme-high-contrast .input,
+html.theme-high-contrast select,
+html.theme-high-contrast textarea,
+html.theme-high-contrast .btn--normal {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+html.theme-high-contrast .field-help {
+  opacity: 1 !important;
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1814,34 +1869,81 @@ table.hosts .mono {
 
 .findings-kpis--dashboard {
   margin: 0 0 16px;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--aws-border-light);
   background: var(--aws-panel);
+  color: var(--aws-text);
+}
+
+.findings-kpis__label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--aws-text);
+}
+
+.findings-kpi__count {
+  font-size: 16px;
+  font-weight: 800;
   color: var(--aws-text);
 }
 
 .findings-kpis--dashboard .field-help {
   color: var(--aws-text-secondary);
   margin: 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .findings-kpis--dashboard .findings-kpi strong {
   color: var(--aws-text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 
 html.theme-dark .findings-kpis--dashboard {
-  background: #161b22;
-  border-color: #30363d;
+  background: #010409 !important;
+  border: 1px solid #8b949e !important;
+  color: #ffffff !important;
 }
 
+html.theme-dark .findings-kpis--dashboard .findings-kpis__label,
 html.theme-dark .findings-kpis--dashboard .field-help {
-  color: #c9d1d9;
+  color: #ffffff !important;
 }
 
-html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
-  color: #e6edf3;
+html.theme-dark .findings-kpis--dashboard .findings-kpi__count,
+html.theme-dark .findings-kpis--dashboard .findings-kpi strong,
+html.theme-dark .findings-kpis .findings-kpi__count,
+html.theme-dark .findings-kpis .findings-kpi strong {
+  color: #ffffff !important;
+}
+
+html.theme-dark .findings-kpis--dashboard .lifecycle-badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-width: 1px;
+}
+
+html.theme-dark .findings-kpis--dashboard .lifecycle-badge--NEW,
+html.theme-dark .findings-kpis .lifecycle-badge--NEW {
+  color: #04110a !important;
+  background: #3fb950 !important;
+  border-color: #56d364 !important;
+}
+
+html.theme-dark .findings-kpis--dashboard .lifecycle-badge--CHANGED,
+html.theme-dark .findings-kpis .lifecycle-badge--CHANGED {
+  color: #1c1400 !important;
+  background: #e3b341 !important;
+  border-color: #ffdf5d !important;
+}
+
+html.theme-dark .findings-kpis--dashboard .lifecycle-badge--GONE,
+html.theme-dark .findings-kpis .lifecycle-badge--GONE {
+  color: #1f0a09 !important;
+  background: #f85149 !important;
+  border-color: #ffa198 !important;
 }
 
 .changes-over-time {
@@ -1921,12 +2023,12 @@ html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
 .changes-over-time__chart {
   display: flex;
   align-items: stretch;
-  gap: 8px;
-  height: 210px;
+  gap: 4px;
+  width: 100%;
+  height: 220px;
   margin: 0;
-  padding: 12px 10px 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  padding: 12px 8px 8px;
+  overflow: hidden;
   border: 1px solid var(--aws-border-light);
   background:
     linear-gradient(180deg, rgba(15, 23, 42, 0.03), transparent 40%),
@@ -1935,16 +2037,14 @@ html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
 
 .changes-over-time__col {
   display: flex;
-  flex: 0 0 64px;
+  flex: 1 1 0;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  width: 64px;
-  min-width: 64px;
-  max-width: 64px;
+  min-width: 0;
   height: 100%;
   margin: 0;
-  padding: 0;
+  padding: 0 1px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -1959,6 +2059,7 @@ html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
   align-items: flex-end;
   justify-content: center;
   width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -1973,7 +2074,8 @@ html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
 }
 
 .changes-over-time__stack {
-  width: 28px;
+  width: clamp(4px, 55%, 36px);
+  max-width: 100%;
   display: flex;
   flex-direction: column-reverse;
   overflow: hidden;
@@ -1990,13 +2092,17 @@ html.theme-dark .findings-kpis--dashboard .findings-kpi strong {
 
 .changes-over-time__label {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: clamp(9px, 1.1vw, 11px);
   line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .changes-over-time__when {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: clamp(8px, 1vw, 10px);
   color: var(--aws-text-secondary, #545b64);
   text-align: center;
   line-height: 1.15;
@@ -2107,37 +2213,6 @@ html.theme-dark .changes-over-time__seg--GONE {
   color: #8c5a00;
   background: #fff4de;
   border-color: #f0d59a;
-}
-
-html.theme-dark .lifecycle-badge--NEW {
-  color: #3fb950;
-  background: #0f2d1a;
-  border-color: #238636;
-}
-
-html.theme-dark .lifecycle-badge--CHANGED {
-  color: #e3b341;
-  background: #3d2c0a;
-  border-color: #9e6a03;
-}
-
-html.theme-dark .lifecycle-badge--MISSING,
-html.theme-dark .lifecycle-badge--FLAKY {
-  color: #ffa657;
-  background: #3d2c0a;
-  border-color: #9e6a03;
-}
-
-html.theme-dark .lifecycle-badge--GONE {
-  color: #ff7b72;
-  background: #3d1214;
-  border-color: #da3633;
-}
-
-html.theme-dark .lifecycle-badge--UNCHANGED {
-  color: #8b949e;
-  background: #21262d;
-  border-color: #484f58;
 }
 
 .role-permissions {
@@ -2536,28 +2611,28 @@ html.theme-dark .curiosity-badge--info {
   border-color: #2f4f72;
 }
 html.theme-dark .lifecycle-badge--NEW {
-  color: #7ee787;
-  background: #12351c;
-  border-color: #3fb950;
+  color: #04110a;
+  background: #3fb950;
+  border-color: #56d364;
 }
 html.theme-dark .lifecycle-badge--CHANGED {
-  color: #ffdf5d;
-  background: #3d2c0a;
-  border-color: #e3b341;
+  color: #1c1400;
+  background: #e3b341;
+  border-color: #ffdf5d;
 }
 html.theme-dark .lifecycle-badge--MISSING,
 html.theme-dark .lifecycle-badge--FLAKY {
-  color: #ffb86c;
-  background: #3d2c0a;
-  border-color: #ffa657;
+  color: #1c1400;
+  background: #ffa657;
+  border-color: #ffb86c;
 }
 html.theme-dark .lifecycle-badge--GONE {
-  color: #ffa198;
-  background: #3d1214;
-  border-color: #f85149;
+  color: #1f0a09;
+  background: #f85149;
+  border-color: #ffa198;
 }
 html.theme-dark .lifecycle-badge--UNCHANGED {
-  color: #c9d1d9;
-  background: #21262d;
-  border-color: #484f58;
+  color: #0d1117;
+  background: #8b949e;
+  border-color: #c9d1d9;
 }

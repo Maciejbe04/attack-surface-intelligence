@@ -704,6 +704,8 @@ const PL: Record<string, string> = {
     "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić.",
   "Windows longer than 1h require admin.":
     "Okna dłuższe niż 1h wymagają roli admin.",
+  "1h default · visible only for admin":
+    "Domyślnie 1h · widoczne tylko dla admina",
   "Changes over time": "Zmiany w czasie",
   "Need at least two finished scans with lifecycle data to chart changes.":
     "Potrzeba co najmniej dwóch ukończonych skanów z danymi lifecycle, żeby narysować zmiany.",

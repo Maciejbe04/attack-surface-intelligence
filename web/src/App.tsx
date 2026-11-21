@@ -700,12 +700,10 @@ export function App() {
   const canMutate = user?.role === "admin" || user?.role === "operator";
   const canExport =
     user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
-  const scanWindowOptions = isAdmin
-    ? ([1800, 3600, 7200] as const)
-    : ([1800, 3600] as const);
+  const scanWindowOptions = [1800, 3600, 7200] as const;
 
   useEffect(() => {
-    if (!isAdmin && scanWindowSeconds > 3600) {
+    if (!isAdmin && scanWindowSeconds !== 3600) {
       setScanWindowSeconds(3600);
     }
   }, [isAdmin, scanWindowSeconds]);
@@ -1915,25 +1913,33 @@ export function App() {
                     </div>
                   )}
                   <div className="form-row">
-                    <label htmlFor="scan-window">{t("Scan window")}</label>
+                    <label htmlFor={isAdmin ? "scan-window" : "scan-window-info"}>
+                      {t("Scan window")}
+                    </label>
                     <div>
-                      <select
-                        id="scan-window"
-                        className="input input--select"
-                        value={String(scanWindowSeconds)}
-                        onChange={(e) => setScanWindowSeconds(Number(e.target.value) || 3600)}
-                      >
-                        {scanWindowOptions.map((seconds) => (
-                          <option key={seconds} value={String(seconds)}>
-                            {seconds === 1800 ? "30m" : seconds === 3600 ? "1h" : "2h"}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="field-help">
-                        {isAdmin
-                          ? t("Required deadline for every scan; unfinished batches pause and can be resumed.")
-                          : t("Windows longer than 1h require admin.")}
-                      </p>
+                      {isAdmin ? (
+                        <>
+                          <select
+                            id="scan-window"
+                            className="input input--select"
+                            value={String(scanWindowSeconds)}
+                            onChange={(e) => setScanWindowSeconds(Number(e.target.value) || 3600)}
+                          >
+                            {scanWindowOptions.map((seconds) => (
+                              <option key={seconds} value={String(seconds)}>
+                                {seconds === 1800 ? "30m" : seconds === 3600 ? "1h" : "2h"}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="field-help">
+                            {t("Required deadline for every scan; unfinished batches pause and can be resumed.")}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="field-help" id="scan-window-info" style={{ marginTop: 6 }}>
+                          {t("1h default · visible only for admin")}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
