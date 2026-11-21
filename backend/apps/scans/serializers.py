@@ -21,6 +21,7 @@ from .models import (
     TargetGroup,
 )
 from .modules import validate_modules
+from .services import NON_ADMIN_MAX_WINDOW_SECONDS, max_window_seconds_for_user
 from .validation import normalize_target
 
 
@@ -31,6 +32,17 @@ def is_admin(user: User) -> bool:
         return user.profile.role == "admin"
     except User.profile.RelatedObjectDoesNotExist:
         return False
+
+
+def validate_window_seconds_for_user(user: User, value: int | None) -> int | None:
+    if value is None:
+        return value
+    window = int(value)
+    if window > max_window_seconds_for_user(user):
+        raise serializers.ValidationError(
+            f"Scan windows longer than {NON_ADMIN_MAX_WINDOW_SECONDS // 3600}h require admin."
+        )
+    return window
 
 
 class TargetSerializer(serializers.ModelSerializer):
@@ -296,6 +308,9 @@ class ScanCreateSerializer(serializers.Serializer):
         self.context["targets"] = [target_by_id[target_id] for target_id in value]
         return value
 
+    def validate_window_seconds(self, value: int | None) -> int | None:
+        return validate_window_seconds_for_user(self.context["request"].user, value)
+
     def validate_modules(self, value: object) -> list[dict]:
         return validate_modules(value)
 
@@ -411,6 +426,9 @@ class GroupScanSerializer(serializers.Serializer):
         min_value=60,
         max_value=86400,
     )
+
+    def validate_window_seconds(self, value: int | None) -> int | None:
+        return validate_window_seconds_for_user(self.context["request"].user, value)
 
     def validate_modules(self, value: object) -> list[dict]:
         return validate_modules(value)

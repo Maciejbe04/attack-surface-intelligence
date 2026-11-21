@@ -11,8 +11,8 @@ export function LogoMark({ className = "" }: { className?: string }) {
   return (
     <svg
       className={className}
-      width="26"
-      height="26"
+      width="30"
+      height="30"
       viewBox="0 0 64 64"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"

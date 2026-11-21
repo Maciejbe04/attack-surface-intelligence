@@ -59,6 +59,7 @@ export function GroupsPanel({
   groups,
   loading,
   canMutate,
+  isAdmin = false,
   currentModules,
   onGroupsChanged,
   onScanQueued,
@@ -69,6 +70,7 @@ export function GroupsPanel({
   groups: TargetGroup[];
   loading: boolean;
   canMutate: boolean;
+  isAdmin?: boolean;
   /** Modules currently selected on the Dashboard; used for "Scan now" and new schedules. */
   currentModules: () => ScanModule[];
   onGroupsChanged: () => void;
@@ -140,6 +142,9 @@ export function GroupsPanel({
   }
 
   const [scanWindowSeconds, setScanWindowSeconds] = useState<number>(3600);
+  const windowOptions = isAdmin ? [1800, 3600, 7200] : [1800, 3600];
+  const effectiveWindowSeconds =
+    !isAdmin && scanWindowSeconds > 3600 ? 3600 : scanWindowSeconds;
 
   async function onScanNow(group: TargetGroup) {
     const modules = currentModules();
@@ -154,7 +159,7 @@ export function GroupsPanel({
         modules,
         newUuid(),
         undefined,
-        Number(scanWindowSeconds) || 3600,
+        Number(effectiveWindowSeconds) || 3600,
       );
       pushToast(
         "ok",
@@ -363,13 +368,15 @@ export function GroupsPanel({
               <span className="field-help">{t("Scan window")}</span>
               <select
                 className="input input--select"
-                value={String(scanWindowSeconds)}
+                value={String(effectiveWindowSeconds)}
                 onChange={(event) => setScanWindowSeconds(Number(event.target.value) || 3600)}
                 aria-label={t("Scan window")}
               >
-                <option value="1800">30m</option>
-                <option value="3600">1h</option>
-                <option value="7200">2h</option>
+                {windowOptions.map((seconds) => (
+                  <option key={seconds} value={String(seconds)}>
+                    {seconds === 1800 ? "30m" : seconds === 3600 ? "1h" : "2h"}
+                  </option>
+                ))}
               </select>
             </label>
           )}

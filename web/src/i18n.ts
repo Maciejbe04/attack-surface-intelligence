@@ -702,6 +702,13 @@ const PL: Record<string, string> = {
     "Opcjonalny deadline; niedokończone batche przechodzą w pause i można je wznowić.",
   "Required deadline for every scan; unfinished batches pause and can be resumed.":
     "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić.",
+  "Windows longer than 1h require admin.":
+    "Okna dłuższe niż 1h wymagają roli admin.",
+  "Changes over time": "Zmiany w czasie",
+  "Need at least two finished scans with lifecycle data to chart changes.":
+    "Potrzeba co najmniej dwóch ukończonych skanów z danymi lifecycle, żeby narysować zmiany.",
+  "Lifecycle counts across recent finished scans.":
+    "Liczniki lifecycle z ostatnich ukończonych skanów.",
   "Open a probe to view the activity log and findings on the Scans page.":
     "Otwórz sondę, aby zobaczyć log i findings na stronie Skany.",
   "Signatures pack": "Pakiet sygnatur",

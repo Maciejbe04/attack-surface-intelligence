@@ -15,13 +15,41 @@ from .models import GroupSchedule, ScanBatch, ScanRun, Target, TargetGroup
 from .tasks import execute_batch
 
 
-def resolve_window_seconds(requested: int | None) -> int:
+NON_ADMIN_MAX_WINDOW_SECONDS = 3600
+
+
+def _user_is_admin(user: User | None) -> bool:
+    if user is None:
+        return False
+    if user.is_superuser:
+        return True
+    try:
+        return user.profile.role == "admin"
+    except User.profile.RelatedObjectDoesNotExist:
+        return False
+
+
+def max_window_seconds_for_user(user: User | None) -> int:
+    """Non-admins are capped at 1h; admins may use the full platform max."""
+    if _user_is_admin(user):
+        return 86400
+    return NON_ADMIN_MAX_WINDOW_SECONDS
+
+
+def resolve_window_seconds(
+    requested: int | None,
+    *,
+    user: User | None = None,
+    max_seconds: int | None = None,
+) -> int:
     """Always apply a global scan window (like allowlist: non-optional safety rail)."""
+    cap = max_seconds if max_seconds is not None else max_window_seconds_for_user(user)
+    cap = max(60, min(int(cap), 86400))
     default = int(getattr(settings, "SCAN_DEFAULT_WINDOW_SECONDS", 3600) or 3600)
-    default = max(60, min(default, 86400))
+    default = max(60, min(default, cap))
     if requested is None or int(requested) <= 0:
         return default
-    return max(60, min(int(requested), 86400))
+    return max(60, min(int(requested), cap))
 
 
 def publish_batch(batch_id: int, delivery_id: str) -> None:
@@ -109,7 +137,7 @@ def queue_scan_for_targets(
             if existing is not None:
                 return existing, False
 
-        resolved_window = resolve_window_seconds(window_seconds)
+        resolved_window = resolve_window_seconds(window_seconds, user=owner)
         deadline_at = timezone.now() + timedelta(seconds=resolved_window)
 
         try:

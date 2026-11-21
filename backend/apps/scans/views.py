@@ -810,7 +810,11 @@ class ScanResumeView(APIView):
                 )
                 republish.append((batch.pk, str(batch.delivery_id)))
             # Always re-apply a scan window on resume (global safety rail).
-            from .services import resolve_window_seconds
+            from .services import (
+                NON_ADMIN_MAX_WINDOW_SECONDS,
+                max_window_seconds_for_user,
+                resolve_window_seconds,
+            )
 
             raw_window = (
                 request.data.get("window_seconds") if isinstance(request.data, dict) else None
@@ -819,7 +823,20 @@ class ScanResumeView(APIView):
                 requested = int(raw_window) if raw_window not in (None, "") else None
             except (TypeError, ValueError):
                 requested = None
-            window = resolve_window_seconds(requested)
+            if (
+                requested is not None
+                and requested > max_window_seconds_for_user(request.user)
+            ):
+                return Response(
+                    {
+                        "detail": (
+                            "Scan windows longer than "
+                            f"{NON_ADMIN_MAX_WINDOW_SECONDS // 3600}h require admin."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            window = resolve_window_seconds(requested, user=request.user)
             run.window_seconds = window
             run.deadline_at = timezone.now() + timedelta(seconds=window)
             run.status = ScanRun.Status.RUNNING

@@ -35,6 +35,7 @@ import { HostSearch } from "./HostSearch";
 import { newUuid } from "./uuid";
 import { AppFooter } from "./AppFooter";
 import { CuriosityInsightsFromScans } from "./CuriosityInsights";
+import { ChangesOverTime } from "./ChangesOverTime";
 import { FindingsPanel, LifecycleKpis } from "./FindingsPanel";
 import { Language, Translate, useLanguage } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
@@ -695,9 +696,19 @@ export function App() {
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
+  const isAdmin = user?.role === "admin";
   const canMutate = user?.role === "admin" || user?.role === "operator";
   const canExport =
     user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
+  const scanWindowOptions = isAdmin
+    ? ([1800, 3600, 7200] as const)
+    : ([1800, 3600] as const);
+
+  useEffect(() => {
+    if (!isAdmin && scanWindowSeconds > 3600) {
+      setScanWindowSeconds(3600);
+    }
+  }, [isAdmin, scanWindowSeconds]);
 
   const scanGroupOptions = useMemo(() => {
     const names = new Set<string>();
@@ -1912,12 +1923,16 @@ export function App() {
                         value={String(scanWindowSeconds)}
                         onChange={(e) => setScanWindowSeconds(Number(e.target.value) || 3600)}
                       >
-                        <option value="1800">30m</option>
-                        <option value="3600">1h</option>
-                        <option value="7200">2h</option>
+                        {scanWindowOptions.map((seconds) => (
+                          <option key={seconds} value={String(seconds)}>
+                            {seconds === 1800 ? "30m" : seconds === 3600 ? "1h" : "2h"}
+                          </option>
+                        ))}
                       </select>
                       <p className="field-help">
-                        {t("Required deadline for every scan; unfinished batches pause and can be resumed.")}
+                        {isAdmin
+                          ? t("Required deadline for every scan; unfinished batches pause and can be resumed.")
+                          : t("Windows longer than 1h require admin.")}
                       </p>
                     </div>
                   </div>
@@ -1940,6 +1955,7 @@ export function App() {
               />
 
               <LifecycleKpis scans={scans} t={t} />
+              <ChangesOverTime scans={scans} t={t} />
               <CuriosityInsightsFromScans scans={scans} t={t} />
 
               <section className="panel">
@@ -2510,6 +2526,7 @@ export function App() {
               groups={groups}
               loading={groupsLoading}
               canMutate={canMutate}
+              isAdmin={isAdmin}
               currentModules={selectedModules}
               onGroupsChanged={refreshGroups}
               onScanQueued={onGroupScanQueued}
