@@ -6,7 +6,9 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 ## Status
 
-Scaffold Docker Compose jest gotowy: gateway, web (React), API (Django), Celery beat/worker, PostgreSQL, Redis i backup. Logika skanowania MVP jest jeszcze w budowie; UI ma ekran startowy z healthcheckiem API.
+MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp i anulowanie.
+
+Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Automatyczne odtwarzanie zadań po całkowitej utracie Redis, harmonogramy oraz pause/resume pozostają kolejnym etapem.
 
 ## Szybki start
 
@@ -23,6 +25,8 @@ docker compose up --build
 
 UI: [http://localhost:8080](http://localhost:8080) (albo port z `GATEWAY_HTTP_PORT` w `.env`)  
 API health: `/api/health/` na tym samym porcie  
+
+Domyślne konto wyłącznie dla lokalnego developmentu: `admin` / `changeme`. Przed uruchomieniem współdzielonego środowiska ustaw własne `BOOTSTRAP_ADMIN_PASSWORD` w `.env`.
 
 Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
 

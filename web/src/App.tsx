@@ -1,4 +1,19 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ACTIVE_SCAN_STATUSES,
+  apiErrorMessage,
+  cancelScan,
+  createScan,
+  createTarget,
+  deleteTarget,
+  listScans,
+  listTargets,
+  Scan,
+  ScanModule,
+  ScanStatus,
+  Target,
+  TargetType,
+} from "./api/scans";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 import { AppFooter } from "./AppFooter";
 import { Language, Translate, useLanguage } from "./i18n";
@@ -13,14 +28,6 @@ import {
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
-type HostTarget = {
-  id: string;
-  value: string;
-  type: "ip" | "cidr" | "domain";
-  comment: string;
-  addedAt: string;
-};
-
 type NavId = "dashboard" | "targets" | "scans";
 
 type Toast = {
@@ -30,18 +37,7 @@ type Toast = {
   message: string;
 };
 
-type ProbeJob = {
-  id: string;
-  host: string;
-  modules: Array<{ id: string; filters: Record<string, string | number | boolean> }>;
-  createdAt: string;
-  status: "queued";
-};
-
-const STORAGE_KEY = "surfacex.targets.v1";
-const JOBS_KEY = "surfacex.probeJobs.v1";
-
-function detectType(value: string): HostTarget["type"] {
+function detectType(value: string): TargetType {
   if (value.includes("/")) return "cidr";
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) return "ip";
   return "domain";
@@ -70,28 +66,118 @@ function isValidTarget(value: string): boolean {
   return /^[a-z0-9.-]+$/i.test(v) && v.includes(".");
 }
 
-function loadTargets(): HostTarget[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as HostTarget[];
-    return Array.isArray(parsed)
-      ? parsed.map((target) => ({ ...target, comment: target.comment ?? "" }))
-      : [];
-  } catch {
-    return [];
-  }
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
-function loadJobs(): ProbeJob[] {
-  try {
-    const raw = localStorage.getItem(JOBS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ProbeJob[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+const STATUS_LABELS: Record<ScanStatus, string> = {
+  queued: "Queued",
+  running: "Running",
+  cancel_requested: "Cancel requested",
+  completed: "Completed",
+  partial: "Partial",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+function ScanTable({
+  scans,
+  emptyTitle,
+  emptyMessage,
+  canMutate,
+  cancellingIds,
+  onCancel,
+  t,
+}: {
+  scans: Scan[];
+  emptyTitle: string;
+  emptyMessage: string;
+  canMutate: boolean;
+  cancellingIds: Set<number>;
+  onCancel: (scan: Scan) => void;
+  t: Translate;
+}) {
+  if (scans.length === 0) {
+    return (
+      <div className="empty">
+        <strong>{t(emptyTitle)}</strong>
+        {t(emptyMessage)}
+      </div>
+    );
   }
+
+  return (
+    <table className="hosts">
+      <caption className="sr-only">{t("Discovery scan runs")}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{t("Scan")}</th>
+          <th scope="col">{t("Targets")}</th>
+          <th scope="col">{t("Modules")}</th>
+          <th scope="col">{t("Status")}</th>
+          <th scope="col">{t("Progress")}</th>
+          <th scope="col">{t("Batches")}</th>
+          <th scope="col">{t("Queued")}</th>
+          {canMutate && <th scope="col">{t("Actions")}</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {scans.map((scan) => {
+          const active = ACTIVE_SCAN_STATUSES.has(scan.status);
+          const cancelling = cancellingIds.has(scan.id);
+          return (
+            <tr key={scan.id}>
+              <td className="mono">#{scan.id}</td>
+              <td className="scan-targets">
+                {scan.targets.length > 0 ? scan.targets.join(", ") : "—"}
+              </td>
+              <td>
+                {scan.modules
+                  .map((module) => `${module.id} (${summarizeFilters(module.filters)})`)
+                  .join("; ")}
+              </td>
+              <td>
+                <span className={`status-badge status-badge--${scan.status}`}>
+                  {t(STATUS_LABELS[scan.status])}
+                </span>
+                {scan.error && <span className="scan-error">{scan.error}</span>}
+              </td>
+              <td>
+                <div className="scan-progress">
+                  <progress value={scan.progress} max={100} aria-label={t("Scan progress")} />
+                  <span>{scan.progress}%</span>
+                </div>
+              </td>
+              <td>
+                {scan.completed_batches}/{scan.total_batches}
+                {scan.failed_batches > 0 && (
+                  <span className="scan-error">
+                    {t("Failed")}: {scan.failed_batches}
+                  </span>
+                )}
+              </td>
+              <td>{new Date(scan.created_at).toLocaleString()}</td>
+              {canMutate && (
+                <td>
+                  {active && (
+                    <button
+                      type="button"
+                      className="btn btn--danger"
+                      onClick={() => onCancel(scan)}
+                      disabled={cancelling || scan.status === "cancel_requested"}
+                      aria-busy={cancelling}
+                    >
+                      {cancelling ? t("Cancelling…") : t("Cancel")}
+                    </button>
+                  )}
+                </td>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 function LoginScreen({
@@ -335,18 +421,25 @@ export function App() {
   const [enteringDashboard, setEnteringDashboard] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("dashboard");
-  const [targets, setTargets] = useState<HostTarget[]>(() => loadTargets());
-  const [jobs, setJobs] = useState<ProbeJob[]>(() => loadJobs());
+  const [targets, setTargets] = useState<Target[]>([]);
+  const [scans, setScans] = useState<Scan[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [scanRefreshKey, setScanRefreshKey] = useState(0);
   const [draft, setDraft] = useState("");
   const [draftComment, setDraftComment] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [probeHost, setProbeHost] = useState("");
+  const [addPending, setAddPending] = useState(false);
+  const [removePending, setRemovePending] = useState(false);
+  const [scanPending, setScanPending] = useState<"dashboard" | "targets" | null>(null);
+  const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set());
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
+  const canMutate = user?.role === "admin" || user?.role === "operator";
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
     const id = crypto.randomUUID();
@@ -384,16 +477,95 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(targets));
-  }, [targets]);
+    if (!user) {
+      setTargets([]);
+      setSelected(new Set());
+      setProbeHost("");
+      return;
+    }
+    const controller = new AbortController();
+    setDataLoading(true);
+    listTargets(controller.signal)
+      .then(setTargets)
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) {
+          pushToast(
+            "error",
+            t("Targets unavailable"),
+            apiErrorMessage(error, t("Could not load targets.")),
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDataLoading(false);
+      });
+    return () => controller.abort();
+  }, [user?.id, language]);
 
   useEffect(() => {
-    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
-  }, [jobs]);
+    if (!user) {
+      setScans([]);
+      return;
+    }
+
+    let disposed = false;
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+
+    const clearTimer = () => {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+
+    const poll = async () => {
+      if (disposed || document.hidden || controller) return;
+      controller = new AbortController();
+      try {
+        const nextScans = await listScans(controller.signal);
+        if (disposed) return;
+        setScans(nextScans);
+        if (nextScans.some((scan) => ACTIVE_SCAN_STATUSES.has(scan.status))) {
+          timer = window.setTimeout(poll, 2000);
+        }
+      } catch (error) {
+        if (!disposed && !isAbortError(error)) {
+          pushToast(
+            "error",
+            t("Scans unavailable"),
+            apiErrorMessage(error, t("Could not load scans.")),
+          );
+          timer = window.setTimeout(poll, 5000);
+        }
+      } finally {
+        controller = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        clearTimer();
+        controller?.abort();
+      } else {
+        clearTimer();
+        timer = window.setTimeout(poll, 0);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    void poll();
+    return () => {
+      disposed = true;
+      clearTimer();
+      controller?.abort();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [user?.id, language, scanRefreshKey]);
 
   useEffect(() => {
     if (!probeHost && targets.length > 0) {
-      setProbeHost(targets[0].value);
+      setProbeHost(targets[0].address);
     }
   }, [targets, probeHost]);
 
@@ -421,7 +593,7 @@ export function App() {
     setSelected(new Set(targets.map((t) => t.id)));
   }
 
-  function toggleOne(id: string) {
+  function toggleOne(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -491,79 +663,157 @@ export function App() {
     });
   }
 
-  function onAdd(event: FormEvent) {
-    event.preventDefault();
-    const value = draft.trim();
-    if (!isValidTarget(value)) {
-      setDraftError("Enter a valid IPv4, CIDR (e.g. 10.0.0.0/24), or hostname.");
-      return;
-    }
-    if (targets.some((t) => t.value.toLowerCase() === value.toLowerCase())) {
-      setDraftError("This target is already on the list.");
-      return;
-    }
-    setTargets((prev) => [
-      {
-        id: crypto.randomUUID(),
-        value,
-        type: detectType(value),
-        comment: draftComment.trim(),
-        addedAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setDraft("");
-    setDraftComment("");
-    setDraftError(null);
-    setFlash(`Added ${value}`);
-    if (!probeHost) setProbeHost(value);
+  function selectedModules(): ScanModule[] {
+    return Object.entries(moduleState)
+      .filter(([, config]) => config.enabled)
+      .map(([id, config]) => ({ id, filters: config.filters }));
   }
 
-  function removeSelected() {
-    if (selected.size === 0) return;
-    const count = selected.size;
-    const removed = new Set(selectedTargets.map((t) => t.value));
-    setTargets((prev) => prev.filter((t) => !selected.has(t.id)));
-    setSelected(new Set());
-    if (removed.has(probeHost)) {
-      setProbeHost("");
+  async function onAdd(event: FormEvent) {
+    event.preventDefault();
+    if (!canMutate || addPending) return;
+    const value = draft.trim();
+    if (!isValidTarget(value)) {
+      setDraftError(t("Enter a valid IPv4, CIDR (e.g. 10.0.0.0/24), or hostname."));
+      return;
     }
-    setFlash(`Removed ${count} target${count === 1 ? "" : "s"}`);
+    if (targets.some((target) => target.address.toLowerCase() === value.toLowerCase())) {
+      setDraftError(t("This target is already on the list."));
+      return;
+    }
+
+    setAddPending(true);
+    try {
+      const target = await createTarget({
+        address: value,
+        type: detectType(value),
+        comment: draftComment.trim(),
+      });
+      setTargets((prev) =>
+        [...prev, target].sort((a, b) => a.address.localeCompare(b.address)),
+      );
+      setDraft("");
+      setDraftComment("");
+      setDraftError(null);
+      setFlash(`${t("Added")} ${target.address}`);
+      if (!probeHost) setProbeHost(target.address);
+    } catch (error) {
+      const message = apiErrorMessage(error, t("Could not add target."));
+      setDraftError(message);
+      pushToast("error", t("Target not added"), message);
+    } finally {
+      setAddPending(false);
+    }
+  }
+
+  async function removeSelected() {
+    if (!canMutate || selected.size === 0 || removePending) return;
+    const ids = [...selected];
+    setRemovePending(true);
+    const results = await Promise.allSettled(ids.map((id) => deleteTarget(id)));
+    const removedIds = new Set(
+      ids.filter((_, index) => results[index].status === "fulfilled"),
+    );
+    const failed = results.length - removedIds.size;
+    const removedTargets = targets.filter((target) => removedIds.has(target.id));
+    setTargets((prev) => prev.filter((target) => !removedIds.has(target.id)));
+    setSelected((prev) => new Set([...prev].filter((id) => !removedIds.has(id))));
+    if (removedTargets.some((target) => target.address === probeHost)) setProbeHost("");
+    if (removedIds.size > 0) {
+      setFlash(`${t("Removed targets")}: ${removedIds.size}`);
+    }
+    if (failed > 0) {
+      const firstFailure = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected",
+      );
+      pushToast(
+        "error",
+        t("Some targets were not removed"),
+        apiErrorMessage(firstFailure?.reason, t("Could not remove selected targets.")),
+      );
+    }
+    setRemovePending(false);
+  }
+
+  async function queueScan(targetIds: number[], source: "dashboard" | "targets") {
+    if (!canMutate || scanPending || targetIds.length === 0) return;
+    const modules = selectedModules();
+    if (modules.length === 0) {
+      pushToast("error", t("No modules"), t("Select at least one discovery module."));
+      return;
+    }
+    setScanPending(source);
+    try {
+      const scan = await createScan({
+        target_ids: targetIds,
+        modules,
+        client_request_id: crypto.randomUUID(),
+      });
+      setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
+      setScanRefreshKey((value) => value + 1);
+      pushToast(
+        "ok",
+        t("Scan queued"),
+        `${t("Targets")}: ${targetIds.length} · ${t("Modules")}: ${modules.length}`,
+      );
+      if (source === "targets") {
+        setFlash(`${t("Scan queued for targets")}: ${targetIds.length}`);
+      }
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Scan not queued"),
+        apiErrorMessage(error, t("Could not queue scan.")),
+      );
+    } finally {
+      setScanPending(null);
+    }
   }
 
   function queueSelected() {
-    if (selectedTargets.length === 0) return;
-    setFlash(
-      `Queued scan for ${selectedTargets.length} host${selectedTargets.length === 1 ? "" : "s"}.`,
+    void queueScan(
+      selectedTargets.map((target) => target.id),
+      "targets",
     );
   }
 
   function runProbe() {
     const host = probeHost.trim();
     if (!host) {
-      pushToast("error", "Host required", "Select or enter a host / IP to probe.");
+      pushToast("error", t("Host required"), t("Select a saved host / IP to probe."));
       return;
     }
-    const selected = Object.entries(moduleState)
-      .filter(([, cfg]) => cfg.enabled)
-      .map(([id, cfg]) => ({ id, filters: cfg.filters }));
-    if (selected.length === 0) {
-      pushToast("error", "No modules", "Select at least one discovery module.");
-      return;
-    }
-    const job: ProbeJob = {
-      id: crypto.randomUUID(),
-      host,
-      modules: selected,
-      createdAt: new Date().toISOString(),
-      status: "queued",
-    };
-    setJobs((prev) => [job, ...prev].slice(0, 50));
-    pushToast(
-      "ok",
-      "Probe queued",
-      `${host} · ${selected.length} module${selected.length === 1 ? "" : "s"} with filters (worker wiring next).`,
+    const target = targets.find(
+      (item) => item.address.toLowerCase() === host.toLowerCase(),
     );
+    if (!target) {
+      pushToast("error", t("Saved target required"), t("Choose a target saved in Targets."));
+      return;
+    }
+    void queueScan([target.id], "dashboard");
+  }
+
+  async function onCancelScan(scan: Scan) {
+    if (!canMutate || cancellingIds.has(scan.id) || !ACTIVE_SCAN_STATUSES.has(scan.status)) return;
+    setCancellingIds((prev) => new Set(prev).add(scan.id));
+    try {
+      const updated = await cancelScan(scan.id);
+      setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setScanRefreshKey((value) => value + 1);
+      pushToast("ok", t("Cancellation requested"), `${t("Scan")} #${scan.id}`);
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Cancellation failed"),
+        apiErrorMessage(error, t("Could not cancel scan.")),
+      );
+    } finally {
+      setCancellingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(scan.id);
+        return next;
+      });
+    }
   }
 
   if (bootstrapping) {
@@ -600,10 +850,6 @@ export function App() {
         <a className="topnav__brand" href="/" aria-label={`${APP_NAME} home`}>
           <Logo />
         </a>
-        <span className="topnav__meta" aria-label={t("Signed-in account")}>
-          {user.username} · {user.role}
-          {user.mfa_enabled ? " · MFA" : ""}
-        </span>
         <button
           type="button"
           className="btn btn--normal topnav__contrast"
@@ -677,7 +923,13 @@ export function App() {
           </button>
         </nav>
 
-        <main className="content content--enter" id="main-content" tabIndex={-1} key={nav}>
+        <main
+          className="content content--enter"
+          id="main-content"
+          tabIndex={-1}
+          key={nav}
+          aria-busy={dataLoading}
+        >
           {nav === "dashboard" && (
             <>
               <header className="page-header">
@@ -708,8 +960,8 @@ export function App() {
                         spellCheck={false}
                       />
                       <datalist id="known-hosts">
-                        {targets.map((t) => (
-                          <option key={t.id} value={t.value} />
+                        {targets.map((target) => (
+                          <option key={target.id} value={target.address} />
                         ))}
                       </datalist>
                       <p className="field-help">
@@ -726,6 +978,8 @@ export function App() {
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
                 onRun={runProbe}
+                canRun={canMutate && scanPending === null}
+                runPending={scanPending === "dashboard"}
                 t={t}
               />
 
@@ -734,38 +988,15 @@ export function App() {
                   <h2>{t("Recent probe jobs")}</h2>
                 </div>
                 <div className="table-wrap">
-                  {jobs.length === 0 ? (
-                    <div className="empty">
-                      <strong>{t("No probe jobs")}</strong>
-                      {t("Select modules and run a discovery probe against a host.")}
-                    </div>
-                  ) : (
-                    <table className="hosts">
-                      <caption className="sr-only">Recent probe jobs</caption>
-                      <thead>
-                        <tr>
-                          <th scope="col">{t("Host")}</th>
-                          <th scope="col">{t("Modules")}</th>
-                          <th scope="col">{t("Status")}</th>
-                          <th scope="col">{t("Queued")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {jobs.map((job) => (
-                          <tr key={job.id}>
-                            <td className="mono">{job.host}</td>
-                            <td>
-                              {job.modules
-                                .map((m) => `${m.id} (${summarizeFilters(m.filters)})`)
-                                .join("; ")}
-                            </td>
-                            <td>{job.status}</td>
-                            <td>{new Date(job.createdAt).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                  <ScanTable
+                    scans={scans.slice(0, 10)}
+                    emptyTitle="No probe jobs"
+                    emptyMessage="Select modules and run a discovery probe against a host."
+                    canMutate={canMutate}
+                    cancellingIds={cancellingIds}
+                    onCancel={onCancelScan}
+                    t={t}
+                  />
                 </div>
               </section>
             </>
@@ -791,11 +1022,12 @@ export function App() {
                 </div>
               )}
 
-              <section className="panel">
-                <div className="panel__header">
-                  <h2>{t("Add target")}</h2>
-                </div>
-                <form className="panel__body" onSubmit={onAdd}>
+              {canMutate ? (
+                <section className="panel">
+                  <div className="panel__header">
+                    <h2>{t("Add target")}</h2>
+                  </div>
+                  <form className="panel__body" onSubmit={onAdd} aria-busy={addPending}>
                   <div className="form-row">
                     <label htmlFor="host-input">{t("IP / hostname")}</label>
                     <div>
@@ -840,31 +1072,43 @@ export function App() {
                     </div>
                   </div>
                   <div className="actions">
-                    <button type="submit" className="btn btn--primary">
-                      {t("Add target")}
+                    <button type="submit" className="btn btn--primary" disabled={addPending}>
+                      {addPending ? t("Adding…") : t("Add target")}
                     </button>
                   </div>
-                </form>
-              </section>
+                  </form>
+                </section>
+              ) : (
+                <div className="flash" role="note">
+                  <div>
+                    <strong>{t("Read-only access")}</strong>
+                    <p>{t("Your role can view targets and scans but cannot change them.")}</p>
+                  </div>
+                </div>
+              )}
 
               <section className="panel">
-                <div className="table-toolbar">
-                  <div className="actions">
+                <div className="table-toolbar" aria-busy={removePending || scanPending === "targets"}>
+                  {canMutate && (
+                    <div className="actions">
                     <button
                       type="button"
                       className="btn btn--primary"
-                      disabled={selected.size === 0}
+                      disabled={selected.size === 0 || scanPending !== null || removePending}
                       onClick={queueSelected}
+                      aria-busy={scanPending === "targets"}
                     >
-                      {t("Scan selected")} ({selected.size})
+                      {scanPending === "targets" ? t("Queueing…") : t("Scan selected")} (
+                      {selected.size})
                     </button>
                     <button
                       type="button"
                       className="btn btn--danger"
-                      disabled={selected.size === 0}
+                      disabled={selected.size === 0 || removePending || scanPending !== null}
                       onClick={removeSelected}
+                      aria-busy={removePending}
                     >
-                      {t("Remove")}
+                      {removePending ? t("Removing…") : t("Remove")}
                     </button>
                     <button
                       type="button"
@@ -874,9 +1118,11 @@ export function App() {
                     >
                       {t("Clear selection")}
                     </button>
-                  </div>
+                    </div>
+                  )}
                   <div className="table-toolbar__count">
-                    {selected.size} selected · {targets.length} total
+                    {canMutate ? `${selected.size} ${t("selected")} · ` : ""}
+                    {targets.length} {t("total")}
                   </div>
                 </div>
 
@@ -891,17 +1137,19 @@ export function App() {
                       <caption className="sr-only">Target hosts for discovery</caption>
                       <thead>
                         <tr>
-                          <th className="col-check" scope="col">
-                            <input
-                              type="checkbox"
-                              checked={allSelected}
-                              ref={(el) => {
-                                if (el) el.indeterminate = someSelected;
-                              }}
-                              onChange={toggleAll}
-                              aria-label="Select all hosts"
-                            />
-                          </th>
+                          {canMutate && (
+                            <th className="col-check" scope="col">
+                              <input
+                                type="checkbox"
+                                checked={allSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = someSelected;
+                                }}
+                                onChange={toggleAll}
+                                aria-label={t("Select all hosts")}
+                              />
+                            </th>
+                          )}
                           <th scope="col">{t("Host / IP")}</th>
                           <th scope="col">{t("Comment")}</th>
                           <th scope="col">{t("Type")}</th>
@@ -916,20 +1164,22 @@ export function App() {
                               key={target.id}
                               className={isSelected ? "is-selected" : undefined}
                             >
-                              <td className="col-check">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggleOne(target.id)}
-                                  aria-label={`Select ${target.value}`}
-                                />
-                              </td>
-                              <td className="mono">{target.value}</td>
+                              {canMutate && (
+                                <td className="col-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleOne(target.id)}
+                                    aria-label={`${t("Select")} ${target.address}`}
+                                  />
+                                </td>
+                              )}
+                              <td className="mono">{target.address}</td>
                               <td className="target-comment">
                                 {target.comment || <span className="target-comment--empty">—</span>}
                               </td>
                               <td>{target.type}</td>
-                              <td>{new Date(target.addedAt).toLocaleString()}</td>
+                              <td>{new Date(target.created_at).toLocaleString()}</td>
                             </tr>
                           );
                         })}
@@ -948,39 +1198,16 @@ export function App() {
                 <p>{t("Queued discovery jobs from the dashboard and target list.")}</p>
               </header>
               <div className="panel">
-                <div className="table-wrap">
-                  {jobs.length === 0 ? (
-                    <div className="empty">
-                      <strong>{t("No scan runs yet")}</strong>
-                      {t("Use Dashboard modules to probe a host.")}
-                    </div>
-                  ) : (
-                    <table className="hosts">
-                      <caption className="sr-only">Queued discovery scan runs</caption>
-                      <thead>
-                        <tr>
-                          <th scope="col">{t("Host")}</th>
-                          <th scope="col">{t("Modules")}</th>
-                          <th scope="col">{t("Status")}</th>
-                          <th scope="col">{t("Queued")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {jobs.map((job) => (
-                          <tr key={job.id}>
-                            <td className="mono">{job.host}</td>
-                            <td>
-                              {job.modules
-                                .map((m) => `${m.id} (${summarizeFilters(m.filters)})`)
-                                .join("; ")}
-                            </td>
-                            <td>{job.status}</td>
-                            <td>{new Date(job.createdAt).toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+                <div className="table-wrap" aria-busy={dataLoading}>
+                  <ScanTable
+                    scans={scans}
+                    emptyTitle="No scan runs yet"
+                    emptyMessage="Use Dashboard modules to probe a host."
+                    canMutate={canMutate}
+                    cancellingIds={cancellingIds}
+                    onCancel={onCancelScan}
+                    t={t}
+                  />
                 </div>
               </div>
             </>

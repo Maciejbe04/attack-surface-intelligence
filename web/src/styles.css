@@ -390,11 +390,6 @@ html.theme-high-contrast a {
   display: none;
 }
 
-.topnav__meta {
-  color: #d5dbdb;
-  font-size: 12px;
-}
-
 .topnav__signout {
   margin-left: 0;
   height: 28px;
@@ -1069,6 +1064,74 @@ html.theme-high-contrast .module-tile__drawer {
 
 .status-dot.is-bad {
   background: var(--aws-danger);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--aws-border);
+  border-radius: 999px;
+  background: var(--aws-table-header);
+  color: var(--aws-text);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-badge--running,
+.status-badge--cancel_requested {
+  border-color: var(--aws-info-border);
+  background: var(--aws-info-bg);
+}
+
+.status-badge--completed {
+  border-color: var(--aws-success);
+  background: #f2f8f0;
+}
+
+.status-badge--partial {
+  border-color: var(--aws-orange);
+  background: #fff8ed;
+}
+
+.status-badge--failed,
+.status-badge--cancelled {
+  border-color: var(--aws-danger);
+  background: #fdf2f1;
+}
+
+.scan-progress {
+  display: flex;
+  min-width: 130px;
+  align-items: center;
+  gap: var(--space-s);
+}
+
+.scan-progress progress {
+  width: 88px;
+  accent-color: var(--brand-yellow);
+}
+
+.scan-progress span {
+  min-width: 3ch;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-error {
+  display: block;
+  max-width: 240px;
+  margin-top: 4px;
+  color: var(--aws-danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.scan-targets {
+  min-width: 150px;
+  max-width: 280px;
+  overflow-wrap: anywhere;
 }
 
 /* Table */

@@ -17,6 +17,8 @@
 | `users` / `roles` | tożsamość i RBAC |
 | `audit_log` | historia zmian konfiguracji i wyników |
 
+Implementacja kolejki MVP obejmuje `targets`, `scan_runs` i `scan_batches`. Identyfikator dostarczenia oraz stan próby są obecnie przechowywane na batchu; osobne `scan_attempts`, znormalizowane `observations` i `fingerprint_evidence` pozostają rozszerzeniem kolejnego etapu.
+
 ## Niemutowalne obserwacje
 
 Surowa obserwacja skanera lub importu jest niemutowalna. Korekty użytkownika trafiają do `manual_overrides`.

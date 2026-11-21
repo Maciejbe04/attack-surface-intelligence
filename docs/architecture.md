@@ -116,7 +116,7 @@ Redis przechowuje:
 - sesje użytkowników;
 - krótkotrwałe blokady koordynacyjne.
 
-Redis nie jest źródłem prawdy. Po jego utracie scheduler odtwarza brakujące zadania na podstawie PostgreSQL.
+Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Kolejka MVP nie odtwarza jeszcze automatycznie zadań po całkowitej utracie Redis — reconciler wykonujący tę operację jest zakresem kolejnego etapu.
 
 ### Worker
 

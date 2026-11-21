@@ -173,7 +173,17 @@ services:
         HTTPX_VERSION: ${HTTPX_VERSION:-v1.6.9}
     image: surfacex-worker:local
     restart: unless-stopped
-    command: ["celery", "-A", "config", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+    command:
+      [
+        "celery",
+        "-A",
+        "config",
+        "worker",
+        "--loglevel=INFO",
+        "--queues=scan",
+        "--concurrency=${WORKER_CONCURRENCY:-2}",
+        "--prefetch-multiplier=1",
+      ]
     environment:
       <<: *api-env
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:8000}
@@ -202,14 +212,9 @@ services:
       - /tmp:size=256m
     mem_limit: ${WORKER_MEMORY_LIMIT:-1g}
     pids_limit: 256
+    stop_grace_period: 20s
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import redis,os; redis.from_url(os.environ['CELERY_BROKER_URL']).ping()",
-        ]
+      test: ["CMD-SHELL", "celery -A config inspect ping --destination=celery@$$HOSTNAME --timeout=5 | grep -q pong"]
       interval: 30s
       timeout: 10s
       retries: 5
