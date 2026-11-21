@@ -1,0 +1,18 @@
+apiVersion: surfacex/v1
+kind: Signature
+metadata:
+  id: nginx-server
+  name: nginx
+  category: http-server
+  version: 1
+spec:
+  matchAny: true
+  rules:
+    - type: header
+      name: server
+      contains: "nginx"
+      weight: 40
+  confidence:
+    low: [1, 39]
+    medium: [40, 69]
+    high: [70, 100]

@@ -65,17 +65,57 @@ export type ScanModule = {
   filters: ModuleFilterValues;
 };
 
+export type ScanBatchStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "paused";
+
 export type ScanBatch = {
   id: number;
   target_address: string;
   target_type: TargetType;
-  status: Exclude<ScanStatus, "cancel_requested" | "partial">;
+  status: ScanBatchStatus;
   progress: number;
   result: unknown;
   error: string;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
+};
+
+export type ObservationLifecycle =
+  | "NEW"
+  | "CHANGED"
+  | "MISSING"
+  | "FLAKY"
+  | "GONE"
+  | "UNCHANGED";
+
+export type Observation = {
+  id: number;
+  entity_type: string;
+  entity_key: string;
+  lifecycle: ObservationLifecycle;
+  target_address: string;
+  attrs: Record<string, unknown>;
+  source: string;
+  miss_streak: number;
+  evidence: Array<{ id: number; kind: string; summary: string; encrypted: boolean }>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AuditEvent = {
+  id: number;
+  actor: string | null;
+  action: string;
+  object_type: string;
+  object_id: string;
+  summary: string;
+  created_at: string;
 };
 
 export type ScanEventLevel = "info" | "warn" | "error";
@@ -108,13 +148,20 @@ export type Scan = {
   completed_batches: number;
   failed_batches: number;
   progress: number;
-  result_summary: Record<string, unknown>;
+  result_summary: Record<string, unknown> & {
+    lifecycle?: Partial<Record<ObservationLifecycle, number>>;
+    paused?: number;
+  };
   error: string;
   defectdojo_export_status: DefectDojoExportStatus;
   defectdojo_export_detail: string;
   group_id: number | null;
   group_name: string | null;
   scheduled: boolean;
+  window_seconds: number | null;
+  deadline_at: string | null;
+  eta_seconds: number | null;
+  resume_available: boolean;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -257,10 +304,18 @@ export function scanGroup(
   modules: ScanModule[],
   clientRequestId: string,
   signal?: AbortSignal,
+  windowSeconds?: number | null,
 ): Promise<ScanDetail> {
+  const body: Record<string, unknown> = {
+    modules,
+    client_request_id: clientRequestId,
+  };
+  if (windowSeconds != null && windowSeconds > 0) {
+    body.window_seconds = windowSeconds;
+  }
   return request<ScanDetail>(`/api/groups/${id}/scan/`, {
     method: "POST",
-    body: JSON.stringify({ modules, client_request_id: clientRequestId }),
+    body: JSON.stringify(body),
     signal,
   });
 }
@@ -404,6 +459,65 @@ export function exportScanToDefectDojo(
       signal,
     },
   );
+}
+
+export function resumeScan(id: number, signal?: AbortSignal): Promise<ScanDetail> {
+  return request<ScanDetail>(`/api/scans/${id}/resume/`, {
+    method: "POST",
+    body: "{}",
+    signal,
+  });
+}
+
+export function listObservations(
+  id: number,
+  params?: { lifecycle?: string; entity_type?: string },
+  signal?: AbortSignal,
+): Promise<{
+  run_id: number;
+  count: number;
+  lifecycle_summary: Partial<Record<ObservationLifecycle, number>>;
+  results: Observation[];
+}> {
+  const query = new URLSearchParams();
+  if (params?.lifecycle) query.set("lifecycle", params.lifecycle);
+  if (params?.entity_type) query.set("entity_type", params.entity_type);
+  const suffix = query.toString() ? `?${query}` : "";
+  return request(`/api/scans/${id}/observations/${suffix}`, { signal });
+}
+
+export function listAudit(signal?: AbortSignal): Promise<{ results: AuditEvent[] }> {
+  return request<{ results: AuditEvent[] }>("/api/audit/", { signal });
+}
+
+export async function downloadScanExport(
+  id: number,
+  format: "json" | "csv",
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await apiFetch(`/api/scans/${id}/export/?format=${format}`, { signal });
+  if (!response.ok) {
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    throw new ApiError(
+      firstError(body) ?? `Export failed with HTTP ${response.status}.`,
+      response.status,
+      body,
+    );
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `scan-${id}.${format}`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>([

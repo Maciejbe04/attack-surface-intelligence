@@ -79,7 +79,7 @@ fi
 cat <<EOF
 
 DefectDojo should be at: http://localhost:${port}
-Login: admin / secrets/defectdojo_admin_password
+Login: admin / changeme  (secrets/defectdojo_admin_password — default from init-secrets)
 
 If initializer failed (uwsgi never starts):
   docker compose --profile defectdojo logs defectdojo-initializer

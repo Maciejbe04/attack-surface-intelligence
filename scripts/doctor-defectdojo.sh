@@ -124,5 +124,5 @@ cat <<'EOF'
   chmod +x scripts/*.sh
   ./scripts/init-secrets.sh
   ./scripts/start-defectdojo.sh
-  # UI: http://localhost:8081  user: admin  hasło: cat secrets/defectdojo_admin_password
+  # UI: http://localhost:8081  user: admin  password: changeme
 EOF

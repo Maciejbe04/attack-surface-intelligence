@@ -8,6 +8,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .audit import record_audit
 from .groups import MAX_GROUP_SCAN_TARGETS, add_targets_to_group
 from .models import GroupSchedule, ScanRun, TargetGroup
 from .permissions import IsAdminOrOperator
@@ -55,6 +56,13 @@ class GroupListCreateView(ReadOrOperatorMixin, APIView):
         serializer = TargetGroupSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         group = serializer.save(owner=request.user)
+        record_audit(
+            actor=request.user,
+            action="group.create",
+            object_type="group",
+            object_id=group.pk,
+            summary=f"Created group {group.name}",
+        )
         return Response(
             _group_payload(request, group.pk),
             status=status.HTTP_201_CREATED,
@@ -79,7 +87,16 @@ class GroupDetailView(ReadOrOperatorMixin, APIView):
 
     def delete(self, request: Request, group_id: int) -> Response:
         # Deleting a group never deletes its targets or past scans.
-        _get_group(request, group_id).delete()
+        group = _get_group(request, group_id)
+        name = group.name
+        group.delete()
+        record_audit(
+            actor=request.user,
+            action="group.delete",
+            object_type="group",
+            object_id=group_id,
+            summary=f"Deleted group {name}",
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -128,10 +145,19 @@ class GroupScanView(APIView):
             modules=serializer.validated_data["modules"],
             client_request_id=serializer.validated_data.get("client_request_id", ""),
             group=group,
+            window_seconds=serializer.validated_data.get("window_seconds"),
         )
         run = ScanRun.objects.select_related("group").prefetch_related(
             "batches", "events__batch"
         ).get(pk=run.pk)
+        if created:
+            record_audit(
+                actor=request.user,
+                action="scan.queue",
+                object_type="scan",
+                object_id=run.pk,
+                summary=f"Queued group scan #{run.pk} for {group.name}",
+            )
         return Response(
             ScanRunSerializer(run).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -150,9 +176,23 @@ class GroupScheduleView(APIView):
         serializer = GroupScheduleSerializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save(group=group)
+        record_audit(
+            actor=request.user,
+            action="schedule.change",
+            object_type="group",
+            object_id=group_id,
+            summary=f"Updated schedule for group {group.name}",
+        )
         return Response(_group_payload(request, group_id))
 
     def delete(self, request: Request, group_id: int) -> Response:
         group = _get_group(request, group_id)
         GroupSchedule.objects.filter(group=group).delete()
+        record_audit(
+            actor=request.user,
+            action="schedule.change",
+            object_type="group",
+            object_id=group_id,
+            summary=f"Removed schedule for group {group.name}",
+        )
         return Response(_group_payload(request, group_id))

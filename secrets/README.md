@@ -33,7 +33,7 @@ Expected files (mode `0600`):
 | `backup_key` | backup |
 | `session_hmac` | api |
 | `worker_token` | api, worker |
-| `defectdojo_admin_password` | api, DefectDojo initializer |
+| `defectdojo_admin_password` | api, DefectDojo initializer — default `changeme` (`admin` / `changeme`) |
 | `defectdojo_db_password` | DefectDojo PostgreSQL |
 | `defectdojo_database_url` | DefectDojo Django services |
 | `defectdojo_secret_key` | DefectDojo Django services |

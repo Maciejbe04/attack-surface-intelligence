@@ -163,6 +163,12 @@ def build_system_info() -> dict[str, Any]:
             "version": settings.DEFECTDOJO_VERSION,
         },
     ]
+    try:
+        from apps.scans.signatures import pack_info
+
+        sig_pack = pack_info()
+    except Exception:
+        sig_pack = {"version": "unknown", "count": 0, "ids": []}
     return {
         "app": {
             "name": settings.APP_NAME,
@@ -173,6 +179,12 @@ def build_system_info() -> dict[str, Any]:
             "executable": sys.executable,
         },
         "integrations": [_defectdojo_integration()],
+        "signatures": {
+            "pack_version": sig_pack.get("version"),
+            "count": sig_pack.get("count"),
+            "ids": sig_pack.get("ids") or [],
+            "summary": "Built-in YAML signature pack (read-only).",
+        },
         "stack": components,
     }
 

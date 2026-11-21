@@ -6,7 +6,16 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .groups import compute_next_run, normalize_group_name
-from .models import GroupSchedule, ScanBatch, ScanEvent, ScanRun, Target, TargetGroup
+from .models import (
+    AuditLog,
+    GroupSchedule,
+    Observation,
+    ScanBatch,
+    ScanEvent,
+    ScanRun,
+    Target,
+    TargetGroup,
+)
 from .modules import validate_modules
 from .validation import normalize_target
 
@@ -129,6 +138,10 @@ class ScanRunSerializer(serializers.ModelSerializer):
             "group_id",
             "group_name",
             "scheduled",
+            "window_seconds",
+            "deadline_at",
+            "eta_seconds",
+            "resume_available",
             "created_at",
             "started_at",
             "finished_at",
@@ -146,6 +159,53 @@ class ScanRunListSerializer(ScanRunSerializer):
         )
 
 
+class ObservationSerializer(serializers.ModelSerializer):
+    evidence = serializers.SerializerMethodField()
+
+    def get_evidence(self, instance: Observation) -> list[dict]:
+        return [
+            {
+                "id": item.pk,
+                "kind": item.kind,
+                "summary": item.summary,
+                "encrypted": bool(item.ciphertext),
+            }
+            for item in instance.evidence.all()[:10]
+        ]
+
+    class Meta:
+        model = Observation
+        fields = (
+            "id",
+            "entity_type",
+            "entity_key",
+            "lifecycle",
+            "target_address",
+            "attrs",
+            "source",
+            "miss_streak",
+            "evidence",
+            "created_at",
+            "updated_at",
+        )
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    actor = serializers.CharField(source="actor.username", default=None, read_only=True)
+
+    class Meta:
+        model = AuditLog
+        fields = (
+            "id",
+            "actor",
+            "action",
+            "object_type",
+            "object_id",
+            "summary",
+            "created_at",
+        )
+
+
 class ScanCreateSerializer(serializers.Serializer):
     target_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
@@ -158,6 +218,12 @@ class ScanCreateSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         trim_whitespace=True,
+    )
+    window_seconds = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=60,
+        max_value=86400,
     )
 
     def validate_target_ids(self, value: list[int]) -> list[int]:
@@ -284,6 +350,12 @@ class GroupScanSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         trim_whitespace=True,
+    )
+    window_seconds = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=60,
+        max_value=86400,
     )
 
     def validate_modules(self, value: object) -> list[dict]:

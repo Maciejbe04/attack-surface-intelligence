@@ -84,7 +84,27 @@ gen app_data_key
 gen backup_key
 gen session_hmac
 gen worker_token
-gen defectdojo_admin_password
+
+# Local/dev default for DefectDojo UI + SurfaceX export auth: admin / changeme.
+# Override with DEFECTDOJO_ADMIN_PASSWORD=... before running this script.
+# Existing DefectDojo DB volumes keep the password from first initializer run —
+# wipe surfacex_defectdojo_postgres (or recreate) after changing this secret.
+DD_ADMIN_PASSWORD_FILE="${SECRET_DIR}/defectdojo_admin_password"
+ensure_secret_file_path "${DD_ADMIN_PASSWORD_FILE}" "defectdojo_admin_password"
+DD_ADMIN_PASSWORD_VALUE="${DEFECTDOJO_ADMIN_PASSWORD:-changeme}"
+if [[ -f "${DD_ADMIN_PASSWORD_FILE}" ]] \
+  && [[ "$(cat "${DD_ADMIN_PASSWORD_FILE}")" == "${DD_ADMIN_PASSWORD_VALUE}" ]]; then
+  echo "keep  defectdojo_admin_password"
+else
+  printf "%s" "${DD_ADMIN_PASSWORD_VALUE}" >"${DD_ADMIN_PASSWORD_FILE}"
+  chmod 600 "${DD_ADMIN_PASSWORD_FILE}"
+  if [[ -n "${DEFECTDOJO_ADMIN_PASSWORD:-}" ]]; then
+    echo "update defectdojo_admin_password (from DEFECTDOJO_ADMIN_PASSWORD)"
+  else
+    echo "update defectdojo_admin_password (default: changeme)"
+  fi
+fi
+
 gen_hex defectdojo_db_password
 gen defectdojo_secret_key
 gen_hex defectdojo_credential_key

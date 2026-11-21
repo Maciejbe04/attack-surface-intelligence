@@ -34,7 +34,8 @@ class RunnerTests(SimpleTestCase):
             (NMAP_XML, b""),
             (
                 b'{"url":"https://192.0.2.50:443","status_code":200,'
-                b'"tech":["ExampleTech"]}\n',
+                b'"tech":["ExampleTech"],'
+                b'"header":{"server":"nginx/1.24.0"}}\n',
                 b"",
             ),
         ]
@@ -62,7 +63,8 @@ class RunnerTests(SimpleTestCase):
         self.assertEqual(commands[1][0], "httpx")
         self.assertNotIn("-follow-redirects", commands[1])
         self.assertEqual(result["hosts"][0]["ports"][0]["port"], 443)
-        self.assertEqual(result["signatures"][0]["technology"], "ExampleTech")
+        self.assertEqual(result["signatures"][0]["technology"], "nginx")
+        self.assertGreaterEqual(result["signatures"][0]["confidence"], 40)
 
     def test_http_probe_preserves_saved_domain_for_vhost_and_tls_sni(self) -> None:
         modules = validate_modules([{"id": "http-fingerprint", "filters": {}}])

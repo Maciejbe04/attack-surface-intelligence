@@ -1,0 +1,32 @@
+apiVersion: surfacex/v1
+kind: Signature
+metadata:
+  id: wordpress-core
+  name: WordPress
+  category: cms
+  version: 1
+spec:
+  matchAny: false
+  rules:
+    - type: header
+      name: link
+      contains: 'rel="https://api.w.org/"'
+      weight: 30
+    - type: cookie
+      name: wordpress_logged_in
+      weight: 20
+    - type: html
+      contains: "wp-content"
+      weight: 20
+    - type: path
+      path: "/wp-login.php"
+      status: [200, 302]
+      weight: 30
+    - type: versionRegex
+      source: html
+      pattern: 'content="WordPress ([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+      weight: 20
+  confidence:
+    low: [1, 39]
+    medium: [40, 69]
+    high: [70, 100]

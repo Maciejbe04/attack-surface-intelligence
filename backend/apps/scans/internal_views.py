@@ -20,6 +20,7 @@ from .auto_export import queue_automatic_defectdojo_export
 from .events import append_scan_event
 from .groups import dispatch_due_schedules
 from .models import QueueState, ScanBatch, ScanEvent, ScanRun
+from .normalize import finalize_run_lifecycle, persist_batch_observations
 from .tasks import execute_batch
 
 MAX_RESULT_BYTES = 2 * 1024 * 1024
@@ -28,6 +29,88 @@ TERMINAL_BATCH_STATUSES = {
     ScanBatch.Status.FAILED,
     ScanBatch.Status.CANCELLED,
 }
+FINISHED_BATCH_STATUSES = TERMINAL_BATCH_STATUSES | {ScanBatch.Status.PAUSED}
+EWMA_ALPHA = 0.3
+
+
+def _update_eta(run: ScanRun) -> None:
+    """EWMA throughput → remaining ETA in seconds."""
+    if run.started_at is None or run.total_batches <= 0:
+        return
+    elapsed = max(1.0, (timezone.now() - run.started_at).total_seconds())
+    done = run.completed_batches + run.failed_batches
+    if done <= 0:
+        return
+    instant_rate = done / (elapsed / 60.0)  # batches per minute
+    summary = dict(run.result_summary or {})
+    prev = float(summary.get("ewma_batches_per_min") or instant_rate)
+    ewma = EWMA_ALPHA * instant_rate + (1.0 - EWMA_ALPHA) * prev
+    summary["ewma_batches_per_min"] = round(ewma, 4)
+    remaining = max(
+        0,
+        run.total_batches
+        - run.batches.filter(status__in=FINISHED_BATCH_STATUSES).count(),
+    )
+    if ewma > 0 and remaining > 0:
+        run.eta_seconds = max(1, int((remaining / ewma) * 60))
+    elif remaining == 0:
+        run.eta_seconds = 0
+    run.result_summary = summary
+
+
+def _pause_run_for_deadline(run: ScanRun) -> bool:
+    """Pause unfinished batches when the scan window expires. Returns True if paused."""
+    if not run.deadline_at or timezone.now() < run.deadline_at:
+        return False
+    if run.status not in {
+        ScanRun.Status.QUEUED,
+        ScanRun.Status.RUNNING,
+        ScanRun.Status.CANCEL_REQUESTED,
+    }:
+        return False
+    unfinished = run.batches.filter(
+        status__in=(ScanBatch.Status.QUEUED, ScanBatch.Status.RUNNING)
+    )
+    if not unfinished.exists():
+        return False
+    now = timezone.now()
+    unfinished.update(
+        status=ScanBatch.Status.PAUSED,
+        error="Paused: scan window deadline reached.",
+        finished_at=now,
+        updated_at=now,
+    )
+    append_scan_event(
+        run,
+        "Scan window deadline reached; unfinished batches paused.",
+        level=ScanEvent.Level.WARN,
+        source="api",
+    )
+    return True
+
+
+def _apply_deadline_pauses() -> int:
+    """Pause any active runs past their deadline. Returns number of runs affected."""
+    now = timezone.now()
+    affected = 0
+    candidates = (
+        ScanRun.objects.filter(
+            deadline_at__isnull=False,
+            deadline_at__lte=now,
+            status__in=(
+                ScanRun.Status.QUEUED,
+                ScanRun.Status.RUNNING,
+            ),
+        )
+        .order_by("id")[:100]
+    )
+    for run in candidates:
+        with transaction.atomic():
+            locked = ScanRun.objects.select_for_update().get(pk=run.pk)
+            if _pause_run_for_deadline(locked):
+                _aggregate_run(locked)
+                affected += 1
+    return affected
 
 
 class HasWorkerToken(BasePermission):
@@ -73,6 +156,7 @@ class BatchReconcileView(WorkerAPIView):
         stale_before = now - timedelta(
             seconds=settings.SCAN_RECONCILE_STALE_SECONDS
         )
+        deadline_paused = _apply_deadline_pauses()
 
         with transaction.atomic():
             queue_state, _ = QueueState.objects.select_for_update().get_or_create(
@@ -160,6 +244,7 @@ class BatchReconcileView(WorkerAPIView):
                 "recovered": len(recovered),
                 "published": published,
                 "failed": failed,
+                "deadline_paused": deadline_paused,
             }
         )
 
@@ -177,8 +262,11 @@ def _aggregate_run(run: ScanRun) -> None:
         completed=Count("id", filter=Q(status=ScanBatch.Status.COMPLETED)),
         failed=Count("id", filter=Q(status=ScanBatch.Status.FAILED)),
         cancelled=Count("id", filter=Q(status=ScanBatch.Status.CANCELLED)),
-        terminal=Count("id", filter=Q(status__in=TERMINAL_BATCH_STATUSES)),
+        paused=Count("id", filter=Q(status=ScanBatch.Status.PAUSED)),
+        finished=Count("id", filter=Q(status__in=FINISHED_BATCH_STATUSES)),
     )
+    previous_lifecycle = (run.result_summary or {}).get("lifecycle")
+    previous_ewma = (run.result_summary or {}).get("ewma_batches_per_min")
     run.progress = round(stats["progress"] or 0)
     run.completed_batches = stats["completed"]
     run.failed_batches = stats["failed"]
@@ -186,10 +274,15 @@ def _aggregate_run(run: ScanRun) -> None:
         "completed": stats["completed"],
         "failed": stats["failed"],
         "cancelled": stats["cancelled"],
+        "paused": stats["paused"],
     }
+    if previous_lifecycle is not None:
+        run.result_summary["lifecycle"] = previous_lifecycle
+    if previous_ewma is not None:
+        run.result_summary["ewma_batches_per_min"] = previous_ewma
 
     became_terminal = False
-    if stats["terminal"] == run.total_batches:
+    if stats["finished"] == run.total_batches and run.total_batches > 0:
         if run.finished_at is None or run.status not in {
             ScanRun.Status.COMPLETED,
             ScanRun.Status.PARTIAL,
@@ -198,17 +291,27 @@ def _aggregate_run(run: ScanRun) -> None:
         }:
             became_terminal = True
         run.finished_at = timezone.now()
-        if stats["cancelled"] or run.status == ScanRun.Status.CANCEL_REQUESTED:
+        if stats["paused"]:
+            run.status = ScanRun.Status.PARTIAL
+            run.resume_available = True
+            run.eta_seconds = None
+        elif stats["cancelled"] or run.status == ScanRun.Status.CANCEL_REQUESTED:
             run.status = ScanRun.Status.CANCELLED
+            run.resume_available = False
         elif stats["failed"]:
             run.status = (
                 ScanRun.Status.PARTIAL
                 if stats["completed"]
                 else ScanRun.Status.FAILED
             )
+            run.resume_available = False
         else:
             run.status = ScanRun.Status.COMPLETED
             run.progress = 100
+            run.resume_available = False
+            run.eta_seconds = 0
+    else:
+        _update_eta(run)
 
     run.save(
         update_fields=(
@@ -218,11 +321,24 @@ def _aggregate_run(run: ScanRun) -> None:
             "failed_batches",
             "result_summary",
             "finished_at",
+            "eta_seconds",
+            "resume_available",
             "updated_at",
         )
     )
     if became_terminal:
-        queue_automatic_defectdojo_export(run)
+        if run.status in {
+            ScanRun.Status.COMPLETED,
+            ScanRun.Status.PARTIAL,
+        }:
+            try:
+                finalize_run_lifecycle(run)
+            except Exception:
+                pass
+        if run.status != ScanRun.Status.PARTIAL or not run.resume_available:
+            queue_automatic_defectdojo_export(run)
+        elif stats["completed"]:
+            queue_automatic_defectdojo_export(run)
 
 
 class BatchClaimView(WorkerAPIView):
@@ -235,12 +351,23 @@ class BatchClaimView(WorkerAPIView):
                     status=status.HTTP_409_CONFLICT,
                 )
 
-            if batch.status in TERMINAL_BATCH_STATUSES:
+            if batch.status in FINISHED_BATCH_STATUSES:
                 return Response(
                     {
                         "terminal": True,
                         "status": batch.status,
                         "cancel_requested": batch.status == ScanBatch.Status.CANCELLED,
+                    }
+                )
+
+            if _pause_run_for_deadline(batch.run):
+                _aggregate_run(batch.run)
+                batch.refresh_from_db()
+                return Response(
+                    {
+                        "terminal": True,
+                        "status": batch.status,
+                        "cancel_requested": False,
                     }
                 )
 
@@ -418,15 +545,25 @@ class BatchCompleteView(WorkerAPIView):
                     "updated_at",
                 )
             )
+            try:
+                obs_count = persist_batch_observations(batch)
+            except Exception:
+                obs_count = 0
             hosts = result.get("hosts") if isinstance(result.get("hosts"), list) else []
             http_records = (
                 result.get("http") if isinstance(result.get("http"), list) else []
+            )
+            signatures = (
+                result.get("signatures")
+                if isinstance(result.get("signatures"), list)
+                else []
             )
             append_scan_event(
                 batch.run,
                 (
                     f"Batch completed for {batch.target_address}: "
-                    f"{len(hosts)} host(s), {len(http_records)} HTTP observation(s)."
+                    f"{len(hosts)} host(s), {len(http_records)} HTTP observation(s), "
+                    f"{len(signatures)} signature(s), {obs_count} observation row(s)."
                 ),
                 batch=batch,
                 source="worker",

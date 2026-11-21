@@ -52,6 +52,36 @@ urlpatterns = [
         name="scan-defectdojo-export",
     ),
     path(
+        "scans/<int:run_id>/export/",
+        views.ScanExportView.as_view(),
+        name="scan-export",
+    ),
+    path(
+        "scans/<int:run_id>/observations/",
+        views.ScanObservationsView.as_view(),
+        name="scan-observations",
+    ),
+    path(
+        "scans/<int:run_id>/diff/",
+        views.ScanDiffView.as_view(),
+        name="scan-diff",
+    ),
+    path(
+        "scans/<int:run_id>/resume/",
+        views.ScanResumeView.as_view(),
+        name="scan-resume",
+    ),
+    path(
+        "observations/import/",
+        views.ObservationImportView.as_view(),
+        name="observations-import",
+    ),
+    path(
+        "audit/",
+        views.AuditLogListView.as_view(),
+        name="audit-list",
+    ),
+    path(
         "internal/batches/reconcile/",
         internal_views.BatchReconcileView.as_view(),
         name="internal-batch-reconcile",

@@ -101,6 +101,8 @@ export function GroupsPanel({
     }
   }
 
+  const [scanWindowSeconds, setScanWindowSeconds] = useState<number | "">("");
+
   async function onScanNow(group: TargetGroup) {
     const modules = currentModules();
     if (modules.length === 0) {
@@ -109,7 +111,15 @@ export function GroupsPanel({
     }
     setBusyId(group.id);
     try {
-      const scan = await scanGroup(group.id, modules, crypto.randomUUID());
+      const windowSeconds =
+        scanWindowSeconds === "" ? null : Number(scanWindowSeconds);
+      const scan = await scanGroup(
+        group.id,
+        modules,
+        crypto.randomUUID(),
+        undefined,
+        windowSeconds,
+      );
       pushToast(
         "ok",
         t("Scan queued"),
@@ -260,6 +270,24 @@ export function GroupsPanel({
           <div className="table-toolbar__count">
             {groups.length} {t("groups")}
           </div>
+          {canMutate && (
+            <label className="table-toolbar__window">
+              <span className="field-help">{t("Scan window")}</span>
+              <select
+                className="input input--select"
+                value={scanWindowSeconds === "" ? "" : String(scanWindowSeconds)}
+                onChange={(event) =>
+                  setScanWindowSeconds(event.target.value ? Number(event.target.value) : "")
+                }
+                aria-label={t("Scan window")}
+              >
+                <option value="">{t("Off (no deadline)")}</option>
+                <option value="1800">30m</option>
+                <option value="3600">1h</option>
+                <option value="7200">2h</option>
+              </select>
+            </label>
+          )}
         </div>
         <div className="table-wrap" aria-busy={loading}>
           {groups.length === 0 ? (
