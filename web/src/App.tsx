@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
+import { Logo } from "./Logo";
 import { PROBE_MODULES, ProbeModuleId } from "./modules";
 
 type HostTarget = {
@@ -151,8 +152,7 @@ function LoginScreen({
         </div>
         <div className="panel__body">
           <div className="login-brand">
-            <span className="topnav__mark" aria-hidden="true" />
-            <strong>SurfaceX</strong>
+            <Logo />
           </div>
           <p className="field-help" style={{ marginBottom: 16 }}>
             {mfaToken
@@ -438,8 +438,7 @@ export function App() {
     <div className="app">
       <header className="topnav">
         <a className="topnav__brand" href="/">
-          <span className="topnav__mark" aria-hidden="true" />
-          SurfaceX
+          <Logo />
         </a>
         <span className="topnav__meta">
           {user.username} · {user.role}

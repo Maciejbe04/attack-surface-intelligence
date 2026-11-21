@@ -3,6 +3,8 @@
   --aws-nav-hover: #37475a;
   --aws-orange: #ec7211;
   --aws-orange-hover: #eb5f07;
+  --brand-yellow: #ffcc00;
+  --brand-black: #000000;
   --aws-link: #0073bb;
   --aws-bg: #eaeded;
   --aws-panel: #ffffff;
@@ -80,22 +82,43 @@ a:hover {
 .topnav__brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-s);
   color: #fff;
   text-decoration: none;
-  font-weight: 700;
-  letter-spacing: 0.01em;
 }
 
 .topnav__brand:hover {
   text-decoration: none;
 }
 
-.topnav__mark {
-  width: 20px;
-  height: 20px;
-  background: var(--aws-orange);
-  border-radius: 2px;
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1;
+}
+
+.brand-logo__mark {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.brand-logo__word {
+  font-family: "Arial Black", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.brand-logo__surface {
+  color: #fff;
+}
+
+.brand-logo__x {
+  color: var(--brand-yellow);
+}
+
+.brand-logo--compact .brand-logo__word {
+  display: none;
 }
 
 .topnav__meta {
@@ -115,7 +138,7 @@ a:hover {
   display: grid;
   place-items: center;
   padding: var(--space-xl);
-  background: var(--aws-bg);
+  background: var(--brand-black);
 }
 
 .login-card {
@@ -128,7 +151,14 @@ a:hover {
   align-items: center;
   gap: var(--space-s);
   margin-bottom: var(--space-m);
-  font-size: 18px;
+  padding: 8px 10px;
+  background: var(--brand-black);
+  border-radius: var(--radius);
+  width: fit-content;
+}
+
+.login-brand .brand-logo__word {
+  font-size: 24px;
 }
 
 .toast-stack {
@@ -274,7 +304,7 @@ a:hover {
 
 .sidenav__item.is-active {
   background: var(--aws-selected);
-  border-left: 4px solid var(--aws-orange);
+  border-left: 4px solid var(--brand-yellow);
   padding-left: calc(var(--space-l) - 4px);
   font-weight: 700;
 }
@@ -413,15 +443,15 @@ a:hover {
 }
 
 .btn--primary {
-  background: var(--aws-orange);
-  border-color: var(--aws-orange);
+  background: var(--brand-yellow);
+  border-color: var(--brand-yellow);
   color: #111;
   font-weight: 700;
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: var(--aws-orange-hover);
-  border-color: var(--aws-orange-hover);
+  background: #e6b800;
+  border-color: #e6b800;
 }
 
 .btn--normal {
