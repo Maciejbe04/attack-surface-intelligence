@@ -365,6 +365,18 @@ const PL: Record<string, string> = {
     "Skanuj teraz",
   "Edit schedule":
     "Edytuj harmonogram",
+  "Rename":
+    "Zmień nazwę",
+  "Save":
+    "Zapisz",
+  "Saving…":
+    "Zapisywanie…",
+  "Group renamed":
+    "Zmieniono nazwę grupy",
+  "Group not renamed":
+    "Nie zmieniono nazwy grupy",
+  "Could not rename the group.":
+    "Nie udało się zmienić nazwy grupy.",
   "Delete":
     "Usuń",
   "Delete group \"{name}\"? Hosts and past scans are kept.":

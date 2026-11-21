@@ -34,12 +34,18 @@ INSTALLED_APPS = [
     "apps.accounts",
 ]
 
+CSRF_PROTECT = os.environ.get("CSRF_PROTECT", "0") == "1"
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    *(
+        ["django.middleware.csrf.CsrfViewMiddleware"]
+        if CSRF_PROTECT
+        else []
+    ),
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -138,7 +144,11 @@ CACHES = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        (
+            "rest_framework.authentication.SessionAuthentication"
+            if CSRF_PROTECT
+            else "apps.accounts.authentication.CsrfExemptSessionAuthentication"
+        ),
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",

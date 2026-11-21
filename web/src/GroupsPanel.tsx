@@ -12,9 +12,11 @@ import {
   deleteGroupSchedule,
   saveGroupSchedule,
   scanGroup,
+  updateGroup,
 } from "./api/scans";
 import { Translate } from "./i18n";
 import { summarizeFilters } from "./modules";
+import { newUuid } from "./uuid";
 
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -81,6 +83,10 @@ export function GroupsPanel({
   const [busyId, setBusyId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameName, setRenameName] = useState("");
+  const [renameDescription, setRenameDescription] = useState("");
+  const [renamePending, setRenamePending] = useState(false);
 
   const editing = groups.find((group) => group.id === editingId) ?? null;
 
@@ -116,7 +122,7 @@ export function GroupsPanel({
       const scan = await scanGroup(
         group.id,
         modules,
-        crypto.randomUUID(),
+        newUuid(),
         undefined,
         windowSeconds,
       );
@@ -143,11 +149,61 @@ export function GroupsPanel({
     try {
       await deleteGroup(group.id);
       if (editingId === group.id) closeEditor();
+      if (renamingId === group.id) closeRename();
       pushToast("ok", t("Group deleted"), group.name);
       onGroupsChanged();
     } catch (error) {
       pushToast("error", t("Group not deleted"), apiErrorMessage(error, t("Could not delete the group.")));
     } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openRename(group: TargetGroup) {
+    setRenamingId(group.id);
+    setRenameName(group.name);
+    setRenameDescription(group.description || "");
+    window.requestAnimationFrame(() =>
+      document.getElementById(`group-rename-${group.id}`)?.focus(),
+    );
+  }
+
+  function closeRename() {
+    setRenamingId(null);
+    setRenameName("");
+    setRenameDescription("");
+    setRenamePending(false);
+  }
+
+  async function onRename(event: FormEvent) {
+    event.preventDefault();
+    if (!renamingId || !renameName.trim() || renamePending) return;
+    const group = groups.find((item) => item.id === renamingId);
+    if (!group) return;
+    const nextName = renameName.trim();
+    const nextDescription = renameDescription.trim();
+    if (nextName === group.name && nextDescription === (group.description || "")) {
+      closeRename();
+      return;
+    }
+    setRenamePending(true);
+    setBusyId(group.id);
+    try {
+      const updated = await updateGroup(group.id, {
+        name: nextName,
+        description: nextDescription,
+      });
+      pushToast("ok", t("Group renamed"), updated.name);
+      closeRename();
+      onGroupsChanged();
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Group not renamed"),
+        apiErrorMessage(error, t("Could not rename the group.")),
+      );
+    } finally {
+      setRenamePending(false);
       setBusyId(null);
     }
   }
@@ -313,10 +369,61 @@ export function GroupsPanel({
                   const busy = busyId === group.id;
                   const schedule = group.schedule;
                   return (
-                    <tr key={group.id} className={editingId === group.id ? "is-selected" : undefined}>
+                    <tr key={group.id} className={editingId === group.id || renamingId === group.id ? "is-selected" : undefined}>
                       <td>
-                        <strong>{group.name}</strong>
-                        {group.description && <span className="group-description">{group.description}</span>}
+                        {renamingId === group.id ? (
+                          <form className="group-rename" onSubmit={onRename}>
+                            <label className="sr-only" htmlFor={`group-rename-${group.id}`}>
+                              {t("Name")}
+                            </label>
+                            <input
+                              id={`group-rename-${group.id}`}
+                              value={renameName}
+                              onChange={(event) => setRenameName(event.target.value)}
+                              disabled={renamePending}
+                              required
+                              maxLength={120}
+                              autoComplete="off"
+                            />
+                            <label className="sr-only" htmlFor={`group-rename-desc-${group.id}`}>
+                              {t("Description (optional)")}
+                            </label>
+                            <input
+                              id={`group-rename-desc-${group.id}`}
+                              value={renameDescription}
+                              onChange={(event) => setRenameDescription(event.target.value)}
+                              disabled={renamePending}
+                              placeholder={t("Description (optional)")}
+                              maxLength={500}
+                              autoComplete="off"
+                            />
+                            <div className="scan-actions">
+                              <button
+                                type="submit"
+                                className="btn btn--primary"
+                                disabled={!renameName.trim() || renamePending}
+                                aria-busy={renamePending}
+                              >
+                                {renamePending ? t("Saving…") : t("Save")}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn--normal"
+                                onClick={closeRename}
+                                disabled={renamePending}
+                              >
+                                {t("Cancel")}
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <>
+                            <strong>{group.name}</strong>
+                            {group.description && (
+                              <span className="group-description">{group.description}</span>
+                            )}
+                          </>
+                        )}
                       </td>
                       <td className="mono">{group.target_count}</td>
                       <td>
@@ -340,7 +447,7 @@ export function GroupsPanel({
                               type="button"
                               className="btn btn--primary"
                               onClick={() => onScanNow(group)}
-                              disabled={busy || group.target_count === 0}
+                              disabled={busy || group.target_count === 0 || renamingId === group.id}
                               aria-busy={busy}
                             >
                               {t("Scan now")}
@@ -348,8 +455,16 @@ export function GroupsPanel({
                             <button
                               type="button"
                               className="btn btn--normal"
+                              onClick={() => openRename(group)}
+                              disabled={busy || renamingId === group.id}
+                            >
+                              {t("Rename")}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--normal"
                               onClick={() => openEditor(group)}
-                              disabled={busy}
+                              disabled={busy || renamingId === group.id}
                             >
                               {schedule ? t("Edit schedule") : t("Schedule")}
                             </button>
@@ -357,7 +472,7 @@ export function GroupsPanel({
                               type="button"
                               className="btn btn--danger"
                               onClick={() => onDelete(group)}
-                              disabled={busy}
+                              disabled={busy || renamingId === group.id}
                             >
                               {t("Delete")}
                             </button>

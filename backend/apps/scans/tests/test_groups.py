@@ -123,6 +123,19 @@ class GroupAPITests(GroupTestCase):
         self.assertEqual(response.status_code, 204)
         self.assertTrue(Target.objects.filter(pk=member.pk).exists())
 
+    def test_rename_group(self) -> None:
+        group = self.group("old-name")
+        response = self.client.patch(
+            reverse("group-detail", args=[group.id]),
+            {"name": "new-name", "description": "renamed"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["name"], "new-name")
+        self.assertEqual(response.json()["description"], "renamed")
+        group.refresh_from_db()
+        self.assertEqual(group.name, "new-name")
+
 
 class TargetSearchTests(GroupTestCase):
     def test_search_group_filter_limit_and_ranking(self) -> None:

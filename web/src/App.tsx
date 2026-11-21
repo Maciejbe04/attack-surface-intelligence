@@ -23,7 +23,8 @@ import {
   scanGroup,
   updateGroupMembers,
 } from "./api/scans";
-import { apiFetch, AuthUser, ensureCsrf } from "./auth";
+import { apiFetch, AuthUser } from "./auth";
+import { newUuid } from "./uuid";
 import { AppFooter } from "./AppFooter";
 import { FindingsPanel, LifecycleKpis } from "./FindingsPanel";
 import { Language, Translate, useLanguage } from "./i18n";
@@ -282,7 +283,6 @@ function LoginScreen({
     setBusy(true);
     setError(null);
     try {
-      await ensureCsrf();
       const response = await apiFetch("/api/auth/login/", {
         method: "POST",
         body: JSON.stringify({ username, password }),
@@ -542,7 +542,7 @@ export function App() {
     user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
-    const id = crypto.randomUUID();
+    const id = newUuid();
     setToasts((prev) => [...prev, { id, kind, title, message }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -1083,7 +1083,7 @@ export function App() {
       const result = await importTargetsFile(importFile, {
         startScan: importStartScan,
         modules: importStartScan ? modules : undefined,
-        clientRequestId: crypto.randomUUID(),
+        clientRequestId: newUuid(),
         groupId:
           importGroupChoice && importGroupChoice !== NEW_GROUP ? Number(importGroupChoice) : undefined,
         groupName: importGroupChoice === NEW_GROUP ? importGroupName.trim() : undefined,
@@ -1184,7 +1184,7 @@ export function App() {
       const scan = await createScan({
         target_ids: targetIds,
         modules,
-        client_request_id: crypto.randomUUID(),
+        client_request_id: newUuid(),
       });
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
       setConsoleScan({
@@ -1243,7 +1243,7 @@ export function App() {
       const scan = await scanGroup(
         group.id,
         modules,
-        crypto.randomUUID(),
+        newUuid(),
         undefined,
         windowSeconds,
       );

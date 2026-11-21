@@ -282,6 +282,18 @@ export function createGroup(
   });
 }
 
+export function updateGroup(
+  id: number,
+  patch: { name?: string; description?: string },
+  signal?: AbortSignal,
+): Promise<TargetGroup> {
+  return request<TargetGroup>(`/api/groups/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+    signal,
+  });
+}
+
 export function deleteGroup(id: number, signal?: AbortSignal): Promise<void> {
   return request<void>(`/api/groups/${id}/`, { method: "DELETE", signal });
 }

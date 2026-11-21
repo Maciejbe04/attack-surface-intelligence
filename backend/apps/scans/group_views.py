@@ -75,6 +75,7 @@ class GroupDetailView(ReadOrOperatorMixin, APIView):
 
     def patch(self, request: Request, group_id: int) -> Response:
         group = _get_group(request, group_id)
+        before = {"name": group.name, "description": group.description}
         serializer = TargetGroupSerializer(
             group,
             data=request.data,
@@ -82,7 +83,14 @@ class GroupDetailView(ReadOrOperatorMixin, APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        group = serializer.save()
+        record_audit(
+            actor=request.user,
+            action="group.update",
+            object_type="group",
+            object_id=group.pk,
+            summary=f"Updated group {before['name']} → {group.name}",
+        )
         return Response(_group_payload(request, group_id))
 
     def delete(self, request: Request, group_id: int) -> Response:

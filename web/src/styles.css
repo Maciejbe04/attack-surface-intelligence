@@ -1242,6 +1242,16 @@ html.theme-high-contrast .module-tile__drawer {
   overflow-wrap: anywhere;
 }
 
+.group-rename {
+  display: grid;
+  gap: 0.45rem;
+  min-width: min(18rem, 100%);
+}
+
+.group-rename input {
+  width: 100%;
+}
+
 .scan-actions {
   min-width: 150px;
 }

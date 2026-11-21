@@ -10,21 +10,13 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/** Kept for compatibility; CSRF is disabled by default on the API. */
 export async function ensureCsrf(): Promise<string> {
-  const existing = getCookie("csrftoken");
-  if (existing) return existing;
-  const response = await fetch("/api/auth/csrf/", { credentials: "include" });
-  if (!response.ok) throw new Error("Could not initialize CSRF");
-  const data = (await response.json()) as { csrfToken: string };
-  return getCookie("csrftoken") || data.csrfToken;
+  return getCookie("csrftoken") || "";
 }
 
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers || {});
-  if (init.method && init.method.toUpperCase() !== "GET") {
-    const csrf = await ensureCsrf();
-    headers.set("X-CSRFToken", csrf);
-  }
   if (
     init.body &&
     !(init.body instanceof FormData) &&
