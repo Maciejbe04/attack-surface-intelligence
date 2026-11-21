@@ -1134,6 +1134,18 @@ html.theme-high-contrast .module-tile__drawer {
   overflow-wrap: anywhere;
 }
 
+.scan-actions {
+  min-width: 150px;
+}
+
+.scan-actions .btn {
+  white-space: nowrap;
+}
+
+.scan-actions .btn + .btn {
+  margin-left: var(--space-s);
+}
+
 /* Table */
 
 .table-toolbar {

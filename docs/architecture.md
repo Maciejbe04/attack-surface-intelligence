@@ -62,7 +62,7 @@ flowchart TB
 
 ### Gateway
 
-Jedyny punkt wejścia wystawiony poza sieci Docker Compose. Terminuje TLS, serwuje frontend oraz przekazuje żądania API. Pozostałe usługi nie publikują portów na hoście.
+Jedyny punkt wejścia SurfaceX wystawiony poza sieci Docker Compose. Terminuje TLS, serwuje frontend oraz przekazuje żądania API. Opcjonalny profil DefectDojo publikuje własny port nginx; pozostałe usługi nie publikują portów na hoście.
 
 ### Frontend
 
@@ -116,7 +116,7 @@ Redis przechowuje:
 - sesje użytkowników;
 - krótkotrwałe blokady koordynacyjne.
 
-Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Kolejka MVP nie odtwarza jeszcze automatycznie zadań po całkowitej utracie Redis — reconciler wykonujący tę operację jest zakresem kolejnego etapu.
+Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Celery Beat uruchamia reconciler domyślnie co 60 sekund. Broker przechowuje identyfikator swojej bieżącej epoki, a API zapamiętuje go w PostgreSQL. Zmiana epoki po utracie danych Redis powoduje ponowne opublikowanie wszystkich aktywnych batchy; bez zmiany epoki odzyskiwane są tylko zadania `running` bez aktualizacji od co najmniej 10 minut oraz wcześniejsze nieudane publikacje naprawcze. Reconciler nadaje zadaniu nowy `delivery_id`, unieważniając stare komunikaty i blokując zapis wyniku przez nieaktualną kopię zadania. Progi i limit jednej iteracji można zmienić przez `SCAN_RECONCILE_INTERVAL_SECONDS`, `SCAN_RECONCILE_STALE_SECONDS` i `SCAN_RECONCILE_BATCH_LIMIT`.
 
 ### Worker
 
@@ -165,6 +165,12 @@ Wrażliwe pola są szyfrowane przez aplikację AES-256-GCM przed zapisem.
 
 Oddzielne zadanie Compose tworzy szyfrowany backup PostgreSQL. Backup trafia do osobnego wolumenu lub wskazanego katalogu lokalnego. Skrypt testowy odtwarza go do tymczasowej bazy i wykonuje migracje oraz zapytanie kontrolne.
 
+### DefectDojo
+
+Opcjonalny profil `defectdojo` uruchamia przypiętą wersję DefectDojo wraz z nginx, uWSGI, workerem Celery, Celery Beat, osobnym PostgreSQL i Valkey. Dane i media znajdują się w oddzielnych wolumenach, a usługi pomocnicze są odseparowane w wewnętrznej sieci `defectdojo`.
+
+API SurfaceX uwierzytelnia się tokenem lub kontem lokalnego administratora i wysyła ukończone obserwacje przez `reimport-scan` jako `Generic Findings Import`. DefectDojo nie jest wymagane do uruchomienia skanera ani interfejsu SurfaceX.
+
 ## Sieci
 
 ### `edge`
@@ -178,6 +184,10 @@ Sieć oznaczona jako `internal`, przeznaczona dla API, schedulera, Redis, Postgr
 ### `scanner`
 
 Sieć z kontrolowanym wyjściem do dozwolonych celów. Podłączone są do niej wyłącznie workery. API, frontend, Redis i PostgreSQL nie mają dostępu do sieci skanowanej.
+
+### `defectdojo`
+
+Wewnętrzna sieć dla aplikacji DefectDojo, jej workera, schedulera, PostgreSQL i Valkey. Tylko nginx DefectDojo łączy tę sieć z `edge` i kontrolowanym połączeniem z API SurfaceX.
 
 ## Przepływ skanu
 
@@ -194,7 +204,7 @@ Sieć z kontrolowanym wyjściem do dozwolonych celów. Podłączone są do niej 
 
 ## Separacja bezpieczeństwa
 
-- Gateway jest jedyną usługą wystawioną na hoście.
+- Gateway jest jedyną usługą SurfaceX wystawioną na hoście; opcjonalny nginx DefectDojo publikuje osobny port.
 - PostgreSQL i Redis działają wyłącznie w sieci wewnętrznej.
 - Worker jest jedynym komponentem z wyjściem skanującym.
 - Tylko worker może otrzymać `NET_RAW`.

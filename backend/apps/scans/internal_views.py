@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hmac
 import json
+import uuid
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
@@ -14,7 +16,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ScanBatch, ScanRun
+from .models import QueueState, ScanBatch, ScanRun
+from .tasks import execute_batch
 
 MAX_RESULT_BYTES = 2 * 1024 * 1024
 TERMINAL_BATCH_STATUSES = {
@@ -52,6 +55,110 @@ class WorkerAPIView(APIView):
         batch = ScanBatch.objects.select_for_update().get(pk=batch_reference.pk)
         batch.run = run
         return batch
+
+
+class BatchReconcileView(WorkerAPIView):
+    def post(self, request: Request) -> Response:
+        broker_epoch = request.data.get("broker_epoch")
+        if not isinstance(broker_epoch, str) or not broker_epoch.strip():
+            return Response(
+                {"detail": "broker_epoch must be a non-empty string."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        broker_epoch = broker_epoch.strip()[:64]
+        now = timezone.now()
+        stale_before = now - timedelta(
+            seconds=settings.SCAN_RECONCILE_STALE_SECONDS
+        )
+
+        with transaction.atomic():
+            queue_state, _ = QueueState.objects.select_for_update().get_or_create(
+                name="scan"
+            )
+            epoch_changed = queue_state.broker_epoch != broker_epoch
+            candidates = ScanBatch.objects.select_for_update().filter(
+                status__in=(
+                    ScanBatch.Status.QUEUED,
+                    ScanBatch.Status.RUNNING,
+                ),
+                run__status__in=(
+                    ScanRun.Status.QUEUED,
+                    ScanRun.Status.RUNNING,
+                ),
+            )
+            if epoch_changed:
+                candidates.update(queue_recovery_required=True)
+            else:
+                candidates = candidates.filter(
+                    Q(queue_recovery_required=True)
+                    | Q(
+                        status=ScanBatch.Status.RUNNING,
+                        updated_at__lt=stale_before,
+                    )
+                )
+            batches = list(
+                candidates.order_by("updated_at", "id")[
+                    : settings.SCAN_RECONCILE_BATCH_LIMIT
+                ]
+            )
+
+            recovered: list[tuple[int, str]] = []
+            for batch in batches:
+                batch.delivery_id = uuid.uuid4()
+                batch.queue_recovery_required = True
+                batch.status = ScanBatch.Status.QUEUED
+                batch.progress = 0
+                batch.result = {}
+                batch.error = ""
+                batch.claimed_at = None
+                batch.finished_at = None
+                batch.save(
+                    update_fields=(
+                        "delivery_id",
+                        "queue_recovery_required",
+                        "status",
+                        "progress",
+                        "result",
+                        "error",
+                        "claimed_at",
+                        "finished_at",
+                    )
+                )
+                recovered.append((batch.pk, str(batch.delivery_id)))
+
+            if epoch_changed:
+                queue_state.broker_epoch = broker_epoch
+                queue_state.save(update_fields=("broker_epoch", "updated_at"))
+
+        published = 0
+        failed = 0
+        for batch_id, delivery_id in recovered:
+            try:
+                execute_batch.apply_async(
+                    args=(batch_id, delivery_id),
+                    queue="scan",
+                )
+            except Exception:
+                failed += 1
+                continue
+
+            published += 1
+            ScanBatch.objects.filter(
+                pk=batch_id,
+                delivery_id=delivery_id,
+            ).update(
+                queue_recovery_required=False,
+                updated_at=timezone.now(),
+            )
+
+        return Response(
+            {
+                "epoch_changed": epoch_changed,
+                "recovered": len(recovered),
+                "published": published,
+                "failed": failed,
+            }
+        )
 
 
 def _aggregate_run(run: ScanRun) -> None:

@@ -104,6 +104,7 @@ class ScanBatch(models.Model):
     target_address = models.CharField(max_length=255)
     target_type = models.CharField(max_length=16, choices=Target.Type.choices)
     delivery_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    queue_recovery_required = models.BooleanField(default=False, db_index=True)
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
@@ -130,3 +131,12 @@ class ScanBatch(models.Model):
 
     def __str__(self) -> str:
         return f"batch:{self.pk}:{self.status}"
+
+
+class QueueState(models.Model):
+    name = models.CharField(max_length=32, primary_key=True)
+    broker_epoch = models.CharField(max_length=64, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"queue:{self.name}"

@@ -6,9 +6,9 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 ## Status
 
-MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp i anulowanie.
+MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp, anulowanie oraz eksport ukończonych obserwacji do opcjonalnego DefectDojo.
 
-Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Automatyczne odtwarzanie zadań po całkowitej utracie Redis, harmonogramy oraz pause/resume pozostają kolejnym etapem.
+Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Harmonogramy użytkownika oraz pause/resume pozostają kolejnym etapem.
 
 ## Szybki start
 
@@ -30,6 +30,20 @@ Domyślne konto wyłącznie dla lokalnego developmentu: `admin` / `changeme`. Pr
 
 Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
 
+### DefectDojo
+
+DefectDojo 3.5.202 działa jako opcjonalny profil i nie obciąża zwykłego uruchomienia:
+
+```bash
+docker compose --profile defectdojo up --build
+```
+
+- UI DefectDojo: [http://localhost:8081](http://localhost:8081)
+- Użytkownik: `admin`
+- Hasło: zawartość lokalnego pliku `secrets/defectdojo_admin_password`
+
+Po zakończeniu skanu użyj przycisku **Send to DefectDojo**. SurfaceX wysyła aktywne hosty, otwarte usługi i wykryte technologie jako informacyjne findings przez oficjalny endpoint `reimport-scan`. Produkt, engagement i test są tworzone automatycznie.
+
 Zatrzymanie bez usuwania wolumenów:
 
 ```bash
@@ -50,6 +64,7 @@ Obrazy:
 - `surfacex-web` — statyczny bundle React z multi-stage build (Vite `dist/` **nie** trafia do Gita)
 - `surfacex-api` — Django/Gunicorn + Celery beat + backup
 - `surfacex-worker` — Celery worker z `nmap` i przypiętym ProjectDiscovery httpx
+- `defectdojo-*` — opcjonalny, przypięty stos DefectDojo uruchamiany profilem
 
 ## Artefakty, których nie commitować
 
@@ -69,8 +84,9 @@ Frontend jest budowany wyłącznie w obrazie (`Dockerfile.web`). Nie wrzucaj got
 | `edge` | gateway, web |
 | `backend` (internal) | api, scheduler, postgres, redis, backup (+ gateway do API) |
 | `scanner` | worker (egress do celów) |
+| `defectdojo` (internal) | uWSGI, Celery, PostgreSQL i Valkey DefectDojo |
 
-Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła PostgreSQL — wyniki mają iść przez API.
+Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła PostgreSQL — wyniki mają iść przez API. Opcjonalny nginx DefectDojo publikuje osobny port `DEFECTDOJO_HTTP_PORT` (domyślnie `8081`).
 
 ## Dokumentacja
 

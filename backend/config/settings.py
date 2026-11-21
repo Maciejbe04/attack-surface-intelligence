@@ -164,11 +164,61 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_RESULT_EXPIRES = 900
 CELERY_TASK_ROUTES = {
     "scans.execute_batch": {"queue": "scan"},
+    "scans.reconcile_batches": {"queue": "scan"},
 }
-CELERY_BEAT_SCHEDULE = {}
+SCAN_RECONCILE_INTERVAL_SECONDS = max(
+    15,
+    int(os.environ.get("SCAN_RECONCILE_INTERVAL_SECONDS", "60")),
+)
+SCAN_RECONCILE_STALE_SECONDS = max(
+    360,
+    int(os.environ.get("SCAN_RECONCILE_STALE_SECONDS", "600")),
+)
+SCAN_RECONCILE_BATCH_LIMIT = max(
+    1,
+    min(500, int(os.environ.get("SCAN_RECONCILE_BATCH_LIMIT", "100"))),
+)
+CELERY_BEAT_SCHEDULE = {
+    "reconcile-stale-scan-batches": {
+        "task": "scans.reconcile_batches",
+        "schedule": float(SCAN_RECONCILE_INTERVAL_SECONDS),
+        "options": {"queue": "scan"},
+    },
+}
 
 APP_DATA_KEY = read_secret("app_data_key")
 SESSION_HMAC = read_secret("session_hmac")
 WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
+
+DEFECTDOJO_URL = os.environ.get("DEFECTDOJO_URL", "").strip()
+DEFECTDOJO_USERNAME = os.environ.get("DEFECTDOJO_USERNAME", "admin")
+DEFECTDOJO_PASSWORD = read_secret(
+    "defectdojo_admin_password",
+    os.environ.get("DEFECTDOJO_PASSWORD", ""),
+)
+DEFECTDOJO_API_TOKEN = read_secret(
+    "defectdojo_api_token",
+    os.environ.get("DEFECTDOJO_API_TOKEN", ""),
+)
+DEFECTDOJO_PRODUCT_TYPE = os.environ.get(
+    "DEFECTDOJO_PRODUCT_TYPE",
+    "SurfaceX",
+)
+DEFECTDOJO_PRODUCT_NAME = os.environ.get(
+    "DEFECTDOJO_PRODUCT_NAME",
+    "Attack Surface",
+)
+DEFECTDOJO_ENGAGEMENT_NAME = os.environ.get(
+    "DEFECTDOJO_ENGAGEMENT_NAME",
+    "SurfaceX Discovery",
+)
+DEFECTDOJO_TEST_TITLE = os.environ.get(
+    "DEFECTDOJO_TEST_TITLE",
+    "SurfaceX Discovery",
+)
+DEFECTDOJO_TIMEOUT_SECONDS = max(
+    5,
+    min(120, int(os.environ.get("DEFECTDOJO_TIMEOUT_SECONDS", "30"))),
+)

@@ -6,6 +6,7 @@ import {
   createScan,
   createTarget,
   deleteTarget,
+  exportScanToDefectDojo,
   listScans,
   listTargets,
   Scan,
@@ -85,16 +86,22 @@ function ScanTable({
   emptyTitle,
   emptyMessage,
   canMutate,
+  canExport,
   cancellingIds,
+  exportingIds,
   onCancel,
+  onExport,
   t,
 }: {
   scans: Scan[];
   emptyTitle: string;
   emptyMessage: string;
   canMutate: boolean;
+  canExport: boolean;
   cancellingIds: Set<number>;
+  exportingIds: Set<number>;
   onCancel: (scan: Scan) => void;
+  onExport: (scan: Scan) => void;
   t: Translate;
 }) {
   if (scans.length === 0) {
@@ -118,13 +125,18 @@ function ScanTable({
           <th scope="col">{t("Progress")}</th>
           <th scope="col">{t("Batches")}</th>
           <th scope="col">{t("Queued")}</th>
-          {canMutate && <th scope="col">{t("Actions")}</th>}
+          {(canMutate || canExport) && <th scope="col">{t("Actions")}</th>}
         </tr>
       </thead>
       <tbody>
         {scans.map((scan) => {
           const active = ACTIVE_SCAN_STATUSES.has(scan.status);
           const cancelling = cancellingIds.has(scan.id);
+          const exporting = exportingIds.has(scan.id);
+          const exportable =
+            canExport &&
+            scan.completed_batches > 0 &&
+            ["completed", "partial", "failed"].includes(scan.status);
           return (
             <tr key={scan.id}>
               <td className="mono">#{scan.id}</td>
@@ -157,8 +169,8 @@ function ScanTable({
                 )}
               </td>
               <td>{new Date(scan.created_at).toLocaleString()}</td>
-              {canMutate && (
-                <td>
+              {(canMutate || canExport) && (
+                <td className="scan-actions">
                   {active && (
                     <button
                       type="button"
@@ -168,6 +180,17 @@ function ScanTable({
                       aria-busy={cancelling}
                     >
                       {cancelling ? t("Cancelling…") : t("Cancel")}
+                    </button>
+                  )}
+                  {exportable && (
+                    <button
+                      type="button"
+                      className="btn btn--normal"
+                      onClick={() => onExport(scan)}
+                      disabled={exporting}
+                      aria-busy={exporting}
+                    >
+                      {exporting ? t("Exporting…") : t("Send to DefectDojo")}
                     </button>
                   )}
                 </td>
@@ -436,10 +459,12 @@ export function App() {
   const [removePending, setRemovePending] = useState(false);
   const [scanPending, setScanPending] = useState<"dashboard" | "targets" | null>(null);
   const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set());
+  const [exportingIds, setExportingIds] = useState<Set<number>>(new Set());
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
   const canMutate = user?.role === "admin" || user?.role === "operator";
+  const canExport = Boolean(user && user.role !== "viewer");
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
     const id = crypto.randomUUID();
@@ -816,6 +841,33 @@ export function App() {
     }
   }
 
+  async function onExportScan(scan: Scan) {
+    if (!canExport || exportingIds.has(scan.id)) return;
+    setExportingIds((prev) => new Set(prev).add(scan.id));
+    try {
+      const result = await exportScanToDefectDojo(scan.id);
+      pushToast(
+        "ok",
+        t("Sent to DefectDojo"),
+        `${t("Findings")}: ${result.finding_count}${
+          result.test ? ` · ${t("Test")}: #${result.test}` : ""
+        }`,
+      );
+    } catch (error) {
+      pushToast(
+        "error",
+        t("DefectDojo export failed"),
+        apiErrorMessage(error, t("Could not send scan results to DefectDojo.")),
+      );
+    } finally {
+      setExportingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(scan.id);
+        return next;
+      });
+    }
+  }
+
   if (bootstrapping) {
     return (
       <div className="login-page" role="status" aria-live="polite">
@@ -993,8 +1045,11 @@ export function App() {
                     emptyTitle="No probe jobs"
                     emptyMessage="Select modules and run a discovery probe against a host."
                     canMutate={canMutate}
+                    canExport={canExport}
                     cancellingIds={cancellingIds}
+                    exportingIds={exportingIds}
                     onCancel={onCancelScan}
+                    onExport={onExportScan}
                     t={t}
                   />
                 </div>
@@ -1204,8 +1259,11 @@ export function App() {
                     emptyTitle="No scan runs yet"
                     emptyMessage="Use Dashboard modules to probe a host."
                     canMutate={canMutate}
+                    canExport={canExport}
                     cancellingIds={cancellingIds}
+                    exportingIds={exportingIds}
                     onCancel={onCancelScan}
+                    onExport={onExportScan}
                     t={t}
                   />
                 </div>
