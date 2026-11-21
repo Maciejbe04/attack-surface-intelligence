@@ -19,8 +19,8 @@ export function LanguageSelect({
         onChange={(event) => onChange(event.target.value as Language)}
         aria-label={label}
       >
-        <option value="en">English</option>
         <option value="pl">Polski</option>
+        <option value="en">English</option>
       </select>
     </label>
   );

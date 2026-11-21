@@ -314,10 +314,25 @@ function LoginScreen({
   );
 }
 
+function DashboardLoader({ t }: { t: Translate }) {
+  return (
+    <div className="dashboard-loader" role="status" aria-live="polite">
+      <div className="dashboard-loader__card">
+        <Logo />
+        <div className="dashboard-loader__bar" aria-hidden="true">
+          <span />
+        </div>
+        <p>{t("Preparing dashboard…")}</p>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const { highContrast, toggleHighContrast } = useHighContrast();
   const { language, setLanguage, t } = useLanguage();
   const [bootstrapping, setBootstrapping] = useState(true);
+  const [enteringDashboard, setEnteringDashboard] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("dashboard");
   const [targets, setTargets] = useState<HostTarget[]>(() => loadTargets());
@@ -339,6 +354,14 @@ export function App() {
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 6000);
+  }
+
+  function completeAuthentication(authenticatedUser: AuthUser) {
+    setEnteringDashboard(true);
+    window.setTimeout(() => {
+      setUser(authenticatedUser);
+      setEnteringDashboard(false);
+    }, 300);
   }
 
   function dismissToast(id: string) {
@@ -551,10 +574,14 @@ export function App() {
     );
   }
 
+  if (enteringDashboard) {
+    return <DashboardLoader t={t} />;
+  }
+
   if (!user) {
     return (
       <LoginScreen
-        onAuthenticated={setUser}
+        onAuthenticated={completeAuthentication}
         highContrast={highContrast}
         onToggleContrast={toggleHighContrast}
         language={language}
@@ -650,7 +677,7 @@ export function App() {
           </button>
         </nav>
 
-        <main className="content" id="main-content" tabIndex={-1}>
+        <main className="content content--enter" id="main-content" tabIndex={-1} key={nav}>
           {nav === "dashboard" && (
             <>
               <header className="page-header">

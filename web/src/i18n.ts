@@ -28,6 +28,7 @@ const PL: Record<string, string> = {
   "Sign-in failed.": "Logowanie nie powiodło się.",
   "Invalid MFA code.": "Nieprawidłowy kod MFA.",
   "Cannot reach authentication API.": "Brak połączenia z API uwierzytelniania.",
+  "Preparing dashboard…": "Przygotowywanie panelu…",
   "Skip to main content": "Przejdź do głównej treści",
   "Signed-in account": "Zalogowane konto",
   "Standard contrast": "Standardowy kontrast",
