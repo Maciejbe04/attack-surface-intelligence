@@ -39,7 +39,10 @@ Oficjalnie wspierane platformy:
 - Linux `amd64`;
 - Linux `arm64`;
 - macOS Intel przez Docker Desktop;
-- macOS Apple Silicon przez Docker Desktop.
+- macOS Apple Silicon przez Docker Desktop;
+- Windows 10/11 przez Docker Desktop z WSL2 i kontenerami Linux.
+
+Szczegóły uruchomienia na hostach opisuje `docs/local-platforms.md`.
 
 ## Model danych i trwałe edycje
 
@@ -293,6 +296,7 @@ Nie wymaga lokalnej instalacji Pythona, Node.js, PostgreSQL, Redis, nmap ani htt
 - W bazie nie występują jawne wartości wrażliwych pól.
 - Zaszyfrowany backup można poprawnie odtworzyć.
 - Ten sam commit przechodzi smoke test na `linux/amd64` i `linux/arm64`.
+- Smoke test obejmuje Docker Desktop na Windows (WSL2, kontenery Linux) dla `linux/amd64`.
 - Demo wykonuje dwa przebiegi oraz eksport CSV/JSON.
 
 ## Plan realizacji
@@ -355,6 +359,7 @@ Dostępne:
 - `docs/rbac.md`: macierz uprawnień;
 - `docs/encryption.md`: pola, klucze i rotacja;
 - `docs/demo-script.md`: demonstracja dwóch skanów;
+- `docs/local-platforms.md`: Linux/macOS/Windows, amd64/arm64 i tryby nmap;
 - `docs/adr-001-http-fingerprinting.md`: wybór httpx.
 
 Do uzupełnienia wraz z implementacją:
@@ -363,5 +368,4 @@ Do uzupełnienia wraz z implementacją:
 - `docs/security.md`: threat model i ograniczenia;
 - `docs/operations.md`: healthchecki i skalowanie workerów;
 - `docs/backup-restore.md`: backup i test odtworzenia;
-- `docs/local-platforms.md`: Linux/macOS, amd64/arm64 i tryby nmap;
 - `presentation/`: prezentacja do 10 slajdów.

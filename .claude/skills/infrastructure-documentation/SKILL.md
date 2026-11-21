@@ -43,7 +43,7 @@ Maintain these documents as the project grows:
 - `docs/security.md`: threat model and residual risks;
 - `docs/operations.md`: healthchecks, logs, scaling and troubleshooting;
 - `docs/backup-restore.md`: encrypted backup and restore test;
-- `docs/local-platforms.md`: Linux/macOS and amd64/arm64 behavior;
+- `docs/local-platforms.md`: Linux/macOS/Windows and amd64/arm64 behavior;
 - `docs/demo-script.md`: repeatable two-scan demonstration.
 
 Create a document only when it has real content. Do not add empty placeholder pages.

@@ -54,7 +54,7 @@ Top 1000 portów nmap. Dozwolony tylko dla mniejszych zakresów albo poza szczyt
 | Środowisko | Tryb | Uwagi |
 |---|---|---|
 | Linux z `NET_RAW` | SYN (`-sS`) | preferowany |
-| Docker Desktop / brak raw sockets | TCP connect (`-sT`) | automatyczny fallback |
+| Docker Desktop (macOS/Windows) / brak raw sockets | TCP connect (`-sT`) | automatyczny fallback |
 
 Użyty tryb trafia do metadanych `scan_run`.
 

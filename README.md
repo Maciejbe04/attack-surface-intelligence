@@ -15,7 +15,7 @@ Projekt jest w fazie dokumentacji i projektowania MVP. Kod aplikacji oraz `compo
 - deklaratywne sygnatury i confidence score;
 - historia zmian `NEW/CHANGED/MISSING/FLAKY/GONE`;
 - RBAC, trwałe overrides i szyfrowanie danych wrażliwych;
-- lokalne uruchomienie przez Docker Compose na `linux/amd64` i `linux/arm64`.
+- lokalne uruchomienie przez Docker Compose na `linux/amd64` i `linux/arm64`, także na Windows Docker Desktop (WSL2).
 
 ## Stos
 
@@ -35,7 +35,7 @@ Projekt jest w fazie dokumentacji i projektowania MVP. Kod aplikacji oraz `compo
 Po pojawieniu się `compose.yml` świeża instalacja będzie wymagała wyłącznie:
 
 - Git;
-- Docker Engine z Compose albo Docker Desktop;
+- Docker Engine z Compose albo Docker Desktop (Linux, macOS lub Windows z WSL2);
 - minimalnej ilości RAM i miejsca opisanej w dokumentacji operacyjnej.
 
 Docelowa sekwencja:
@@ -61,6 +61,7 @@ Do czasu implementacji Compose powyższe komendy nie działają. Szczegóły arc
 - [RBAC](docs/rbac.md)
 - [Szyfrowanie](docs/encryption.md)
 - [Scenariusz demo](docs/demo-script.md)
+- [Platformy lokalne](docs/local-platforms.md)
 - [ADR-001: wybór silnika HTTP fingerprintingu](docs/adr-001-http-fingerprinting.md)
 
 ## Poza zakresem MVP

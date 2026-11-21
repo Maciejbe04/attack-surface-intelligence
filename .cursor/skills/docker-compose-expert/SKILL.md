@@ -10,7 +10,7 @@ description: Designs, reviews, secures, and troubleshoots Docker Compose stacks 
 - Docker Compose is the only orchestration layer.
 - Do not introduce Terraform, Ansible, Kubernetes, Helm, Swarm, or cloud-only services.
 - Support native `linux/amd64` and `linux/arm64`.
-- Support Linux Docker Engine and Docker Desktop on Intel and Apple Silicon macOS.
+- Support Linux Docker Engine; Docker Desktop on Intel/Apple Silicon macOS; Docker Desktop on Windows 10/11 with WSL2 and Linux containers.
 - Keep the complete MVP runnable locally without SaaS dependencies.
 - Read `docs/architecture.md` and `docs/mvp-plan.md` before structural changes.
 

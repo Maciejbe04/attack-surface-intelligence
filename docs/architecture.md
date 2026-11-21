@@ -2,7 +2,7 @@
 
 ## Założenia
 
-Attack Surface Intelligence jest uruchamiane lokalnie przez Docker Compose. Ten sam zestaw obrazów obsługuje `linux/amd64` i `linux/arm64`, w tym Docker Desktop na komputerach Mac z procesorem Intel lub Apple Silicon.
+Attack Surface Intelligence jest uruchamiane lokalnie przez Docker Compose. Ten sam zestaw obrazów Linux obsługuje `linux/amd64` i `linux/arm64`, w tym Docker Desktop na macOS (Intel/Apple Silicon) oraz Windows 10/11 z WSL2. Szczegóły hostów opisuje `docs/local-platforms.md`.
 
 System rozdziela warstwę zarządzającą od wykonania skanów. API nie uruchamia nmap bezpośrednio, a workery nie mają dostępu administracyjnego do PostgreSQL ani do środowiska kontenerowego.
 
@@ -14,7 +14,7 @@ flowchart TB
   SecretFiles[Pliki sekretów 0600]
   ImageManifest[Obrazy linux amd64 i arm64]
 
-  subgraph localHost [Lokalny host Linux lub macOS]
+  subgraph localHost [Lokalny host Linux macOS lub Windows]
     subgraph composeRuntime [Docker Compose]
       subgraph edgeNet [Sieć edge]
         Gateway[Gateway TLS]
@@ -219,7 +219,8 @@ Ten sam commit musi przejść build, migracje, healthcheck, logowanie, import, t
 - Docker Compose nie zapewnia wysokiej dostępności.
 - Awaria lokalnego hosta zatrzymuje wszystkie usługi.
 - Redis i PostgreSQL działają jako pojedyncze instancje.
-- Docker Desktop nie zapewnia identycznej semantyki sieci jak natywny Linux, dlatego worker wykorzystuje TCP connect scan.
+- Docker Desktop na macOS i Windows nie zapewnia identycznej semantyki sieci jak natywny Linux, dlatego worker wykorzystuje TCP connect scan.
+- Windows jest wspierany wyłącznie przez Docker Desktop + WSL2 i kontenery Linux; Windows Containers są poza zakresem.
 - DefectDojo pozostaje integracją opcjonalną.
 
 Ograniczenia są akceptowalne dla lokalnego prototypu konkursowego i muszą być jawnie opisane podczas demonstracji.

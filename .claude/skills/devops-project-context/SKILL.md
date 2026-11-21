@@ -18,7 +18,7 @@ Read `docs/mvp-plan.md` for acceptance criteria and `docs/architecture.md` for c
 - Application stack: Python/Django/DRF, Celery, React/TypeScript, PostgreSQL and Redis.
 - Scanning stack: nmap discovery, ProjectDiscovery httpx and custom declarative signatures.
 - Supported image architectures: `linux/amd64` and `linux/arm64`.
-- Supported local environments: Linux Docker Engine and Docker Desktop on Intel/Apple Silicon macOS.
+- Supported local environments: Linux Docker Engine; Docker Desktop on Intel/Apple Silicon macOS; Docker Desktop on Windows 10/11 with WSL2 and Linux containers.
 - No mandatory SaaS or cloud dependency.
 - DefectDojo is optional and must not block local startup.
 
