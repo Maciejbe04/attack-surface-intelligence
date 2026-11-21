@@ -171,6 +171,35 @@ Wymagania operacyjne httpx:
 - brak automatycznego rozszerzania celu poza allowlistę;
 - zapis wersji narzędzia i użytych opcji w metadanych przebiegu.
 
+### Dlaczego httpx zamiast WhatWeb
+
+ProjectDiscovery httpx jest podstawowym narzędziem MVP, ponieważ:
+
+- jest napisany w Go i dobrze pasuje do workera;
+- przetwarza duże listy endpointów współbieżnie;
+- udostępnia strumieniowy JSONL;
+- ma wbudowaną kontrolę tempa, timeoutów i równoległości;
+- łatwo buduje się natywnie dla `linux/amd64` i `linux/arm64`;
+- ma mniejszy narzut uruchomieniowy niż stos Ruby;
+- dostarcza wystarczające dane HTTP/TLS i wstępne fingerprinty technologii.
+
+WhatWeb posiada rozbudowany system pluginów i może zapewnić głębsze rozpoznanie części CMS-ów lub starszych technologii, ale:
+
+- ma większy koszt uruchomienia i pamięci;
+- wymaga ostrożniejszego batchowania przy ponad 10 000 adresów;
+- część trybów agresywności wykonuje dodatkowe żądania;
+- pluginy są wykonywalnym kodem Ruby i nie mogą być bezpiecznym formatem sygnatur użytkownika;
+- komplikuje wieloarchitekturowy obraz workera.
+
+WhatWeb nie jest częścią obowiązkowego MVP. W przyszłości może działać jako wyłączony domyślnie drugi etap tylko dla ręcznie wybranych endpointów:
+
+```text
+wszystkie endpointy → httpx
+wybrane endpointy → opcjonalny WhatWeb deep fingerprint
+```
+
+Jego wynik również musiałby zostać znormalizowany jako evidence i przejść przez wspólny confidence score. Szczegóły decyzji opisuje `docs/adr-001-http-fingerprinting.md`.
+
 Każda detekcja przechowuje dowody i score `0–100`. Domyślne wagi:
 
 - charakterystyczny nagłówek: `30`;

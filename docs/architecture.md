@@ -143,6 +143,8 @@ httpx jest uruchamiany dla partii endpointów, a jego JSONL jest przetwarzany st
 
 Własny moduł Go uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, ograniczone fragmenty HTML i dozwolone ścieżki. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
 
+WhatWeb może zostać dodany w przyszłości jako opcjonalny, domyślnie wyłączony drugi etap dla ręcznie wybranych endpointów wymagających głębszej identyfikacji. Nie może działać dla całego zakresu bez osobnego limitu ruchu ani przyjmować pluginów dostarczonych przez użytkownika. Jego wyniki muszą zostać zapisane jako evidence i ocenione przez ten sam model pewności co wyniki httpx. Uzasadnienie wyboru opisuje `docs/adr-001-http-fingerprinting.md`.
+
 ### PostgreSQL
 
 PostgreSQL przechowuje:
