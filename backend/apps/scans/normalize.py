@@ -229,8 +229,21 @@ def _run_target_addresses(run: ScanRun) -> set[str]:
     return {batch.target_address for batch in run.batches.all() if batch.target_address}
 
 
+def module_signature(run: ScanRun) -> tuple[str, ...]:
+    """Sorted module ids — TLS compares with TLS, not with HTTP/port/host runs."""
+    snapshot = run.modules_snapshot if isinstance(run.modules_snapshot, list) else []
+    ids = {
+        str(item.get("id")).strip()
+        for item in snapshot
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    return tuple(sorted(ids))
+
+
 def same_scan_scope(current: ScanRun, other: ScanRun) -> bool:
-    """True when both runs cover the same group or the same host/target set."""
+    """True when both runs share method (modules) and the same group or host set."""
+    if module_signature(current) != module_signature(other):
+        return False
     if current.group_id or other.group_id:
         return bool(current.group_id) and current.group_id == other.group_id
     return _run_target_addresses(current) == _run_target_addresses(other) and bool(
@@ -239,6 +252,7 @@ def same_scan_scope(current: ScanRun, other: ScanRun) -> bool:
 
 
 def previous_completed_run(run: ScanRun) -> ScanRun | None:
+    wanted_modules = module_signature(run)
     qs = (
         ScanRun.objects.filter(
             owner_id=run.owner_id,
@@ -250,13 +264,18 @@ def previous_completed_run(run: ScanRun) -> ScanRun | None:
     )
     if run.group_id:
         qs = qs.filter(group_id=run.group_id)
-        return qs.order_by("-finished_at", "-id").first()
+        for candidate in qs.order_by("-finished_at", "-id")[:50]:
+            if module_signature(candidate) == wanted_modules:
+                return candidate
+        return None
 
     current_targets = _run_target_addresses(run)
     if not current_targets:
         return None
-    # Host / ad-hoc scans: only previous runs with the exact same target set.
+    # Host / ad-hoc scans: same modules and exact same target set.
     for candidate in qs.filter(group_id__isnull=True).order_by("-finished_at", "-id")[:50]:
+        if module_signature(candidate) != wanted_modules:
+            continue
         if _run_target_addresses(candidate) == current_targets:
             return candidate
     return None
@@ -396,6 +415,7 @@ def diff_runs(current: ScanRun, against: ScanRun) -> dict[str, Any]:
             changed.append(
                 {
                     "entity_key": key,
+                    "entity_type": obs.entity_type,
                     "before": old_map[key].attrs,
                     "after": obs.attrs,
                     "lifecycle": obs.lifecycle,
@@ -407,6 +427,7 @@ def diff_runs(current: ScanRun, against: ScanRun) -> dict[str, Any]:
     return {
         "current_run_id": current.pk,
         "against_run_id": against.pk,
+        "modules": list(module_signature(current)),
         "added": added,
         "removed": removed,
         "changed": changed,

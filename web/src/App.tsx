@@ -50,6 +50,7 @@ import { ScanConsole } from "./ScanConsole";
 import { AllowlistPanel } from "./AllowlistPanel";
 import { SystemLockButton, SystemPanel } from "./SystemPanel";
 import { UsersPanel } from "./UsersPanel";
+import { useDarkMode } from "./useDarkMode";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
@@ -414,6 +415,8 @@ function ScanTable({
 
 function LoginScreen({
   onAuthenticated,
+  darkMode,
+  onToggleDarkMode,
   highContrast,
   onToggleContrast,
   language,
@@ -421,6 +424,8 @@ function LoginScreen({
   t,
 }: {
   onAuthenticated: (user: AuthUser) => void;
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
   highContrast: boolean;
   onToggleContrast: () => void;
   language: Language;
@@ -619,6 +624,8 @@ function LoginScreen({
         </div>
       </main>
       <AppFooter
+        darkMode={darkMode}
+        onToggleDarkMode={onToggleDarkMode}
         highContrast={highContrast}
         onToggleContrast={onToggleContrast}
         language={language}
@@ -634,6 +641,7 @@ function LoginScreen({
 }
 
 export function App() {
+  const { darkMode, toggleDarkMode } = useDarkMode();
   const { highContrast, toggleHighContrast } = useHighContrast();
   const { language, setLanguage, t } = useLanguage();
   const [bootstrapping, setBootstrapping] = useState(true);
@@ -1273,6 +1281,37 @@ export function App() {
       .map(([id, config]) => ({ id, filters: config.filters }));
   }
 
+  async function createMissingProbeTarget(address: string): Promise<Target | null> {
+    const value = address.trim();
+    if (!canMutate || !isValidTarget(value)) return null;
+    const existing = targets.find(
+      (target) => target.address.toLowerCase() === value.toLowerCase(),
+    );
+    if (existing) {
+      setProbeTarget(existing);
+      return existing;
+    }
+    try {
+      const target = await createTarget({
+        address: value,
+        type: detectType(value),
+        comment: "",
+      });
+      setTargets((prev) =>
+        [...prev.filter((item) => item.id !== target.id), target].sort((a, b) =>
+          a.address.localeCompare(b.address),
+        ),
+      );
+      setProbeTarget(target);
+      pushToast("ok", t("Target added from probe."), target.address);
+      return target;
+    } catch (error) {
+      const message = apiErrorMessage(error, t("Could not add target."));
+      pushToast("error", t("Target not added"), message);
+      return null;
+    }
+  }
+
   async function onAdd(event: FormEvent) {
     event.preventDefault();
     if (!canMutate || addPending) return;
@@ -1629,6 +1668,8 @@ export function App() {
     return (
       <LoginScreen
         onAuthenticated={completeAuthentication}
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
         highContrast={highContrast}
         onToggleContrast={toggleHighContrast}
         language={language}
@@ -1647,6 +1688,15 @@ export function App() {
         <a className="topnav__brand" href="/" aria-label={`${APP_NAME} home`}>
           <Logo />
         </a>
+        <button
+          type="button"
+          className="btn btn--normal topnav__theme"
+          aria-pressed={darkMode}
+          aria-label={darkMode ? t("Switch to light mode") : t("Switch to dark mode")}
+          onClick={toggleDarkMode}
+        >
+          {darkMode ? t("Light mode") : t("Dark mode")}
+        </button>
         <button
           type="button"
           className="btn btn--normal topnav__contrast"
@@ -1775,7 +1825,7 @@ export function App() {
                 <h1>{t("Dashboard")}</h1>
                 <p>
                   {t(
-                    "Pick a target group or host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.",
+                    "Select a group or a saved host, then run discovery.",
                   )}
                 </p>
               </header>
@@ -1839,6 +1889,7 @@ export function App() {
                           id="probe-host"
                           selected={probeTarget}
                           onSelect={setProbeTarget}
+                          onCreateMissing={canMutate ? createMissingProbeTarget : undefined}
                           t={t}
                         />
                         <p className="field-help">
@@ -2128,13 +2179,7 @@ export function App() {
                         autoComplete="off"
                         spellCheck={false}
                       />
-                      {draftError ? (
-                        <p className="field-error">{draftError}</p>
-                      ) : (
-                        <p className="field-help">
-                          {t("One target per submit. CIDR is stored as a range entry.")}
-                        </p>
-                      )}
+                      {draftError && <p className="field-error">{draftError}</p>}
                     </div>
                   </div>
                   <div className="form-row">
@@ -2149,10 +2194,6 @@ export function App() {
                         maxLength={280}
                         rows={3}
                       />
-                      <p className="field-help">
-                        {t("Optional note describing the host, owner, environment, or purpose.")}{" "}
-                        {draftComment.length}/280
-                      </p>
                     </div>
                   </div>
                   <div className="form-row">
@@ -2642,6 +2683,8 @@ export function App() {
       </div>
 
       <AppFooter
+        darkMode={darkMode}
+        onToggleDarkMode={toggleDarkMode}
         highContrast={highContrast}
         onToggleContrast={toggleHighContrast}
         onOpenSystem={() => setNav("system")}
@@ -2652,7 +2695,7 @@ export function App() {
       <div id="a11y-help" className="sr-only" tabIndex={-1}>
         Keyboard: Tab moves focus, Enter activates buttons, Escape dismisses toasts when focused.
         Navigation uses aria-current for the active page. Status messages use live regions.
-        Enable High contrast from the header or footer for stronger colors and borders.
+        Enable Dark mode or High contrast from the header or footer.
       </div>
     </div>
   );

@@ -11,6 +11,12 @@ from typing import Any
 from django.conf import settings
 from django.core.cache import cache
 
+from .curiosity import (
+    curiosity_rank,
+    curiosity_to_defectdojo_severity,
+    normalize_curiosity_level,
+    port_curiosity_score,
+)
 from .models import ScanBatch, ScanRun
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -43,10 +49,17 @@ def _finding(
     unique_id: str,
     endpoints: list[str | dict[str, Any]],
     rule: str,
+    severity: str = "Info",
+    curiosity: str | None = None,
 ) -> dict[str, Any]:
+    level = normalize_curiosity_level(curiosity)
+    if level:
+        severity = curiosity_to_defectdojo_severity(level)
+        if f"Curiosity: {level}" not in description:
+            description = f"{description}\nCuriosity: {level}".strip()
     finding: dict[str, Any] = {
         "title": title[:511],
-        "severity": "Info",
+        "severity": severity,
         "description": description,
         "unique_id_from_tool": unique_id,
         "vuln_id_from_tool": rule,
@@ -54,6 +67,8 @@ def _finding(
         "static_finding": False,
         "tags": ["surfacex", "attack-surface"],
     }
+    if level:
+        finding["tags"] = [*finding["tags"], f"curiosity:{level}"]
     if endpoints:
         finding["endpoints"] = endpoints
     return finding
@@ -83,6 +98,8 @@ def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
                 unique_id=live_id,
                 endpoints=[address],
                 rule="surfacex.live-host",
+                severity="Info",
+                curiosity="info",
             )
 
             ports = host.get("ports", [])
@@ -98,6 +115,7 @@ def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
                 service = str(port_data.get("service") or "unknown").strip()
                 product = str(port_data.get("product") or "").strip()
                 version = str(port_data.get("version") or "").strip()
+                curiosity = port_curiosity_score(port)
                 service_id = _stable_id(
                     "open-service",
                     address,
@@ -121,6 +139,7 @@ def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
                         }
                     ],
                     rule="surfacex.open-service",
+                    curiosity=curiosity,
                 )
 
         technology_records: list[dict[str, Any]] = []
@@ -161,6 +180,25 @@ def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
             technology_id = _stable_id("technology", endpoint, technology)
             confidence = record.get("confidence")
             evidence = str(record.get("evidence") or "SurfaceX fingerprint")
+            try:
+                conf_score = int(confidence) if confidence is not None else 0
+            except (TypeError, ValueError):
+                conf_score = 0
+            if conf_score >= 70:
+                tech_curiosity = "medium"
+            elif conf_score >= 40:
+                tech_curiosity = "low"
+            else:
+                tech_curiosity = "info"
+            existing = findings_by_id.get(technology_id)
+            if existing is not None:
+                existing_level = None
+                for tag in existing.get("tags") or []:
+                    if isinstance(tag, str) and tag.startswith("curiosity:"):
+                        existing_level = tag.split(":", 1)[1]
+                        break
+                if curiosity_rank(tech_curiosity) <= curiosity_rank(existing_level):
+                    continue
             findings_by_id[technology_id] = _finding(
                 title=f"Technology detected: {technology}",
                 description=(
@@ -171,6 +209,7 @@ def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
                 unique_id=technology_id,
                 endpoints=_endpoint(endpoint),
                 rule="surfacex.technology",
+                curiosity=tech_curiosity,
             )
 
     return {

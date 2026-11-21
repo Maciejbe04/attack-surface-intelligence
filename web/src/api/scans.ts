@@ -565,6 +565,7 @@ export type ScanDiffObservation = {
 
 export type ScanDiffChange = {
   entity_key: string;
+  entity_type?: string;
   before: Record<string, unknown>;
   after: Record<string, unknown>;
   lifecycle: ObservationLifecycle;
@@ -573,6 +574,7 @@ export type ScanDiffChange = {
 export type ScanDiff = {
   current_run_id: number;
   against_run_id: number | null;
+  modules?: string[];
   added: ScanDiffObservation[];
   removed: ScanDiffObservation[];
   changed: ScanDiffChange[];

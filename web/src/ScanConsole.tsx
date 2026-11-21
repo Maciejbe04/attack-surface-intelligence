@@ -45,11 +45,31 @@ function formatTime(value: string): string {
 
 function batchSummary(batch: ScanBatch): string {
   const result = batch.result && typeof batch.result === "object" ? (batch.result as Record<string, unknown>) : null;
-  const hosts = Array.isArray(result?.hosts) ? result.hosts.length : null;
-  const http = Array.isArray(result?.http) ? result.http.length : null;
+  const hosts = Array.isArray(result?.hosts) ? result.hosts : null;
+  const http = Array.isArray(result?.http) ? result.http : null;
+  const signatures = Array.isArray(result?.signatures) ? result.signatures : null;
   const parts = [`Batch ${batch.status} for ${batch.target_address} (${batch.progress}%)`];
-  if (hosts !== null) parts.push(`${hosts} host(s)`);
-  if (http !== null) parts.push(`${http} HTTP observation(s)`);
+  if (hosts !== null) {
+    parts.push(`${hosts.length} host(s)`);
+    let openPorts = 0;
+    for (const host of hosts) {
+      if (!host || typeof host !== "object") continue;
+      const ports = (host as { ports?: unknown }).ports;
+      if (Array.isArray(ports)) openPorts += ports.length;
+    }
+    if (openPorts > 0) parts.push(`${openPorts} port(s)`);
+  }
+  if (http !== null) {
+    parts.push(`${http.length} HTTP`);
+    let tlsCount = 0;
+    for (const record of http) {
+      if (!record || typeof record !== "object") continue;
+      const row = record as Record<string, unknown>;
+      if (row.tls || row["tls-grab"] || row.cert) tlsCount += 1;
+    }
+    if (tlsCount > 0) parts.push(`${tlsCount} TLS`);
+  }
+  if (signatures !== null) parts.push(`${signatures.length} signature(s)`);
   if (batch.error) parts.push(batch.error);
   return parts.join(" · ");
 }

@@ -101,6 +101,7 @@ class NormalizeLifecycleTests(TestCase):
         second = ScanRun.objects.create(
             owner=self.owner,
             status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "full-pipeline", "filters": {}}],
             finished_at=timezone.now(),
             total_batches=1,
             completed_batches=1,
@@ -121,6 +122,60 @@ class NormalizeLifecycleTests(TestCase):
         self.assertTrue(same_scan_scope(second, first))
         self.assertFalse(same_scan_scope(second, other))
 
+    def test_previous_completed_run_matches_same_modules_only(self) -> None:
+        pipeline = self._run_with_batch(
+            {
+                "hosts": [
+                    {
+                        "address": "192.0.2.50",
+                        "status": "up",
+                        "ports": [{"port": 80, "protocol": "tcp", "state": "open"}],
+                    }
+                ]
+            }
+        )
+        tls_older = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "tls-cert", "filters": {}}],
+            finished_at=timezone.now() - timedelta(minutes=5),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=tls_older,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now() - timedelta(minutes=5),
+        )
+        tls_newer = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "tls-cert", "filters": {}}],
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=tls_newer,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        prev = previous_completed_run(tls_newer)
+        self.assertEqual(prev, tls_older)
+        self.assertFalse(same_scan_scope(tls_newer, pipeline))
+
     def test_previous_completed_run_matches_same_group(self) -> None:
         group = TargetGroup.objects.create(owner=self.owner, name="lab")
         group.targets.add(self.target)
@@ -128,6 +183,7 @@ class NormalizeLifecycleTests(TestCase):
             owner=self.owner,
             group=group,
             status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "full-pipeline", "filters": {}}],
             finished_at=timezone.now(),
             total_batches=1,
             completed_batches=1,
@@ -158,6 +214,7 @@ class NormalizeLifecycleTests(TestCase):
             owner=self.owner,
             group=group,
             status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "full-pipeline", "filters": {}}],
             finished_at=timezone.now(),
             total_batches=1,
             completed_batches=1,

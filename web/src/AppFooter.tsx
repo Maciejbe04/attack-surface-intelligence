@@ -4,6 +4,8 @@ import { SystemLockButton } from "./SystemPanel";
 import { APP_NAME, APP_VERSION } from "./version";
 
 type Props = {
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
   highContrast: boolean;
   onToggleContrast: () => void;
   onOpenSystem?: () => void;
@@ -13,6 +15,8 @@ type Props = {
 };
 
 export function AppFooter({
+  darkMode,
+  onToggleDarkMode,
   highContrast,
   onToggleContrast,
   onOpenSystem,
@@ -40,6 +44,15 @@ export function AppFooter({
           onChange={onLanguageChange}
           label={t("Language")}
         />
+        <button
+          type="button"
+          className="btn btn--normal"
+          aria-pressed={darkMode}
+          aria-label={darkMode ? t("Switch to light mode") : t("Switch to dark mode")}
+          onClick={onToggleDarkMode}
+        >
+          {darkMode ? t("Light mode") : t("Dark mode")}
+        </button>
         <button
           type="button"
           className="btn btn--normal app-footer__contrast"

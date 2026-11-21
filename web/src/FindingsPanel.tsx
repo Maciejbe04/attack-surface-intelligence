@@ -92,6 +92,7 @@ function attrDiffLines(before: Record<string, unknown>, after: Record<string, un
   const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).sort();
   const lines: string[] = [];
   for (const key of keys) {
+    if (key === "curiosity") continue;
     const left = before[key];
     const right = after[key];
     if (JSON.stringify(left) === JSON.stringify(right)) continue;
@@ -103,6 +104,44 @@ function attrDiffLines(before: Record<string, unknown>, after: Record<string, un
 type DiffRow =
   | { kind: "added" | "removed"; item: ScanDiffObservation }
   | { kind: "changed"; item: ScanDiffChange };
+
+type DiffMethod = "host" | "port" | "http" | "tls" | "tech" | "signatures" | "other";
+
+const DIFF_METHOD_ORDER: DiffMethod[] = [
+  "host",
+  "port",
+  "http",
+  "tls",
+  "tech",
+  "signatures",
+  "other",
+];
+
+function diffMethodFromKey(entityKey: string, entityType?: string): DiffMethod {
+  const type = (entityType || "").toLowerCase();
+  if (type === "host" || entityKey.startsWith("host:")) return "host";
+  if (type === "port" || entityKey.startsWith("port:")) return "port";
+  if (type === "http" || entityKey.startsWith("http:")) return "http";
+  if (type === "cert" || entityKey.startsWith("cert:")) return "tls";
+  if (type === "tech" || entityKey.startsWith("tech:")) return "tech";
+  if (type === "signature" || entityKey.startsWith("sig:") || entityKey.startsWith("signature:")) {
+    return "signatures";
+  }
+  return "other";
+}
+
+function moduleIds(scan: Scan): string[] {
+  return [...(scan.modules || [])]
+    .map((module) => module.id)
+    .filter(Boolean)
+    .sort();
+}
+
+function sameModules(left: Scan, right: Scan): boolean {
+  const a = moduleIds(left);
+  const b = moduleIds(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
 
 type Props = {
   scan: Scan | null;
@@ -150,10 +189,11 @@ export function FindingsPanel({
     };
     return scans.filter((item) => {
       if (item.id === scan.id || !finished(item)) return false;
+      if (!sameModules(scan, item)) return false;
       if (scan.group_id != null) {
         return item.group_id === scan.group_id;
       }
-      // Host / ad-hoc scan: only the same target host set.
+      // Host / ad-hoc scan: same modules and the same target host set.
       return item.group_id == null && sameTargets(item);
     });
   }, [scan, scans]);
@@ -242,6 +282,32 @@ export function FindingsPanel({
       ...diff.changed.map((item) => ({ kind: "changed" as const, item })),
     ];
   }, [diff]);
+
+  const diffGroups = useMemo(() => {
+    const buckets = new Map<DiffMethod, DiffRow[]>();
+    for (const method of DIFF_METHOD_ORDER) buckets.set(method, []);
+    for (const row of diffRows) {
+      const entityKey = row.item.entity_key;
+      const entityType =
+        row.kind === "changed" ? row.item.entity_type : row.item.entity_type;
+      const method = diffMethodFromKey(entityKey, entityType);
+      buckets.get(method)!.push(row);
+    }
+    return DIFF_METHOD_ORDER.map((method) => ({
+      method,
+      rows: buckets.get(method) || [],
+    })).filter((group) => group.rows.length > 0);
+  }, [diffRows]);
+
+  function methodLabel(method: DiffMethod): string {
+    if (method === "host") return t("Hosts");
+    if (method === "port") return t("Ports");
+    if (method === "http") return t("HTTP");
+    if (method === "tls") return t("TLS");
+    if (method === "tech") return t("Technology");
+    if (method === "signatures") return t("Signatures");
+    return t("Other");
+  }
 
   if (!scan) return null;
 
@@ -448,63 +514,96 @@ export function FindingsPanel({
                     <strong className="mono">{diff.counts.changed}</strong>
                   </div>
                 </div>
+                <p className="field-help">
+                  {t("Compare is limited to the same scan modules (TLS vs TLS, HTTP vs HTTP).")}
+                  {diff.modules && diff.modules.length > 0
+                    ? ` · ${diff.modules.join(", ")}`
+                    : ""}
+                </p>
                 {diffRows.length === 0 ? (
                   <p className="field-help">{t("No differences between these scans.")}</p>
                 ) : (
-                  <div className="table-wrap">
-                    <table className="hosts">
-                      <caption className="sr-only">{t("Scan comparison")}</caption>
-                      <thead>
-                        <tr>
-                          <th scope="col">{t("Change")}</th>
-                          <th scope="col">{t("Entity")}</th>
-                          <th scope="col">{t("Details")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {diffRows.slice(0, 300).map((row) => {
-                          if (row.kind === "changed") {
-                            const lines = attrDiffLines(row.item.before, row.item.after);
-                            return (
-                              <tr key={`changed-${row.item.entity_key}`}>
-                                <td>
-                                  <span className="lifecycle-badge lifecycle-badge--CHANGED">
-                                    {t("Changed")}
-                                  </span>
-                                </td>
-                                <td className="mono">{row.item.entity_key}</td>
-                                <td>
-                                  {lines.length > 0 ? (
-                                    <ul className="diff-attr-list">
-                                      {lines.map((line) => (
-                                        <li key={line} className="mono">
-                                          {line}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  ) : (
-                                    "—"
-                                  )}
-                                </td>
+                  <div className="compare-method-groups">
+                    {diffGroups.map((group) => (
+                      <div key={group.method} className="compare-method-group">
+                        <h3 className="compare-method-group__title">
+                          {methodLabel(group.method)}
+                          <span className="field-help mono">{group.rows.length}</span>
+                        </h3>
+                        <div className="table-wrap">
+                          <table className="hosts">
+                            <caption className="sr-only">
+                              {t("Scan comparison")} — {methodLabel(group.method)}
+                            </caption>
+                            <thead>
+                              <tr>
+                                <th scope="col">{t("Change")}</th>
+                                <th scope="col">{t("Entity")}</th>
+                                <th scope="col">{t("Curiosity")}</th>
+                                <th scope="col">{t("Details")}</th>
                               </tr>
-                            );
-                          }
-                          const badge =
-                            row.kind === "added" ? "lifecycle-badge--NEW" : "lifecycle-badge--GONE";
-                          return (
-                            <tr key={`${row.kind}-${row.item.entity_key}`}>
-                              <td>
-                                <span className={`lifecycle-badge ${badge}`}>
-                                  {row.kind === "added" ? t("Added") : t("Removed")}
-                                </span>
-                              </td>
-                              <td className="mono">{row.item.entity_key}</td>
-                              <td>{attrsPreview(row.item.attrs)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                              {group.rows.slice(0, 300).map((row) => {
+                                if (row.kind === "changed") {
+                                  const lines = attrDiffLines(row.item.before, row.item.after);
+                                  return (
+                                    <tr key={`changed-${row.item.entity_key}`}>
+                                      <td>
+                                        <span className="lifecycle-badge lifecycle-badge--CHANGED">
+                                          {t("Changed")}
+                                        </span>
+                                      </td>
+                                      <td className="mono">{row.item.entity_key}</td>
+                                      <td>
+                                        <CuriosityBadge
+                                          value={curiosityFromAttrs(row.item.after)}
+                                          t={t}
+                                        />
+                                      </td>
+                                      <td>
+                                        {lines.length > 0 ? (
+                                          <ul className="diff-attr-list">
+                                            {lines.map((line) => (
+                                              <li key={line} className="mono">
+                                                {line}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        ) : (
+                                          "—"
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+                                const badge =
+                                  row.kind === "added"
+                                    ? "lifecycle-badge--NEW"
+                                    : "lifecycle-badge--GONE";
+                                return (
+                                  <tr key={`${row.kind}-${row.item.entity_key}`}>
+                                    <td>
+                                      <span className={`lifecycle-badge ${badge}`}>
+                                        {row.kind === "added" ? t("Added") : t("Removed")}
+                                      </span>
+                                    </td>
+                                    <td className="mono">{row.item.entity_key}</td>
+                                    <td>
+                                      <CuriosityBadge
+                                        value={curiosityFromAttrs(row.item.attrs)}
+                                        t={t}
+                                      />
+                                    </td>
+                                    <td>{attrsPreview(row.item.attrs)}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </>

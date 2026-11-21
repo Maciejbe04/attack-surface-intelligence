@@ -88,6 +88,18 @@ def curiosity_rank(level: CuriosityLevel | None) -> int:
     return int(_CURIOSITY_RANK.get(level, 0))
 
 
+def curiosity_to_defectdojo_severity(level: CuriosityLevel | None) -> str:
+    """Map SurfaceX curiosity to DefectDojo Generic Findings severity."""
+    normalized = normalize_curiosity_level(level)
+    if normalized == "high":
+        return "High"
+    if normalized == "medium":
+        return "Medium"
+    if normalized == "low":
+        return "Low"
+    return "Info"
+
+
 def port_curiosity_score(port: int | None) -> CuriosityLevel | None:
     """Return high/medium/low/info for an open port number; None if port unknown."""
     if port is None:

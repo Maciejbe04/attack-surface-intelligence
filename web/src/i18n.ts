@@ -34,6 +34,16 @@ const PL: Record<string, string> = {
   "Skip to main content": "Przejdź do głównej treści",
   "Standard contrast": "Standardowy kontrast",
   "High contrast": "Wysoki kontrast",
+  "Dark mode": "Tryb ciemny",
+  "Light mode": "Tryb jasny",
+  "Switch to dark mode": "Przełącz na tryb ciemny",
+  "Switch to light mode": "Przełącz na tryb jasny",
+  "Add target": "Dodaj cel",
+  "Not on the target list — press Enter to add.":
+    "Brak na liście celów — Enter dodaje od razu.",
+  "No saved host matches. Type a valid IP, CIDR, or hostname.":
+    "Brak pasującego hosta. Wpisz poprawne IP, CIDR lub nazwę hosta.",
+  "Target added from probe.": "Cel dodany z sondy.",
   "Sign out": "Wyloguj się",
   Dismiss: "Zamknij",
   Primary: "Główna",
@@ -101,10 +111,8 @@ const PL: Record<string, string> = {
   "User deleted": "Usunięto użytkownika",
   "User not deleted": "Nie usunięto użytkownika",
   "Could not delete the user.": "Nie udało się usunąć użytkownika.",
-  "Pick a host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
-    "Wybierz host i uruchom moduły rozpoznania. SurfaceX wykonuje wyłącznie bezpieczne sondy — bez logowania, brute force i exploitacji.",
-  "Pick a target group or host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
-    "Wybierz grupę lub host i uruchom moduły rozpoznania. SurfaceX wykonuje wyłącznie bezpieczne sondy — bez logowania, brute force i exploitacji.",
+  "Select a group or a saved host, then run discovery.":
+    "Wybierz grupę albo zapisanego hosta i odpal rozpoznanie.",
   "Add IP addresses, CIDR ranges, or hostnames. Select hosts with checkboxes, then queue a scan or remove them from the working set.":
     "Dodawaj adresy IP, zakresy CIDR i nazwy hostów. Zaznacz hosty, aby uruchomić skan lub usunąć je z zestawu.",
   "Target host": "Host docelowy",
@@ -136,7 +144,6 @@ const PL: Record<string, string> = {
   Modules: "Moduły",
   Status: "Status",
   Queued: "W kolejce",
-  "Add target": "Dodaj cel",
   "Import hosts file": "Import pliku hostów",
   "Host list file": "Plik z listą hostów",
   "TXT: one host per line. CSV/JSON: value/address column. Up to 10 000 hosts. Uses modules selected on the Dashboard.":
@@ -450,6 +457,12 @@ const PL: Record<string, string> = {
   "Overrides survive the next scan. Scanner attrs stay immutable.":
     "Override przeżywa kolejny skan. Atrybuty skanera pozostają niemutowalne.",
   Technology: "Technologia",
+  Ports: "Porty",
+  HTTP: "HTTP",
+  TLS: "TLS",
+  Other: "Inne",
+  "Compare is limited to the same scan modules (TLS vs TLS, HTTP vs HTTP).":
+    "Porównanie tylko przy tych samych modułach (TLS z TLS, HTTP z HTTP).",
   Tags: "Tagi",
   Notes: "Notatki",
   "comma-separated": "oddzielone przecinkami",

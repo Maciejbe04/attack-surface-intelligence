@@ -317,6 +317,14 @@ class PublicScanAPITests(TestCase):
                 "surfacex.technology",
             },
         )
+        by_rule = {
+            finding["vuln_id_from_tool"]: finding for finding in report["findings"]
+        }
+        # Port 443 curiosity → Info; high-confidence tech → Medium
+        self.assertEqual(by_rule["surfacex.open-service"]["severity"], "Info")
+        self.assertIn("Curiosity: info", by_rule["surfacex.open-service"]["description"])
+        self.assertEqual(by_rule["surfacex.technology"]["severity"], "Medium")
+        self.assertEqual(by_rule["surfacex.live-host"]["severity"], "Info")
         self.assertEqual(
             len(
                 {
