@@ -18,9 +18,17 @@ Wymagania: Git oraz Docker Engine/Desktop z Compose (Linux, macOS albo Windows +
 git clone git@github.com:Maciejbe04/attack-surface-intelligence.git
 cd attack-surface-intelligence
 cp .env.example .env
-chmod +x scripts/init-secrets.sh deploy/docker/*.sh
+chmod +x scripts/*.sh deploy/docker/*.sh
 ./scripts/init-secrets.sh
 docker compose up --build
+```
+
+`.env.example` ustawia `COMPOSE_PROFILES=defectdojo`, więc DefectDojo startuje razem ze stosem.
+Jeśli kolega ma stare `.env` bez tej linii, DefectDojo **nie wstanie** mimo działającego Compose — wtedy:
+
+```bash
+./scripts/doctor-defectdojo.sh
+./scripts/start-defectdojo.sh
 ```
 
 UI: [http://localhost:8080](http://localhost:8080) (albo port z `GATEWAY_HTTP_PORT` w `.env`)  
@@ -32,36 +40,27 @@ Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
 
 ### DefectDojo
 
-DefectDojo 3.5.202 działa jako opcjonalny profil i nie startuje przy zwykłym `docker compose up`.
+DefectDojo 3.5.202 jest profilem Compose. Nowe instalacje (`cp .env.example .env`) mają `COMPOSE_PROFILES=defectdojo` i startują DD razem z SurfaceX.
+
+Jeśli Compose działa, a DD nie:
 
 ```bash
-./scripts/init-secrets.sh
-./scripts/start-defectdojo.sh
-```
-
-Albo ręcznie:
-
-```bash
-./scripts/init-secrets.sh
-docker compose --profile defectdojo up -d
+./scripts/doctor-defectdojo.sh   # pokaże dlaczego
+./scripts/start-defectdojo.sh    # sekrety + profil + pull + up
 ```
 
 - UI DefectDojo: [http://localhost:8081](http://localhost:8081)
 - Użytkownik: `admin`
 - Hasło: zawartość lokalnego pliku `secrets/defectdojo_admin_password`
 
-Stałe włączanie profilu: w `.env` ustaw `COMPOSE_PROFILES=defectdojo`.
+Checklist:
 
-Jeśli u kolegi „się nie odpala”, sprawdź kolejno:
-
-1. **Profil** — bez `--profile defectdojo` (albo `COMPOSE_PROFILES`) kontenery DD w ogóle nie powstają.
-2. **Sekrety** — muszą istnieć lokalne pliki z `./scripts/init-secrets.sh` (`secrets/defectdojo_*`). Compose pada, gdy brakuje secret file.
-3. **Pull obrazów** — wymagany dostęp do `registry.defectdojo.com` (`docker pull registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202`).
-4. **Port** — domyślnie `8081`; zajęty port → `DEFECTDOJO_HTTP_PORT` w `.env`.
-5. **Initializer / wolumen** — po nieudanym pierwszym starcie:  
-   `docker compose --profile defectdojo logs defectdojo-initializer`  
-   ewentualnie usuń volume `surfacex_defectdojo_postgres` i odpal `./scripts/start-defectdojo.sh` ponownie.
-6. **RAM** — DD potrzebuje ok. 3–4 GB ponad SurfaceX; w Docker Desktop podnieś limit pamięci.
+1. **Profil** — w `.env` musi być `COMPOSE_PROFILES=defectdojo` albo każde `up` z `--profile defectdojo`.
+2. **Sekrety** — `./scripts/init-secrets.sh` (pliki `secrets/defectdojo_*`).
+3. **Pull** — dostęp do `registry.defectdojo.com`.
+4. **Port** — domyślnie `8081` (`DEFECTDOJO_HTTP_PORT`).
+5. **Initializer** — `docker compose --profile defectdojo logs defectdojo-initializer`; po padnięciu: usuń volume `surfacex_defectdojo_postgres` i odpal `./scripts/start-defectdojo.sh`.
+6. **RAM** — ok. 3–4 GB ponad SurfaceX.
 
 Po zakończeniu skanu SurfaceX automatycznie wysyła aktywne hosty, otwarte usługi i wykryte technologie do DefectDojo jako informacyjne findings (`reimport-scan`). Status wysyłki widać w konsoli aktywności i na liście skanów. Produkt, engagement i test są tworzone automatycznie.
 
