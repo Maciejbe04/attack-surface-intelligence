@@ -414,15 +414,52 @@ class BatchClaimView(WorkerAPIView):
                     source="worker",
                 )
 
+            # Re-check allowlist (incl. DNS → IP) immediately before the worker connects.
+            from .allowlist import AllowlistDenied, assert_resolvable_allowed
+
+            try:
+                resolved = assert_resolvable_allowed(
+                    batch.run.owner,
+                    batch.target_address,
+                    batch.target_type,
+                )
+            except AllowlistDenied as exc:
+                batch.status = ScanBatch.Status.FAILED
+                batch.error = str(exc)
+                batch.finished_at = timezone.now()
+                batch.save(
+                    update_fields=("status", "error", "finished_at", "updated_at")
+                )
+                append_scan_event(
+                    batch.run,
+                    f"Allowlist denied {batch.target_address}: {exc}",
+                    batch=batch,
+                    level="error",
+                    source="api",
+                )
+                _aggregate_run(batch.run)
+                return Response(
+                    {
+                        "terminal": True,
+                        "status": batch.status,
+                        "cancel_requested": False,
+                        "detail": str(exc),
+                    }
+                )
+
+            target_payload = {
+                "address": batch.target_address,
+                "type": batch.target_type,
+            }
+            if resolved:
+                target_payload["resolved_ips"] = resolved
+
             return Response(
                 {
                     "terminal": False,
                     "batch_id": batch.pk,
                     "delivery_id": str(batch.delivery_id),
-                    "target": {
-                        "address": batch.target_address,
-                        "type": batch.target_type,
-                    },
+                    "target": target_payload,
                     "modules": batch.run.modules_snapshot,
                 }
             )

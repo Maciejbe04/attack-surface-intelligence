@@ -2251,7 +2251,14 @@ export function App() {
             </>
           )}
 
-          {nav === "system" && <SystemPanel active isAdmin={user?.role === "admin"} t={t} />}
+          {nav === "system" && (
+            <SystemPanel
+              active
+              isAdmin={user?.role === "admin"}
+              canManageAllowlist={user?.role === "admin" || user?.role === "operator"}
+              t={t}
+            />
+          )}
         </main>
       </div>
 

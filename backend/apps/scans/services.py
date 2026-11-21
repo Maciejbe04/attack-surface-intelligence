@@ -78,6 +78,17 @@ def queue_scan_for_targets(
     if not targets:
         raise ValueError("At least one target is required.")
 
+    from .allowlist import AllowlistDenied, filter_allowed_targets
+
+    allowed, rejected = filter_allowed_targets(owner, targets)
+    if rejected:
+        sample = ", ".join(rejected[:8])
+        more = f" (+{len(rejected) - 8} more)" if len(rejected) > 8 else ""
+        raise AllowlistDenied(
+            f"{len(rejected)} target(s) outside allowlist: {sample}{more}"
+        )
+    targets = allowed
+
     with transaction.atomic():
         if client_request_id:
             existing = (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import {
   apiErrorMessage,
   downloadScanExport,
@@ -7,6 +7,7 @@ import {
   ObservationLifecycle,
   resumeScan,
   Scan,
+  upsertOverride,
 } from "./api/scans";
 import { Translate } from "./i18n";
 
@@ -120,6 +121,68 @@ export function FindingsPanel({
     }
   }
 
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editTech, setEditTech] = useState("");
+
+  function openOverride(row: Observation) {
+    setEditingKey(row.entity_key);
+    setEditNotes(row.notes || "");
+    setEditTags((row.tags || []).join(", "));
+    const attrs = row.effective_attrs || row.attrs || {};
+    setEditTech(attrs.technology != null ? String(attrs.technology) : "");
+  }
+
+  async function onSaveOverride(event: FormEvent) {
+    event.preventDefault();
+    if (!editingKey || !canExport) return;
+    const row = rows.find((item) => item.entity_key === editingKey);
+    if (!row) return;
+    setBusy(true);
+    try {
+      const tags = editTags
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const attrs_patch: Record<string, unknown> = {};
+      if (editTech.trim()) attrs_patch.technology = editTech.trim();
+      const updated = await upsertOverride({
+        entity_key: row.entity_key,
+        target_address: row.target_address,
+        tags,
+        notes: editNotes,
+        attrs_patch,
+      });
+      setRows((prev) =>
+        prev.map((item) =>
+          item.entity_key === row.entity_key
+            ? {
+                ...item,
+                override: updated,
+                tags: updated.tags,
+                notes: updated.notes,
+                effective_attrs: {
+                  ...(item.attrs || {}),
+                  ...(updated.attrs_patch || {}),
+                },
+              }
+            : item,
+        ),
+      );
+      setEditingKey(null);
+      pushToast("ok", t("Override saved"), row.entity_key);
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Override not saved"),
+        apiErrorMessage(error, t("Could not save the override.")),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel__header">
@@ -199,11 +262,12 @@ export function FindingsPanel({
                       <th scope="col">{t("Type")}</th>
                       <th scope="col">{t("Entity")}</th>
                       <th scope="col">{t("Details")}</th>
+                      <th scope="col">{t("Override")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.slice(0, 200).map((row) => (
-                      <tr key={row.id}>
+                      <tr key={row.id} className={editingKey === row.entity_key ? "is-selected" : undefined}>
                         <td>
                           <span className={`lifecycle-badge lifecycle-badge--${row.lifecycle}`}>
                             {row.lifecycle}
@@ -211,12 +275,89 @@ export function FindingsPanel({
                         </td>
                         <td className="mono">{row.entity_type}</td>
                         <td className="mono">{row.entity_key}</td>
-                        <td>{attrsPreview(row.attrs)}</td>
+                        <td>
+                          {attrsPreview(row.effective_attrs || row.attrs)}
+                          {(row.tags?.length || row.notes) && (
+                            <div className="field-help">
+                              {row.tags?.length ? `${t("Tags")}: ${row.tags.join(", ")}` : ""}
+                              {row.tags?.length && row.notes ? " · " : ""}
+                              {row.notes ? `${t("Notes")}: ${row.notes}` : ""}
+                            </div>
+                          )}
+                        </td>
+                        <td className="scan-actions">
+                          {canExport && (
+                            <button
+                              type="button"
+                              className="btn btn--normal"
+                              disabled={busy}
+                              onClick={() => openOverride(row)}
+                            >
+                              {row.override ? t("Edit override") : t("Add override")}
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            )}
+            {canExport && editingKey && (
+              <form className="panel panel--nested" onSubmit={onSaveOverride}>
+                <div className="panel__header">
+                  <h3>
+                    {t("Manual override")}: <span className="mono">{editingKey}</span>
+                  </h3>
+                </div>
+                <div className="panel__body">
+                  <p className="field-help">
+                    {t("Overrides survive the next scan. Scanner attrs stay immutable.")}
+                  </p>
+                  <div className="form-row">
+                    <label htmlFor="override-tech">{t("Technology")}</label>
+                    <input
+                      id="override-tech"
+                      value={editTech}
+                      onChange={(e) => setEditTech(e.target.value)}
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="override-tags">{t("Tags")}</label>
+                    <input
+                      id="override-tags"
+                      value={editTags}
+                      onChange={(e) => setEditTags(e.target.value)}
+                      placeholder={t("comma-separated")}
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="override-notes">{t("Notes")}</label>
+                    <textarea
+                      id="override-notes"
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      rows={3}
+                      disabled={busy}
+                    />
+                  </div>
+                  <div className="scan-actions">
+                    <button type="submit" className="btn btn--primary" disabled={busy}>
+                      {busy ? t("Saving…") : t("Save override")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--normal"
+                      disabled={busy}
+                      onClick={() => setEditingKey(null)}
+                    >
+                      {t("Cancel")}
+                    </button>
+                  </div>
+                </div>
+              </form>
             )}
           </>
         )}

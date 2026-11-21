@@ -82,6 +82,26 @@ urlpatterns = [
         name="audit-list",
     ),
     path(
+        "overrides/",
+        views.ManualOverrideUpsertView.as_view(),
+        name="override-upsert",
+    ),
+    path(
+        "overrides/<int:override_id>/",
+        views.ManualOverrideDetailView.as_view(),
+        name="override-detail",
+    ),
+    path(
+        "allowlist/",
+        views.AllowlistListCreateView.as_view(),
+        name="allowlist-list",
+    ),
+    path(
+        "allowlist/<int:entry_id>/",
+        views.AllowlistDetailView.as_view(),
+        name="allowlist-detail",
+    ),
+    path(
         "internal/batches/reconcile/",
         internal_views.BatchReconcileView.as_view(),
         name="internal-batch-reconcile",

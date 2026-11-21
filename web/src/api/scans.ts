@@ -94,6 +94,15 @@ export type ObservationLifecycle =
   | "GONE"
   | "UNCHANGED";
 
+export type ObservationOverride = {
+  id: number;
+  entity_key: string;
+  tags: string[];
+  notes: string;
+  attrs_patch: Record<string, unknown>;
+  updated_at: string;
+};
+
 export type Observation = {
   id: number;
   entity_type: string;
@@ -101,9 +110,23 @@ export type Observation = {
   lifecycle: ObservationLifecycle;
   target_address: string;
   attrs: Record<string, unknown>;
+  effective_attrs?: Record<string, unknown>;
+  tags?: string[];
+  notes?: string;
+  override?: ObservationOverride | null;
   source: string;
   miss_streak: number;
   evidence: Array<{ id: number; kind: string; summary: string; encrypted: boolean }>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AllowlistEntry = {
+  id: number;
+  value: string;
+  type: "ip" | "cidr" | "domain";
+  enabled: boolean;
+  comment: string;
   created_at: string;
   updated_at: string;
 };
@@ -501,6 +524,50 @@ export function listObservations(
 
 export function listAudit(signal?: AbortSignal): Promise<{ results: AuditEvent[] }> {
   return request<{ results: AuditEvent[] }>("/api/audit/", { signal });
+}
+
+export function upsertOverride(
+  payload: {
+    entity_key: string;
+    target_address?: string;
+    tags?: string[];
+    notes?: string;
+    attrs_patch?: Record<string, unknown>;
+  },
+  signal?: AbortSignal,
+): Promise<ObservationOverride> {
+  return request<ObservationOverride>("/api/overrides/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    signal,
+  });
+}
+
+export function deleteOverride(id: number, signal?: AbortSignal): Promise<void> {
+  return request<void>(`/api/overrides/${id}/`, { method: "DELETE", signal });
+}
+
+export function listAllowlist(
+  signal?: AbortSignal,
+): Promise<{ enforced: boolean; results: AllowlistEntry[] }> {
+  return request<{ enforced: boolean; results: AllowlistEntry[] }>("/api/allowlist/", {
+    signal,
+  });
+}
+
+export function createAllowlistEntry(
+  entry: { value: string; type: AllowlistEntry["type"]; comment?: string },
+  signal?: AbortSignal,
+): Promise<AllowlistEntry> {
+  return request<AllowlistEntry>("/api/allowlist/", {
+    method: "POST",
+    body: JSON.stringify(entry),
+    signal,
+  });
+}
+
+export function deleteAllowlistEntry(id: number, signal?: AbortSignal): Promise<void> {
+  return request<void>(`/api/allowlist/${id}/`, { method: "DELETE", signal });
 }
 
 export async function downloadScanExport(

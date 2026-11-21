@@ -42,12 +42,25 @@ from .events import append_scan_event
 from .export import export_csv_bytes, export_json_bytes, import_observations_payload
 from .import_targets import MAX_IMPORT_TARGETS, parse_import_payload
 from .groups import add_targets_to_group, get_or_create_group, normalize_group_name
-from .models import AuditLog, ScanBatch, ScanEvent, ScanRun, Target, TargetGroup
+from .allowlist import AllowlistDenied
+from .models import (
+    AllowlistEntry,
+    AuditLog,
+    ManualOverride,
+    ScanBatch,
+    ScanEvent,
+    ScanRun,
+    Target,
+    TargetGroup,
+)
 from .modules import validate_modules
 from .normalize import diff_runs, previous_completed_run
+from .overrides import overrides_for_keys
 from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
+    AllowlistEntrySerializer,
     AuditLogSerializer,
+    ManualOverrideSerializer,
     ObservationSerializer,
     ScanCreateSerializer,
     ScanRunListSerializer,
@@ -254,6 +267,27 @@ class TargetImportView(APIView):
         }
         existing_addresses = set(existing_by_address)
 
+        from .allowlist import is_value_allowed
+
+        rejected_import = [
+            item.address
+            for item in parsed.targets
+            if item.address not in existing_addresses
+            and not is_value_allowed(owner, item.address, item.target_type)
+        ]
+        if rejected_import:
+            sample = ", ".join(rejected_import[:8])
+            more = f" (+{len(rejected_import) - 8} more)" if len(rejected_import) > 8 else ""
+            return Response(
+                {
+                    "detail": (
+                        f"{len(rejected_import)} imported target(s) outside allowlist: "
+                        f"{sample}{more}"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         to_create = [
             Target(
                 owner=owner,
@@ -308,13 +342,16 @@ class TargetImportView(APIView):
 
         scan_payload = None
         if start_scan and all_targets:
-            run, _created = queue_scan_for_targets(
-                owner=owner,
-                targets=all_targets,
-                modules=modules,
-                client_request_id=client_request_id,
-                group=import_group,
-            )
+            try:
+                run, _created = queue_scan_for_targets(
+                    owner=owner,
+                    targets=all_targets,
+                    modules=modules,
+                    client_request_id=client_request_id,
+                    group=import_group,
+                )
+            except AllowlistDenied as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             run = (
                 ScanRun.objects.prefetch_related("batches", "events__batch")
                 .get(pk=run.pk)
@@ -365,13 +402,16 @@ class ScanListCreateView(APIView):
         serializer = ScanCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         client_request_id = serializer.validated_data.get("client_request_id", "")
-        run, created = queue_scan_for_targets(
-            owner=request.user,
-            targets=serializer.context["targets"],
-            modules=serializer.validated_data["modules"],
-            client_request_id=client_request_id,
-            window_seconds=serializer.validated_data.get("window_seconds"),
-        )
+        try:
+            run, created = queue_scan_for_targets(
+                owner=request.user,
+                targets=serializer.context["targets"],
+                modules=serializer.validated_data["modules"],
+                client_request_id=client_request_id,
+                window_seconds=serializer.validated_data.get("window_seconds"),
+            )
+        except AllowlistDenied as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         run = (
             ScanRun.objects.prefetch_related("batches", "events__batch")
             .get(pk=run.pk)
@@ -573,12 +613,21 @@ class ScanObservationsView(APIView):
         entity_type = request.query_params.get("entity_type", "").strip().lower()
         if entity_type:
             qs = qs.filter(entity_type=entity_type)
+        rows = list(qs[:2000])
+        override_map = overrides_for_keys(
+            request.user,
+            [row.entity_key for row in rows],
+        )
         return Response(
             {
                 "run_id": run.pk,
                 "count": qs.count(),
                 "lifecycle_summary": (run.result_summary or {}).get("lifecycle") or {},
-                "results": ObservationSerializer(qs[:2000], many=True).data,
+                "results": ObservationSerializer(
+                    rows,
+                    many=True,
+                    context={"request": request, "override_map": override_map},
+                ).data,
             }
         )
 
@@ -801,3 +850,118 @@ class AuditLogListView(APIView):
             )
         qs = AuditLog.objects.select_related("actor").order_by("-id")[:200]
         return Response({"results": AuditLogSerializer(qs, many=True).data})
+
+
+class ManualOverrideUpsertView(APIView):
+    """Create/update a durable override by entity_key (survives rescans)."""
+
+    permission_classes = (IsAuthenticated, CanExportFindings)
+
+    def post(self, request: Request) -> Response:
+        serializer = ManualOverrideSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        override = serializer.save()
+        record_audit(
+            actor=request.user,
+            action="override.upsert",
+            object_type="override",
+            object_id=override.pk,
+            summary=f"Override {override.entity_key}",
+        )
+        return Response(serializer.to_representation(override))
+
+
+class ManualOverrideDetailView(APIView):
+    permission_classes = (IsAuthenticated, CanExportFindings)
+
+    def delete(self, request: Request, override_id: int) -> Response:
+        override = get_object_or_404(
+            ManualOverride.objects.filter(owner=request.user),
+            pk=override_id,
+        )
+        key = override.entity_key
+        override.delete()
+        record_audit(
+            actor=request.user,
+            action="override.delete",
+            object_type="override",
+            object_id=override_id,
+            summary=f"Removed override {key}",
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AllowlistListCreateView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsAdminOrOperator()]
+        return super().get_permissions()
+
+    def get(self, request: Request) -> Response:
+        qs = AllowlistEntry.objects.filter(owner=request.user).order_by("value", "id")
+        enforced = qs.filter(enabled=True).exists()
+        return Response(
+            {
+                "enforced": enforced,
+                "results": AllowlistEntrySerializer(qs[:500], many=True).data,
+            }
+        )
+
+    def post(self, request: Request) -> Response:
+        serializer = AllowlistEntrySerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        entry = serializer.save()
+        record_audit(
+            actor=request.user,
+            action="allowlist.create",
+            object_type="allowlist",
+            object_id=entry.pk,
+            summary=f"Allowlisted {entry.value}",
+        )
+        return Response(
+            AllowlistEntrySerializer(entry).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AllowlistDetailView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminOrOperator)
+
+    def patch(self, request: Request, entry_id: int) -> Response:
+        entry = get_object_or_404(
+            AllowlistEntry.objects.filter(owner=request.user), pk=entry_id
+        )
+        serializer = AllowlistEntrySerializer(
+            entry, data=request.data, partial=True, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        entry = serializer.save()
+        record_audit(
+            actor=request.user,
+            action="allowlist.update",
+            object_type="allowlist",
+            object_id=entry.pk,
+            summary=f"Updated allowlist {entry.value}",
+        )
+        return Response(AllowlistEntrySerializer(entry).data)
+
+    def delete(self, request: Request, entry_id: int) -> Response:
+        entry = get_object_or_404(
+            AllowlistEntry.objects.filter(owner=request.user), pk=entry_id
+        )
+        value = entry.value
+        entry.delete()
+        record_audit(
+            actor=request.user,
+            action="allowlist.delete",
+            object_type="allowlist",
+            object_id=entry_id,
+            summary=f"Removed allowlist {value}",
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

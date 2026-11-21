@@ -1,5 +1,13 @@
-import { useEffect, useState } from "react";
-import { AuditEvent, listAudit } from "./api/scans";
+import { FormEvent, useEffect, useState } from "react";
+import {
+  AllowlistEntry,
+  apiErrorMessage,
+  AuditEvent,
+  createAllowlistEntry,
+  deleteAllowlistEntry,
+  listAllowlist,
+  listAudit,
+} from "./api/scans";
 import { apiFetch } from "./auth";
 import { Translate } from "./i18n";
 import { APP_NAME, APP_VERSION } from "./version";
@@ -47,6 +55,7 @@ export type SystemInfo = {
 type Props = {
   active: boolean;
   isAdmin?: boolean;
+  canManageAllowlist?: boolean;
   t: Translate;
 };
 
@@ -56,11 +65,22 @@ function statusLabel(status: string, t: Translate): string {
   return status;
 }
 
-export function SystemPanel({ active, isAdmin = false, t }: Props) {
+export function SystemPanel({
+  active,
+  isAdmin = false,
+  canManageAllowlist = false,
+  t,
+}: Props) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [allowlist, setAllowlist] = useState<AllowlistEntry[]>([]);
+  const [allowlistEnforced, setAllowlistEnforced] = useState(false);
+  const [allowValue, setAllowValue] = useState("");
+  const [allowType, setAllowType] = useState<AllowlistEntry["type"]>("cidr");
+  const [allowBusy, setAllowBusy] = useState(false);
+  const [allowRefresh, setAllowRefresh] = useState(0);
 
   useEffect(() => {
     if (!active) return;
@@ -101,6 +121,55 @@ export function SystemPanel({ active, isAdmin = false, t }: Props) {
       });
     return () => controller.abort();
   }, [active, isAdmin]);
+
+  useEffect(() => {
+    if (!active) {
+      setAllowlist([]);
+      return;
+    }
+    const controller = new AbortController();
+    listAllowlist(controller.signal)
+      .then((payload) => {
+        if (controller.signal.aborted) return;
+        setAllowlist(payload.results);
+        setAllowlistEnforced(payload.enforced);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setAllowlist([]);
+          setAllowlistEnforced(false);
+        }
+      });
+    return () => controller.abort();
+  }, [active, allowRefresh]);
+
+  async function onAddAllowlist(event: FormEvent) {
+    event.preventDefault();
+    if (!canManageAllowlist || !allowValue.trim() || allowBusy) return;
+    setAllowBusy(true);
+    try {
+      await createAllowlistEntry({ value: allowValue.trim(), type: allowType });
+      setAllowValue("");
+      setAllowRefresh((value) => value + 1);
+    } catch (err) {
+      setError(apiErrorMessage(err, t("Could not add allowlist entry.")));
+    } finally {
+      setAllowBusy(false);
+    }
+  }
+
+  async function onDeleteAllowlist(id: number) {
+    if (!canManageAllowlist || allowBusy) return;
+    setAllowBusy(true);
+    try {
+      await deleteAllowlistEntry(id);
+      setAllowRefresh((value) => value + 1);
+    } catch (err) {
+      setError(apiErrorMessage(err, t("Could not remove allowlist entry.")));
+    } finally {
+      setAllowBusy(false);
+    }
+  }
 
   if (!active) return null;
 
@@ -180,6 +249,86 @@ export function SystemPanel({ active, isAdmin = false, t }: Props) {
                   </li>
                 ))}
               </ul>
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel__header">
+              <h2>{t("Allowlist")}</h2>
+              <span className={`status-badge ${allowlistEnforced ? "status-badge--completed" : "status-badge--cancelled"}`}>
+                {allowlistEnforced ? t("Enforced") : t("Open (empty)")}
+              </span>
+            </div>
+            <div className="panel__body">
+              <p className="field-help" style={{ marginTop: 0 }}>
+                {t(
+                  "When at least one entry is enabled, scans and new targets must match IP/CIDR/domain. Domains are re-checked after DNS resolution.",
+                )}
+              </p>
+              {canManageAllowlist && (
+                <form className="form-row" onSubmit={onAddAllowlist}>
+                  <label htmlFor="allowlist-value">{t("Add entry")}</label>
+                  <div className="scan-actions" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <select
+                      className="input input--select"
+                      value={allowType}
+                      onChange={(e) => setAllowType(e.target.value as AllowlistEntry["type"])}
+                      disabled={allowBusy}
+                    >
+                      <option value="cidr">CIDR</option>
+                      <option value="ip">IP</option>
+                      <option value="domain">{t("Domain")}</option>
+                    </select>
+                    <input
+                      id="allowlist-value"
+                      value={allowValue}
+                      onChange={(e) => setAllowValue(e.target.value)}
+                      placeholder="192.0.2.0/24 or lab.example"
+                      disabled={allowBusy}
+                      required
+                    />
+                    <button type="submit" className="btn btn--primary" disabled={allowBusy || !allowValue.trim()}>
+                      {t("Add")}
+                    </button>
+                  </div>
+                </form>
+              )}
+              {allowlist.length === 0 ? (
+                <p className="field-help">{t("No allowlist entries — all saved targets may be scanned.")}</p>
+              ) : (
+                <div className="table-wrap">
+                  <table className="hosts">
+                    <caption className="sr-only">{t("Allowlist")}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">{t("Value")}</th>
+                        <th scope="col">{t("Type")}</th>
+                        <th scope="col">{t("Actions")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allowlist.map((entry) => (
+                        <tr key={entry.id}>
+                          <td className="mono">{entry.value}</td>
+                          <td className="mono">{entry.type}</td>
+                          <td className="scan-actions">
+                            {canManageAllowlist && (
+                              <button
+                                type="button"
+                                className="btn btn--danger"
+                                disabled={allowBusy}
+                                onClick={() => void onDeleteAllowlist(entry.id)}
+                              >
+                                {t("Delete")}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </section>
 

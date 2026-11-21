@@ -388,3 +388,73 @@ class AuditLog(models.Model):
 
     def __str__(self) -> str:
         return f"audit:{self.pk}:{self.action}"
+
+
+class ManualOverride(models.Model):
+    """Analyst correction keyed by entity_key — survives rescans."""
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="manual_overrides",
+    )
+    entity_key = models.CharField(max_length=512, db_index=True)
+    target_address = models.CharField(max_length=255, blank=True, default="")
+    tags = models.JSONField(default=list, blank=True)
+    notes = models.TextField(blank=True, default="")
+    notes_ciphertext = models.TextField(blank=True, default="")
+    attrs_patch = models.JSONField(default=dict, blank=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "entity_key"),
+                name="scans_manualoverride_owner_key_uniq",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"override:{self.owner_id}:{self.entity_key}"
+
+
+class AllowlistEntry(models.Model):
+    """Approved scan destinations (IP / CIDR / domain) per owner."""
+
+    class EntryType(models.TextChoices):
+        IP = "ip", "IP address"
+        CIDR = "cidr", "CIDR range"
+        DOMAIN = "domain", "Domain"
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="allowlist_entries",
+    )
+    value = models.CharField(max_length=255)
+    entry_type = models.CharField(max_length=16, choices=EntryType.choices)
+    enabled = models.BooleanField(default=True)
+    comment = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("value", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "value"),
+                name="scans_allowlist_owner_value_uniq",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"allowlist:{self.value}"

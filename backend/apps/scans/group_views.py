@@ -147,14 +147,19 @@ class GroupScanView(APIView):
                 {"detail": f"A group scan is limited to {MAX_GROUP_SCAN_TARGETS} targets."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        run, created = queue_scan_for_targets(
-            owner=group.owner,
-            targets=targets,
-            modules=serializer.validated_data["modules"],
-            client_request_id=serializer.validated_data.get("client_request_id", ""),
-            group=group,
-            window_seconds=serializer.validated_data.get("window_seconds"),
-        )
+        from .allowlist import AllowlistDenied
+
+        try:
+            run, created = queue_scan_for_targets(
+                owner=group.owner,
+                targets=targets,
+                modules=serializer.validated_data["modules"],
+                client_request_id=serializer.validated_data.get("client_request_id", ""),
+                group=group,
+                window_seconds=serializer.validated_data.get("window_seconds"),
+            )
+        except AllowlistDenied as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         run = ScanRun.objects.select_related("group").prefetch_related(
             "batches", "events__batch"
         ).get(pk=run.pk)

@@ -5,10 +5,14 @@ from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework import serializers
 
+from .allowlist import AllowlistDenied, assert_target_allowed
 from .groups import compute_next_run, normalize_group_name
+from .overrides import effective_attrs, notes_plaintext, overrides_for_keys, store_notes
 from .models import (
+    AllowlistEntry,
     AuditLog,
     GroupSchedule,
+    ManualOverride,
     Observation,
     ScanBatch,
     ScanEvent,
@@ -53,6 +57,12 @@ class TargetSerializer(serializers.ModelSerializer):
             attrs["address"] = normalize_target(address, target_type)
         except ValueError as exc:
             raise serializers.ValidationError({"address": str(exc)}) from exc
+        request = self.context.get("request")
+        if request and getattr(request, "user", None):
+            try:
+                assert_target_allowed(request.user, attrs["address"], target_type)
+            except AllowlistDenied as exc:
+                raise serializers.ValidationError({"address": str(exc)}) from exc
         return attrs
 
     def create(self, validated_data: dict) -> Target:
@@ -161,6 +171,22 @@ class ScanRunListSerializer(ScanRunSerializer):
 
 class ObservationSerializer(serializers.ModelSerializer):
     evidence = serializers.SerializerMethodField()
+    override = serializers.SerializerMethodField()
+    effective_attrs = serializers.SerializerMethodField()
+    tags = serializers.SerializerMethodField()
+    notes = serializers.SerializerMethodField()
+
+    def _override_for(self, instance: Observation) -> ManualOverride | None:
+        mapping = self.context.get("override_map")
+        if mapping is None:
+            request = self.context.get("request")
+            owner = getattr(request, "user", None) if request else None
+            if owner and owner.is_authenticated:
+                mapping = overrides_for_keys(owner, [instance.entity_key])
+            else:
+                mapping = {}
+            self.context["override_map"] = mapping
+        return mapping.get(instance.entity_key)
 
     def get_evidence(self, instance: Observation) -> list[dict]:
         return [
@@ -173,6 +199,30 @@ class ObservationSerializer(serializers.ModelSerializer):
             for item in instance.evidence.all()[:10]
         ]
 
+    def get_override(self, instance: Observation) -> dict | None:
+        override = self._override_for(instance)
+        if not override:
+            return None
+        return {
+            "id": override.pk,
+            "entity_key": override.entity_key,
+            "tags": override.tags or [],
+            "notes": notes_plaintext(override),
+            "attrs_patch": override.attrs_patch or {},
+            "updated_at": override.updated_at,
+        }
+
+    def get_effective_attrs(self, instance: Observation) -> dict:
+        return effective_attrs(instance.attrs or {}, self._override_for(instance))
+
+    def get_tags(self, instance: Observation) -> list:
+        override = self._override_for(instance)
+        return list(override.tags or []) if override else []
+
+    def get_notes(self, instance: Observation) -> str:
+        override = self._override_for(instance)
+        return notes_plaintext(override) if override else ""
+
     class Meta:
         model = Observation
         fields = (
@@ -182,6 +232,10 @@ class ObservationSerializer(serializers.ModelSerializer):
             "lifecycle",
             "target_address",
             "attrs",
+            "effective_attrs",
+            "tags",
+            "notes",
+            "override",
             "source",
             "miss_streak",
             "evidence",
@@ -360,3 +414,92 @@ class GroupScanSerializer(serializers.Serializer):
 
     def validate_modules(self, value: object) -> list[dict]:
         return validate_modules(value)
+
+
+class ManualOverrideSerializer(serializers.Serializer):
+    entity_key = serializers.CharField(max_length=512)
+    target_address = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, default=""
+    )
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=64),
+        required=False,
+        allow_empty=True,
+        max_length=32,
+    )
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+    attrs_patch = serializers.DictField(required=False, default=dict)
+
+    def create(self, validated_data: dict) -> ManualOverride:
+        owner = self.context["request"].user
+        entity_key = validated_data["entity_key"].strip()
+        override, _ = ManualOverride.objects.get_or_create(
+            owner=owner,
+            entity_key=entity_key,
+            defaults={
+                "target_address": validated_data.get("target_address", ""),
+                "updated_by": owner,
+            },
+        )
+        if "tags" in validated_data:
+            override.tags = validated_data["tags"]
+        if "attrs_patch" in validated_data:
+            override.attrs_patch = validated_data["attrs_patch"] or {}
+        if "target_address" in validated_data:
+            override.target_address = validated_data.get("target_address") or ""
+        if "notes" in validated_data:
+            store_notes(override, validated_data.get("notes") or "")
+        override.updated_by = owner
+        override.save()
+        return override
+
+    def to_representation(self, instance: ManualOverride) -> dict:
+        return {
+            "id": instance.pk,
+            "entity_key": instance.entity_key,
+            "target_address": instance.target_address,
+            "tags": instance.tags or [],
+            "notes": notes_plaintext(instance),
+            "attrs_patch": instance.attrs_patch or {},
+            "updated_at": instance.updated_at,
+            "created_at": instance.created_at,
+        }
+
+
+class AllowlistEntrySerializer(serializers.ModelSerializer):
+    type = serializers.ChoiceField(
+        source="entry_type", choices=AllowlistEntry.EntryType.choices
+    )
+
+    class Meta:
+        model = AllowlistEntry
+        fields = (
+            "id",
+            "value",
+            "type",
+            "enabled",
+            "comment",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "created_at", "updated_at")
+
+    def validate(self, attrs: dict) -> dict:
+        entry_type = attrs.get(
+            "entry_type", getattr(self.instance, "entry_type", None)
+        )
+        value = attrs.get("value", getattr(self.instance, "value", ""))
+        try:
+            attrs["value"] = normalize_target(value, entry_type)
+        except ValueError as exc:
+            raise serializers.ValidationError({"value": str(exc)}) from exc
+        return attrs
+
+    def create(self, validated_data: dict) -> AllowlistEntry:
+        validated_data["owner"] = self.context["request"].user
+        try:
+            return super().create(validated_data)
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {"value": "This allowlist entry already exists."}
+            ) from exc

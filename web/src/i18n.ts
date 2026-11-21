@@ -371,6 +371,32 @@ const PL: Record<string, string> = {
     "Edytuj harmonogram",
   "Rename":
     "Zmień nazwę",
+  Allowlist: "Allowlista",
+  Enforced: "Wymuszona",
+  "Open (empty)": "Otwarta (pusta)",
+  "When at least one entry is enabled, scans and new targets must match IP/CIDR/domain. Domains are re-checked after DNS resolution.":
+    "Gdy jest co najmniej jeden wpis, nowe cele i skany muszą pasować do IP/CIDR/domeny. Domeny są ponownie sprawdzane po DNS.",
+  "Add entry": "Dodaj wpis",
+  "No allowlist entries — all saved targets may be scanned.":
+    "Brak wpisów allowlisty — można skanować wszystkie zapisane cele.",
+  "Could not add allowlist entry.": "Nie udało się dodać wpisu allowlisty.",
+  "Could not remove allowlist entry.": "Nie udało się usunąć wpisu allowlisty.",
+  Override: "Override",
+  "Add override": "Dodaj override",
+  "Edit override": "Edytuj override",
+  "Manual override": "Ręczny override",
+  "Overrides survive the next scan. Scanner attrs stay immutable.":
+    "Override przeżywa kolejny skan. Atrybuty skanera pozostają niemutowalne.",
+  Technology: "Technologia",
+  Tags: "Tagi",
+  Notes: "Notatki",
+  "comma-separated": "oddzielone przecinkami",
+  "Save override": "Zapisz override",
+  "Override saved": "Zapisano override",
+  "Override not saved": "Nie zapisano override",
+  "Could not save the override.": "Nie udało się zapisać override.",
+  Domain: "Domena",
+  Value: "Wartość",
   "Save":
     "Zapisz",
   "Saving…":
