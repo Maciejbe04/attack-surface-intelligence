@@ -32,9 +32,15 @@ Pending MFA token żyje 5 minut w Redis (cache).
 docker compose exec api python manage.py bootstrap_admin --username admin --enable-mfa
 ```
 
-Komenda wypisze `secret=` oraz `otpauth=` — dodaj do aplikacji authenticator. Secret pokazywany jest raz.
+Komenda wypisze `secret=` oraz `otpauth=` — dodaj do Authenticatora (Google / 1Password / Authy) jako nowe konto TOTP. Secret pokazywany jest raz.
 
-Domyślne konto lokalne (bez MFA):
+Logowanie:
+
+1. http://localhost:18080 (lub port z `.env`)
+2. `admin` / `changeme`
+3. 6-cyfrowy kod z aplikacji
+
+Domyślne konto lokalne:
 
 - user: `admin`
 - password: `changeme` (zmień w `.env`: `BOOTSTRAP_ADMIN_PASSWORD`)
