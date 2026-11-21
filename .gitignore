@@ -1,0 +1,50 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+secrets/*
+!secrets/.gitkeep
+!secrets/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+backend/.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node / frontend build artifacts — never commit bundles
+web/node_modules/
+web/dist/
+web/build/
+web/.vite/
+web/coverage/
+*.tsbuildinfo
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker / local runtime
+*.log
+tmp/
+.cache/
+
+# Backups produced locally
+backups/
+*.sql.gz
+*.dump

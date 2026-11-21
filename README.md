@@ -6,49 +6,65 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 ## Status
 
-Projekt jest w fazie dokumentacji i projektowania MVP. Kod aplikacji oraz `compose.yml` nie są jeszcze dostępne. Ten commit opisuje zakres, architekturę i kontrakty potrzebne do implementacji.
+Scaffold Docker Compose jest gotowy: gateway, web (React), API (Django), Celery beat/worker, PostgreSQL, Redis i backup. Logika skanowania MVP jest jeszcze w budowie; UI ma ekran startowy z healthcheckiem API.
 
-## Cel MVP
+## Szybki start
 
-- bezpieczne skanowanie zakresów powyżej 10 000 adresów;
-- discovery nmap oraz fingerprinting HTTP/TLS przez ProjectDiscovery httpx;
-- deklaratywne sygnatury i confidence score;
-- historia zmian `NEW/CHANGED/MISSING/FLAKY/GONE`;
-- RBAC, trwałe overrides i szyfrowanie danych wrażliwych;
-- lokalne uruchomienie przez Docker Compose na `linux/amd64` i `linux/arm64`, także na Windows Docker Desktop (WSL2).
-
-## Stos
-
-| Warstwa | Technologia |
-|---|---|
-| API | Python / Django / Django REST Framework |
-| Scheduler / worker | Celery |
-| UI | React / TypeScript |
-| Dane | PostgreSQL |
-| Kolejka i sesje | Redis |
-| Discovery | nmap |
-| HTTP / TLS fingerprint | ProjectDiscovery httpx |
-| Uruchomienie | Docker Compose |
-
-## Planowane uruchomienie
-
-Po pojawieniu się `compose.yml` świeża instalacja będzie wymagała wyłącznie:
-
-- Git;
-- Docker Engine z Compose albo Docker Desktop (Linux, macOS lub Windows z WSL2);
-- minimalnej ilości RAM i miejsca opisanej w dokumentacji operacyjnej.
-
-Docelowa sekwencja:
+Wymagania: Git oraz Docker Engine/Desktop z Compose (Linux, macOS albo Windows + WSL2).
 
 ```bash
-git clone <repo>
+git clone git@github.com:Maciejbe04/attack-surface-intelligence.git
 cd attack-surface-intelligence
 cp .env.example .env
+chmod +x scripts/init-secrets.sh deploy/docker/*.sh
 ./scripts/init-secrets.sh
 docker compose up --build
 ```
 
-Do czasu implementacji Compose powyższe komendy nie działają. Szczegóły architektury i polityk są w `docs/`.
+UI: [http://localhost:8080](http://localhost:8080)  
+API health: [http://localhost:8080/api/health/](http://localhost:8080/api/health/)
+
+Zatrzymanie bez usuwania wolumenów:
+
+```bash
+docker compose down
+```
+
+## Build
+
+| Cel | Komenda |
+|---|---|
+| Cały stos lokalnie | `docker compose up --build` |
+| Tylko build obrazów | `docker compose build` |
+| Multi-arch Bake | `docker buildx bake` |
+
+Obrazy:
+
+- `surfacex-gateway` — jedyny publikowany port (`GATEWAY_HTTP_PORT`, domyślnie `8080`)
+- `surfacex-web` — statyczny bundle React z multi-stage build (Vite `dist/` **nie** trafia do Gita)
+- `surfacex-api` — Django/Gunicorn + Celery beat + backup
+- `surfacex-worker` — Celery worker z `nmap` i przypiętym ProjectDiscovery httpx
+
+## Artefakty, których nie commitować
+
+`.gitignore` i `.dockerignore` blokują m.in.:
+
+- `web/node_modules/`, `web/dist/`, `web/build/`
+- `.env`, `secrets/*` (poza README/`.gitkeep`)
+- `__pycache__/`, `.venv/`
+- lokalne backupy
+
+Frontend jest budowany wyłącznie w obrazie (`Dockerfile.web`). Nie wrzucaj gotowego bundla do repozytorium.
+
+## Sieci
+
+| Sieć | Usługi |
+|---|---|
+| `edge` | gateway, web |
+| `backend` (internal) | api, scheduler, postgres, redis, backup (+ gateway do API) |
+| `scanner` | worker (egress do celów) |
+
+Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła PostgreSQL — wyniki mają iść przez API.
 
 ## Dokumentacja
 
@@ -69,4 +85,5 @@ Do czasu implementacji Compose powyższe komendy nie działają. Szczegóły arc
 - Terraform, Ansible i Kubernetes;
 - eksploatacja podatności, brute force i logowanie do celów;
 - WhatWeb i Nuclei jako obowiązkowe narzędzia;
+- Windows Containers;
 - wysokodostępny klaster produkcyjny.

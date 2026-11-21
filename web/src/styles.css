@@ -1,0 +1,102 @@
+:root {
+  --bg: #0f1412;
+  --surface: #18201c;
+  --text: #e7eee8;
+  --muted: #9aaba0;
+  --accent: #6fbf8b;
+  --danger: #d86b5a;
+  --border: #2a3630;
+  --font-display: "IBM Plex Serif", "Source Serif 4", Georgia, serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --space: 1rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, #1c2a22 0%, transparent 45%),
+    linear-gradient(160deg, #0c100e, #121916 55%, #0f1412);
+}
+
+.shell {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: calc(var(--space) * 3) var(--space);
+}
+
+.brand h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.4rem, 5vw, 3.4rem);
+  margin: 0.2rem 0 0.6rem;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+  max-width: 36rem;
+  line-height: 1.5;
+}
+
+.panel {
+  margin-top: calc(var(--space) * 2.5);
+  padding: calc(var(--space) * 1.25);
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 92%, black);
+}
+
+.panel h2 {
+  margin: 0 0 var(--space);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.facts div {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 0.5rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  margin: 0;
+}

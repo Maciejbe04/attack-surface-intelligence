@@ -1,0 +1,44 @@
+# syntax=docker/dockerfile:1.7
+
+ARG HTTPX_VERSION=v1.6.9
+
+FROM golang:1.23-bookworm AS httpx-build
+ARG TARGETOS=linux
+ARG TARGETARCH
+ARG HTTPX_VERSION
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git clone --depth 1 --branch "${HTTPX_VERSION}" https://github.com/projectdiscovery/httpx.git . \
+    && CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -ldflags="-s -w" -o /out/httpx ./cmd/httpx
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nmap ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1000 surfacex \
+    && useradd --system --uid 1000 --gid surfacex --home /app --shell /usr/sbin/nologin surfacex
+
+COPY --from=httpx-build /out/httpx /usr/local/bin/httpx
+RUN chmod 755 /usr/local/bin/httpx
+
+WORKDIR /app
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r /app/backend/requirements.txt
+
+COPY backend /app/backend
+RUN chown -R surfacex:surfacex /app
+
+WORKDIR /app/backend
+USER surfacex
+
+CMD ["celery", "-A", "config", "worker", "--loglevel=INFO"]

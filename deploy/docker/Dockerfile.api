@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1.7
+
+FROM python:3.12-slim-bookworm AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl openssl postgresql-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1000 surfacex \
+    && useradd --system --uid 1000 --gid surfacex --home /app --shell /usr/sbin/nologin surfacex
+
+WORKDIR /app
+
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r /app/backend/requirements.txt
+
+COPY backend /app/backend
+COPY deploy/docker/entrypoint-api.sh deploy/docker/backup-loop.sh /app/deploy/docker/
+RUN chmod +x /app/deploy/docker/*.sh \
+    && mkdir -p /app/backend/staticfiles \
+    && chown -R surfacex:surfacex /app
+
+WORKDIR /app/backend
+ENV DJANGO_SECRET_KEY=build-only \
+    DJANGO_DEBUG=0 \
+    POSTGRES_HOST=localhost \
+    POSTGRES_DB=surfacex \
+    POSTGRES_USER=surfacex \
+    POSTGRES_PASSWORD=build-only
+RUN python manage.py collectstatic --noinput \
+    && chown -R surfacex:surfacex /app/backend/staticfiles
+
+USER surfacex
+EXPOSE 8000
+
+CMD ["/app/deploy/docker/entrypoint-api.sh"]
