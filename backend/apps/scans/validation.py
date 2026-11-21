@@ -5,7 +5,8 @@ import re
 
 
 DOMAIN_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
-MAX_CIDR_ADDRESSES = 4096
+# Large ranges are split into per-subnet batches (apps/scans/scope.py), so a /16 is fine.
+MAX_CIDR_ADDRESSES = 65536
 
 
 def normalize_target(address: str, target_type: str) -> str:

@@ -8,6 +8,7 @@ from rest_framework import serializers
 from .groups import compute_next_run, normalize_group_name
 from .models import GroupSchedule, ScanBatch, ScanEvent, ScanRun, Target, TargetGroup
 from .modules import validate_modules
+from .scope import check_target
 from .validation import normalize_target
 
 
@@ -42,7 +43,8 @@ class TargetSerializer(serializers.ModelSerializer):
         address = attrs.get("address", getattr(self.instance, "address", ""))
         try:
             attrs["address"] = normalize_target(address, target_type)
-        except ValueError as exc:
+            check_target(attrs["address"], target_type)
+        except ValueError as exc:  # includes OutOfScope
             raise serializers.ValidationError({"address": str(exc)}) from exc
         return attrs
 

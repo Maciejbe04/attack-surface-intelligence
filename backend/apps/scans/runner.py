@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .scope import OutOfScope, check_target
 from .validation import normalize_target
 
 FAST_PORTS = (
@@ -23,6 +24,7 @@ FAST_PORTS = (
 WEB_PORTS = "80,443,3000,5000,7001,8000,8080,8443,8888,9000,9443"
 HTTP_PORTS = {80, 443, 3000, 5000, 7001, 8000, 8080, 8443, 8888, 9000, 9443}
 TLS_PORTS = {443, 8443, 9443}
+DISCOVERY_SYN_PORTS = "22,80,443,3389,8080"
 MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
 MAX_RESULT_BYTES = 1800 * 1024
 MAX_OBSERVATIONS = 2000
@@ -223,7 +225,21 @@ def _nmap_arguments(
             arguments.extend(["--host-timeout", f"{host['timeoutSec']}s"])
         arguments.extend(["--max-rate", str(rate_cap)])
     else:
-        arguments.extend(["-Pn", "-sS" if scan_mode == "syn" else "-sT"])
+        if target_type == "cidr":
+            # Ranges: discover live hosts first. With -Pn nmap would treat every
+            # address as up and report the whole range as live.
+            if host:
+                if host["method"] in {"icmp", "icmp-tcp"}:
+                    arguments.append("-PE")
+                if host["method"] in {"tcp", "icmp-tcp"}:
+                    arguments.append(f"-PS{host['tcpPorts']}")
+            else:
+                arguments.extend(["-PE", f"-PS{DISCOVERY_SYN_PORTS}", "-PA80"])
+        else:
+            # A single saved host is probed even if it ignores ping; liveness is
+            # then decided by open ports (see _parse_nmap).
+            arguments.append("-Pn")
+        arguments.append("-sS" if scan_mode == "syn" else "-sT")
         if full:
             ports = _port_profile(full["portProfile"])
             timing = "T3"
@@ -280,11 +296,13 @@ def _parse_nmap(output: bytes) -> list[dict[str, Any]]:
         status_element = host_element.find("status")
         if address_element is None:
             continue
+        state = status_element.attrib.get("state", "unknown") if status_element is not None else "unknown"
+        reason = status_element.attrib.get("reason", "") if status_element is not None else ""
+        if state != "up":
+            continue
         host: dict[str, Any] = {
             "address": address_element.attrib.get("addr", ""),
-            "state": status_element.attrib.get("state", "unknown")
-            if status_element is not None
-            else "unknown",
+            "state": state,
             "ports": [],
         }
         for port_element in host_element.findall("./ports/port"):
@@ -307,6 +325,9 @@ def _parse_nmap(output: bytes) -> list[dict[str, Any]]:
                     else "",
                 }
             )
+        if reason == "user-set" and not host["ports"]:
+            # "up" only because of -Pn and nothing answered: not evidence of a live host.
+            continue
         hosts.append(host)
         if len(hosts) >= MAX_OBSERVATIONS:
             break
@@ -396,6 +417,11 @@ def _httpx_arguments(
         str(rate_limit),
         "-threads",
         str(threads),
+        # Response headers (incl. Set-Cookie), favicon mmh3 hash and the redirect
+        # Location are recorded; the redirect itself is never followed.
+        "-include-response-header",
+        "-favicon",
+        "-location",
     ]
     if http_filters.get("techDetect", full is not None):
         arguments.append("-tech-detect")
@@ -416,10 +442,65 @@ def _parse_httpx(output: bytes) -> list[dict[str, Any]]:
             raise ScanRunnerError("httpx returned invalid JSONL.") from exc
         if not isinstance(record, dict):
             raise ScanRunnerError("httpx returned an invalid record.")
-        records.append(record)
+        records.append(_normalize_http_record(record))
         if len(records) >= MAX_OBSERVATIONS:
             break
     return records
+
+
+MAX_HEADERS_PER_RECORD = 60
+MAX_HEADER_VALUE = 512
+# Bulky or sensitive raw fields we never keep (bodies may contain secrets).
+DROPPED_HTTP_FIELDS = ("body", "raw_header", "request", "response", "header")
+
+
+def _header_values(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return [str(value)] if value is not None else []
+
+
+def _parse_set_cookie(raw: str) -> dict[str, Any] | None:
+    parts = [part.strip() for part in raw.split(";") if part.strip()]
+    if not parts or "=" not in parts[0]:
+        return None
+    name = parts[0].split("=", 1)[0].strip()[:200]
+    attributes = {part.split("=", 1)[0].strip().lower(): part for part in parts[1:]}
+    samesite = attributes.get("samesite", "")
+    return {
+        "name": name,
+        "secure": "secure" in attributes,
+        "httponly": "httponly" in attributes,
+        "samesite": samesite.split("=", 1)[1].strip() if "=" in samesite else "",
+    }
+
+
+def _normalize_http_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Keep useful HTTP evidence; drop cookie values and response bodies.
+
+    Header names are lower-cased with dashes (httpx JSON may use underscores).
+    Cookie values are session data, so only cookie names and security flags are kept.
+    """
+    raw_headers = record.get("header") or record.get("headers") or {}
+    headers: dict[str, str] = {}
+    cookies: list[dict[str, Any]] = []
+    if isinstance(raw_headers, dict):
+        for key, value in list(raw_headers.items())[:MAX_HEADERS_PER_RECORD]:
+            name = str(key).strip().lower().replace("_", "-")[:100]
+            values = _header_values(value)
+            if name == "set-cookie":
+                for item in values:
+                    for line in item.splitlines():
+                        parsed = _parse_set_cookie(line)
+                        if parsed:
+                            cookies.append(parsed)
+                headers[name] = f"[{len(cookies)} cookie(s), values not stored]"
+                continue
+            headers[name] = ", ".join(values)[:MAX_HEADER_VALUE]
+    normalized = {key: value for key, value in record.items() if key not in DROPPED_HTTP_FIELDS}
+    normalized["headers"] = headers
+    normalized["cookies"] = cookies[:50]
+    return normalized
 
 
 def _signature_results(http_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -464,6 +545,11 @@ def execute_scan(
     target_type = target_data.get("type")
     try:
         target = normalize_target(target_data.get("address", ""), target_type)
+        # Checked again right before scanning: the allowlist may have changed since
+        # the target was saved, and a domain may now resolve outside the lab.
+        check_target(target, target_type, resolve=True)
+    except OutOfScope as exc:
+        raise ScanRunnerError(f"Refused: {exc}") from exc
     except ValueError as exc:
         raise ScanRunnerError(str(exc)) from exc
 

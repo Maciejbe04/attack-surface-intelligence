@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from functools import partial
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .events import append_scan_event
 from .models import GroupSchedule, ScanBatch, ScanRun, Target, TargetGroup
+from .scope import split_into_batches
 from .tasks import execute_batch
 
 
@@ -63,6 +65,29 @@ def publish_batch(batch_id: int, delivery_id: str) -> None:
             )
 
 
+class TooManyBatches(ValueError):
+    """The scan would create more batches than SCAN_MAX_BATCHES_PER_RUN."""
+
+
+def plan_batches(targets: list[Target]) -> list[tuple[Target, str]]:
+    """One batch per target, except large CIDRs: one batch per subnet (e.g. /16 -> 256 x /24).
+
+    Each batch is scanned and timed separately within the per-batch time budget.
+    """
+    planned = [
+        (target, address)
+        for target in targets
+        for address in split_into_batches(target.address, target.target_type)
+    ]
+    max_batches = int(getattr(settings, "SCAN_MAX_BATCHES_PER_RUN", 10_000))
+    if len(planned) > max_batches:
+        raise TooManyBatches(
+            f"This scan would create {len(planned)} batches; the limit is "
+            f"{max_batches}. Select fewer or smaller ranges."
+        )
+    return planned
+
+
 def queue_scan_for_targets(
     *,
     owner: User,
@@ -75,6 +100,7 @@ def queue_scan_for_targets(
     """Create a scan run for targets. Returns (run, created)."""
     if not targets:
         raise ValueError("At least one target is required.")
+    planned = plan_batches(targets)
 
     with transaction.atomic():
         if client_request_id:
@@ -92,7 +118,7 @@ def queue_scan_for_targets(
                     owner=owner,
                     modules_snapshot=modules,
                     client_request_id=client_request_id,
-                    total_batches=len(targets),
+                    total_batches=len(planned),
                     group=group,
                     schedule=schedule,
                 )
@@ -108,10 +134,10 @@ def queue_scan_for_targets(
                 ScanBatch(
                     run=run,
                     target=target,
-                    target_address=target.address,
+                    target_address=address,
                     target_type=target.target_type,
                 )
-                for target in targets
+                for target, address in planned
             ]
         )
         for batch in batches:
@@ -134,6 +160,9 @@ def queue_scan_for_targets(
             run,
             (
                 f"Queued scan #{run.pk}{origin} for {len(batches)} target(s); "
+                if len(batches) == len(targets)
+                else f"Queued scan #{run.pk}{origin} for {len(targets)} target(s) "
+                f"split into {len(batches)} batches; "
                 f"modules: {', '.join(str(item) for item in module_ids) or 'none'}."
             ),
             source="api",

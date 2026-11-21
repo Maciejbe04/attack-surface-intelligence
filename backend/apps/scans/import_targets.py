@@ -6,6 +6,7 @@ import ipaddress
 import json
 from dataclasses import dataclass
 
+from .scope import check_target
 from .validation import normalize_target
 
 MAX_IMPORT_TARGETS = 10_000
@@ -73,6 +74,7 @@ def _add_target(
         return
     try:
         normalized = normalize_target(raw, chosen_type)
+        check_target(normalized, chosen_type)  # scan allowlist (OutOfScope is a ValueError)
     except ValueError as exc:
         if len(errors) < MAX_IMPORT_ERRORS:
             errors.append(f"{line_label}: {exc}")

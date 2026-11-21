@@ -32,7 +32,7 @@ from .serializers import (
     TargetSerializer,
     is_admin,
 )
-from .services import queue_scan_for_targets
+from .services import TooManyBatches, queue_scan_for_targets
 
 
 def _targets_for(user):
@@ -327,12 +327,15 @@ class ScanListCreateView(APIView):
         serializer = ScanCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         client_request_id = serializer.validated_data.get("client_request_id", "")
-        run, created = queue_scan_for_targets(
-            owner=request.user,
-            targets=serializer.context["targets"],
-            modules=serializer.validated_data["modules"],
-            client_request_id=client_request_id,
-        )
+        try:
+            run, created = queue_scan_for_targets(
+                owner=request.user,
+                targets=serializer.context["targets"],
+                modules=serializer.validated_data["modules"],
+                client_request_id=client_request_id,
+            )
+        except TooManyBatches as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         run = (
             ScanRun.objects.prefetch_related("batches", "events__batch")
             .get(pk=run.pk)

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from .models import GroupSchedule, ScanRun, Target, TargetGroup
 from .modules import validate_modules
-from .services import queue_scan_for_targets
+from .services import TooManyBatches, queue_scan_for_targets
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +101,18 @@ def _dispatch_one(schedule: GroupSchedule, now: datetime) -> str:
     except Exception:  # noqa: BLE001 - serializer errors carry nested details
         return "Skipped: the saved module configuration is no longer valid."
 
-    run, _created = queue_scan_for_targets(
-        owner=group.owner,
-        targets=targets,
-        modules=modules,
-        # One run per occurrence even if dispatch is retried.
-        client_request_id=f"schedule:{schedule.pk}:{occurrence:%Y%m%dT%H%M}",
-        group=group,
-        schedule=schedule,
-    )
+    try:
+        run, _created = queue_scan_for_targets(
+            owner=group.owner,
+            targets=targets,
+            modules=modules,
+            # One run per occurrence even if dispatch is retried.
+            client_request_id=f"schedule:{schedule.pk}:{occurrence:%Y%m%dT%H%M}",
+            group=group,
+            schedule=schedule,
+        )
+    except TooManyBatches as exc:
+        return f"Skipped: {exc}"
     schedule.last_run = run
     schedule.last_run_at = now
     return f"Queued scan #{run.pk} for {len(targets)} target(s)."

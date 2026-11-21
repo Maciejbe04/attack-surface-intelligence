@@ -19,7 +19,7 @@ from .serializers import (
     TargetGroupSerializer,
     is_admin,
 )
-from .services import queue_scan_for_targets
+from .services import TooManyBatches, queue_scan_for_targets
 
 
 def groups_for(user):
@@ -122,13 +122,16 @@ class GroupScanView(APIView):
                 {"detail": f"A group scan is limited to {MAX_GROUP_SCAN_TARGETS} targets."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        run, created = queue_scan_for_targets(
-            owner=group.owner,
-            targets=targets,
-            modules=serializer.validated_data["modules"],
-            client_request_id=serializer.validated_data.get("client_request_id", ""),
-            group=group,
-        )
+        try:
+            run, created = queue_scan_for_targets(
+                owner=group.owner,
+                targets=targets,
+                modules=serializer.validated_data["modules"],
+                client_request_id=serializer.validated_data.get("client_request_id", ""),
+                group=group,
+            )
+        except TooManyBatches as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         run = ScanRun.objects.select_related("group").prefetch_related(
             "batches", "events__batch"
         ).get(pk=run.pk)
