@@ -117,7 +117,7 @@ export function HostSearch({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        placeholder={t("Search saved hosts: IP, CIDR, hostname, or comment")}
+        placeholder=""
         autoComplete="off"
         spellCheck={false}
       />

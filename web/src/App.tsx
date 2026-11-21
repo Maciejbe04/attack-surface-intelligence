@@ -2144,7 +2144,7 @@ export function App() {
                                           if (value) void assignTargetGroup(target, value);
                                         }}
                                       >
-                                        <option value="">+</option>
+                                        <option value="">{t("Add…")}</option>
                                         {groups
                                           .filter(
                                             (group) =>

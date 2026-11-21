@@ -479,6 +479,9 @@ const PL: Record<string, string> = {
     "Wpisz nazwę nowej grupy.",
   "Add to group":
     "Dodaj do grupy",
+  "Add…":
+    "Dodaj…",
+
   "No group":
     "Bez grupy",
   "New group…":
