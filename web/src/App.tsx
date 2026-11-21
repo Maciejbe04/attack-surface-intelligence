@@ -1955,7 +1955,11 @@ export function App() {
               />
 
               <LifecycleKpis scans={scans} t={t} />
-              <ChangesOverTime scans={scans} t={t} />
+              <ChangesOverTime
+                scans={scans}
+                t={t}
+                onOpenScan={(scanId) => openScanConsole(scanId, { goToScans: true })}
+              />
               <CuriosityInsightsFromScans scans={scans} t={t} />
 
               <section className="panel">

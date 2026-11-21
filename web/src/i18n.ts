@@ -709,6 +709,14 @@ const PL: Record<string, string> = {
     "Potrzeba co najmniej dwóch ukończonych skanów z danymi lifecycle, żeby narysować zmiany.",
   "Lifecycle counts across recent finished scans.":
     "Liczniki lifecycle z ostatnich ukończonych skanów.",
+  "Click a bar to open that scan log.": "Kliknij słupek, żeby otworzyć log skanu.",
+  "Time range": "Zakres czasu",
+  "Last 24 hours": "Ostatnie 24 godziny",
+  "Last 7 days": "Ostatnie 7 dni",
+  "Last 30 days": "Ostatnie 30 dni",
+  "All time": "Cały okres",
+  "No finished scans in this time range.": "Brak ukończonych skanów w tym zakresie.",
+  "Open scan log": "Otwórz log skanu",
   "Open a probe to view the activity log and findings on the Scans page.":
     "Otwórz sondę, aby zobaczyć log i findings na stronie Skany.",
   "Signatures pack": "Pakiet sygnatur",
