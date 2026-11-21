@@ -51,6 +51,14 @@ export type ScanEvent = {
   created_at: string;
 };
 
+export type DefectDojoExportStatus =
+  | "none"
+  | "pending"
+  | "sending"
+  | "sent"
+  | "failed"
+  | "skipped";
+
 export type Scan = {
   id: number;
   status: ScanStatus;
@@ -63,6 +71,8 @@ export type Scan = {
   progress: number;
   result_summary: Record<string, unknown>;
   error: string;
+  defectdojo_export_status: DefectDojoExportStatus;
+  defectdojo_export_detail: string;
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
@@ -167,6 +177,68 @@ export function createTarget(
     body: JSON.stringify(target),
     signal,
   });
+}
+
+export type TargetImportResult = {
+  created_count: number;
+  existing_count: number;
+  total_count: number;
+  parse_errors: string[];
+  skipped_duplicates_in_file: number;
+  target_ids: number[];
+  targets: Target[];
+  scan: ScanDetail | null;
+};
+
+export async function importTargetsFile(
+  file: File,
+  options: {
+    startScan?: boolean;
+    modules?: ScanModule[];
+    clientRequestId?: string;
+  } = {},
+  signal?: AbortSignal,
+): Promise<TargetImportResult> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("start_scan", options.startScan === false ? "false" : "true");
+  if (options.modules) {
+    body.append("modules", JSON.stringify(options.modules));
+  }
+  if (options.clientRequestId) {
+    body.append("client_request_id", options.clientRequestId);
+  }
+
+  let response: Response;
+  try {
+    response = await apiFetch("/api/targets/import/", {
+      method: "POST",
+      body,
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError("Cannot reach the SurfaceX API.", 0, error);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  let payload: unknown = null;
+  try {
+    payload = contentType.includes("application/json")
+      ? await response.json()
+      : await response.text();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      firstError(payload) ?? `Request failed with HTTP ${response.status}.`,
+      response.status,
+      payload,
+    );
+  }
+  return payload as TargetImportResult;
 }
 
 export function deleteTarget(id: number, signal?: AbortSignal): Promise<void> {

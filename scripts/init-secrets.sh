@@ -69,14 +69,18 @@ gen defectdojo_secret_key
 gen_hex defectdojo_credential_key
 
 DEFECTDOJO_DATABASE_URL="${SECRET_DIR}/defectdojo_database_url"
-if [[ -f "${DEFECTDOJO_DATABASE_URL}" ]]; then
+DB_PASSWORD_FILE="${SECRET_DIR}/defectdojo_db_password"
+EXPECTED_DATABASE_URL="$(
+  printf "postgresql://defectdojo:%s@defectdojo-postgres:5432/defectdojo" \
+    "$(cat "${DB_PASSWORD_FILE}")"
+)"
+if [[ -f "${DEFECTDOJO_DATABASE_URL}" ]] \
+  && [[ "$(cat "${DEFECTDOJO_DATABASE_URL}")" == "${EXPECTED_DATABASE_URL}" ]]; then
   echo "keep  defectdojo_database_url"
 else
-  printf "postgresql://defectdojo:%s@defectdojo-postgres:5432/defectdojo" \
-    "$(cat "${SECRET_DIR}/defectdojo_db_password")" \
-    >"${DEFECTDOJO_DATABASE_URL}"
+  printf "%s" "${EXPECTED_DATABASE_URL}" >"${DEFECTDOJO_DATABASE_URL}"
   chmod 600 "${DEFECTDOJO_DATABASE_URL}"
-  echo "create defectdojo_database_url"
+  echo "update defectdojo_database_url"
 fi
 
 echo "Secrets ready in ${SECRET_DIR}"

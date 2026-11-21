@@ -8,6 +8,20 @@ Nieznana wersja schematu powoduje odrzucenie importu z czytelnym błędem.
 
 ## Import celów
 
+Endpoint:
+
+```http
+POST /api/targets/import/
+Content-Type: multipart/form-data
+```
+
+Pola:
+
+- `file` — TXT (jeden host w linii), CSV (`value`/`address`/`host`) lub JSON (`targets[]`)
+- `start_scan` — domyślnie `true`; po imporcie kolejkuje skan
+- `modules` — opcjonalny JSON wybranych modułów (domyślnie `full-pipeline`)
+- limit: 10 000 hostów / 5 MiB
+
 ### JSON
 
 ```json
@@ -124,6 +138,9 @@ Eksport używa tych samych schematów. Dodatkowo może zawierać:
 Ukończony lub częściowo ukończony przebieg można wysłać z UI albo przez:
 
 ```text
+Po zakończeniu skanu z co najmniej jednym ukończonym batchem SurfaceX
+wysyła raport automatycznie. Endpoint poniżej zostaje jako ręczny fallback:
+
 POST /api/scans/<scan_run_id>/export/defectdojo/
 ```
 

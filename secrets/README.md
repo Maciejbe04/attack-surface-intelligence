@@ -8,6 +8,13 @@ Generate them with:
 ./scripts/init-secrets.sh
 ```
 
+DefectDojo wymaga osobnego profilu Compose oraz kompletnych sekretów `defectdojo_*`.
+Najprostszy start:
+
+```bash
+./scripts/start-defectdojo.sh
+```
+
 Expected files (mode `0600`):
 
 | File | Used by |

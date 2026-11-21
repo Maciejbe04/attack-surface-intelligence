@@ -25,7 +25,11 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
     const csrf = await ensureCsrf();
     headers.set("X-CSRFToken", csrf);
   }
-  if (init.body && !headers.has("Content-Type")) {
+  if (
+    init.body &&
+    !(init.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
   return fetch(input, { ...init, headers, credentials: "include" });

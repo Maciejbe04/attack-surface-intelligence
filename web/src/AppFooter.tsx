@@ -1,10 +1,12 @@
 import { Language, Translate } from "./i18n";
 import { LanguageSelect } from "./LanguageSelect";
+import { SystemLockButton } from "./SystemPanel";
 import { APP_NAME, APP_VERSION } from "./version";
 
 type Props = {
   highContrast: boolean;
   onToggleContrast: () => void;
+  onOpenSystem?: () => void;
   language: Language;
   onLanguageChange: (language: Language) => void;
   t: Translate;
@@ -13,6 +15,7 @@ type Props = {
 export function AppFooter({
   highContrast,
   onToggleContrast,
+  onOpenSystem,
   language,
   onLanguageChange,
   t,
@@ -50,6 +53,7 @@ export function AppFooter({
         >
           {highContrast ? t("Standard contrast") : t("High contrast")}
         </button>
+        {onOpenSystem && <SystemLockButton onClick={onOpenSystem} t={t} />}
         <button
           type="button"
           className="btn btn--normal"

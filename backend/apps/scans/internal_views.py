@@ -16,6 +16,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .auto_export import queue_automatic_defectdojo_export
 from .events import append_scan_event
 from .models import QueueState, ScanBatch, ScanEvent, ScanRun
 from .tasks import execute_batch
@@ -179,7 +180,15 @@ def _aggregate_run(run: ScanRun) -> None:
         "cancelled": stats["cancelled"],
     }
 
+    became_terminal = False
     if stats["terminal"] == run.total_batches:
+        if run.finished_at is None or run.status not in {
+            ScanRun.Status.COMPLETED,
+            ScanRun.Status.PARTIAL,
+            ScanRun.Status.FAILED,
+            ScanRun.Status.CANCELLED,
+        }:
+            became_terminal = True
         run.finished_at = timezone.now()
         if stats["cancelled"] or run.status == ScanRun.Status.CANCEL_REQUESTED:
             run.status = ScanRun.Status.CANCELLED
@@ -204,6 +213,8 @@ def _aggregate_run(run: ScanRun) -> None:
             "updated_at",
         )
     )
+    if became_terminal:
+        queue_automatic_defectdojo_export(run)
 
 
 class BatchClaimView(WorkerAPIView):

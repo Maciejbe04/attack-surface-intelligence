@@ -66,6 +66,22 @@ class ScanRun(models.Model):
     progress = models.PositiveSmallIntegerField(default=0)
     result_summary = models.JSONField(default=dict, blank=True)
     error = models.TextField(blank=True, default="")
+
+    class DefectDojoExportStatus(models.TextChoices):
+        NONE = "none", "None"
+        PENDING = "pending", "Pending"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped"
+
+    defectdojo_export_status = models.CharField(
+        max_length=16,
+        choices=DefectDojoExportStatus.choices,
+        default=DefectDojoExportStatus.NONE,
+        db_index=True,
+    )
+    defectdojo_export_detail = models.CharField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

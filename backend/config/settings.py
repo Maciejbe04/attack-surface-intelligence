@@ -192,6 +192,12 @@ WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
 
+APP_NAME = os.environ.get("APP_NAME", "SurfaceX")
+APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
+WEB_VERSION = os.environ.get("WEB_VERSION", APP_VERSION)
+HTTPX_VERSION = os.environ.get("HTTPX_VERSION", "v1.6.9")
+DEFECTDOJO_VERSION = os.environ.get("DEFECTDOJO_VERSION", "3.5.202")
+
 DEFECTDOJO_URL = os.environ.get("DEFECTDOJO_URL", "").strip()
 DEFECTDOJO_USERNAME = os.environ.get("DEFECTDOJO_USERNAME", "admin")
 DEFECTDOJO_PASSWORD = read_secret(

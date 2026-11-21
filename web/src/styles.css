@@ -396,6 +396,65 @@ html.theme-high-contrast a {
   font-size: 12px;
 }
 
+.topnav__system,
+.topnav__contrast {
+  height: 28px;
+  font-size: 12px;
+}
+
+.system-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.system-lock-btn__icon {
+  display: block;
+}
+
+.system-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-m);
+}
+
+.system-panel__card {
+  padding: var(--space-m);
+  border: 1px solid var(--aws-border-light);
+  border-radius: var(--radius);
+  background: var(--aws-table-header);
+}
+
+.system-panel__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-m);
+  margin-bottom: 4px;
+}
+
+.system-panel__meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-m);
+  margin: var(--space-m) 0 0;
+}
+
+.system-panel__meta dt {
+  color: var(--aws-text-secondary);
+  font-size: 12px;
+}
+
+.system-panel__meta dd {
+  margin: 2px 0 0;
+}
+
+.system-panel__table {
+  margin-top: var(--space-s);
+}
+
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -1099,6 +1158,29 @@ html.theme-high-contrast .module-tile__drawer {
 .status-badge--cancelled {
   border-color: var(--aws-danger);
   background: #fdf2f1;
+}
+
+.status-badge--dd-pending,
+.status-badge--dd-sending {
+  margin-left: 6px;
+  border-color: var(--aws-info-border);
+  background: var(--aws-info-bg);
+}
+
+.status-badge--dd-sent {
+  margin-left: 6px;
+  border-color: var(--aws-success);
+  background: #f2f8f0;
+}
+
+.status-badge--dd-failed {
+  margin-left: 6px;
+  border-color: var(--aws-danger);
+  background: #fdf2f1;
+}
+
+.status-badge--dd-skipped {
+  margin-left: 6px;
 }
 
 .scan-progress {

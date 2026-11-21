@@ -5,6 +5,11 @@ from . import internal_views, views
 urlpatterns = [
     path("targets/", views.TargetListCreateView.as_view(), name="target-list"),
     path(
+        "targets/import/",
+        views.TargetImportView.as_view(),
+        name="target-import",
+    ),
+    path(
         "targets/<int:target_id>/",
         views.TargetDetailView.as_view(),
         name="target-detail",

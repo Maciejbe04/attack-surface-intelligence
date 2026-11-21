@@ -107,6 +107,8 @@ class ScanRunSerializer(serializers.ModelSerializer):
             "progress",
             "result_summary",
             "error",
+            "defectdojo_export_status",
+            "defectdojo_export_detail",
             "created_at",
             "started_at",
             "finished_at",
@@ -128,7 +130,7 @@ class ScanCreateSerializer(serializers.Serializer):
     target_ids = serializers.ListField(
         child=serializers.IntegerField(min_value=1),
         allow_empty=False,
-        max_length=1000,
+        max_length=10000,
     )
     modules = serializers.JSONField()
     client_request_id = serializers.CharField(
