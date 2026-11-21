@@ -1128,6 +1128,8 @@ html.theme-high-contrast .module-tile__drawer {
 .status-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-height: 22px;
   padding: 2px 8px;
   border: 1px solid var(--aws-border);
   border-radius: 999px;
@@ -1135,7 +1137,13 @@ html.theme-high-contrast .module-tile__drawer {
   color: var(--aws-text);
   font-size: 12px;
   font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
+}
+
+.status-badge--queued {
+  border-color: var(--aws-border);
+  background: var(--aws-table-header);
 }
 
 .status-badge--running,
@@ -1162,25 +1170,43 @@ html.theme-high-contrast .module-tile__drawer {
 
 .status-badge--dd-pending,
 .status-badge--dd-sending {
-  margin-left: 6px;
   border-color: var(--aws-info-border);
   background: var(--aws-info-bg);
 }
 
 .status-badge--dd-sent {
-  margin-left: 6px;
   border-color: var(--aws-success);
   background: #f2f8f0;
 }
 
 .status-badge--dd-failed {
-  margin-left: 6px;
   border-color: var(--aws-danger);
   background: #fdf2f1;
 }
 
-.status-badge--dd-skipped {
-  margin-left: 6px;
+.scan-status-cell {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.scan-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scan-modules {
+  min-width: 140px;
+  max-width: 220px;
+  vertical-align: top;
+}
+
+.scan-modules__list {
+  color: var(--aws-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .scan-progress {
