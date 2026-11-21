@@ -20,11 +20,11 @@ Preserve these logical services:
 
 - gateway: the only host-published entry point;
 - web: static React frontend;
-- api: authentication, RBAC, validation and persistence;
-- scheduler: schedules, snapshots, batches, deadlines and ETA;
-- redis: sessions, queue and leases;
+- api: Django/DRF authentication, RBAC, validation and persistence;
+- scheduler: Celery Beat schedules, snapshots, batches, deadlines and ETA;
+- redis: sessions, Celery broker and leases;
 - postgres: durable source of truth;
-- worker: nmap discovery, ProjectDiscovery httpx and custom fingerprint signatures;
+- worker: Celery worker for nmap discovery, ProjectDiscovery httpx and custom fingerprint signatures;
 - backup: encrypted PostgreSQL backup.
 
 Workers submit results through the internal API. Do not give workers database administrator credentials or Docker socket access.
@@ -62,7 +62,7 @@ Mount secrets from gitignored files with mode `0600`. Keep examples limited to n
 
 - Do not hardcode `platform: linux/amd64` in `compose.yml`.
 - Use multi-stage Dockerfiles with `TARGETOS` and `TARGETARCH`.
-- Prefer Go builds with `CGO_ENABLED=0`.
+- Prefer official Python base images and architecture-compatible wheels; avoid native compile dependencies when possible.
 - Install nmap from the target image package repository; never copy a host binary.
 - Build a pinned ProjectDiscovery httpx version from source for the target architecture; do not use the unrelated Python package named httpx.
 - Ensure every base image publishes both `linux/amd64` and `linux/arm64`.

@@ -22,15 +22,15 @@ flowchart TB
       end
 
       subgraph backendNet [Sieć backend internal]
-        API[API Go]
-        Scheduler[Scheduler]
+        API[API Django]
+        Scheduler[Celery Beat scheduler]
         Queue[(Redis)]
         Database[(PostgreSQL)]
         Backup[Zadanie backupu]
       end
 
       subgraph scannerNet [Sieć scanner egress]
-        Worker[Workery nmap httpx i sygnatury]
+        Worker[Celery worker nmap httpx i sygnatury]
       end
 
       DatabaseVolume[(Wolumen danych)]
@@ -78,7 +78,7 @@ Aplikacja React/TypeScript udostępniająca:
 
 ### API
 
-Usługa Go odpowiadająca za:
+Aplikacja Django / Django REST Framework odpowiadająca za:
 
 - uwierzytelnianie i RBAC;
 - walidację danych wejściowych;
@@ -87,23 +87,24 @@ Usługa Go odpowiadająca za:
 - przyjmowanie wyników workerów;
 - porównywanie obserwacji;
 - eksport CSV/JSON i integrację DefectDojo;
-- audyt zmian.
+- audyt zmian;
+- migracje ORM i admin panel wyłącznie dla `admin`.
 
 API jest jedynym komponentem zapisującym wyniki workerów do PostgreSQL.
 
 ### Scheduler
 
-Scheduler:
+Celery Beat / zadania okresowe:
 
-- wyznacza terminy skanów;
-- zapisuje snapshot konfiguracji przebiegu;
-- rozwija i deduplikuje cele;
-- dzieli pracę na idempotentne batche;
-- pilnuje deadline okna;
-- zatrzymuje i wznawia pracę;
-- oblicza postęp oraz ETA.
+- wyznaczają terminy skanów;
+- zapisują snapshot konfiguracji przebiegu;
+- rozwijają i deduplikują cele;
+- dzielą pracę na idempotentne batche;
+- pilnują deadline okna;
+- zatrzymują i wznawiają pracę;
+- obliczają postęp oraz ETA.
 
-Scheduler może korzystać z tego samego obrazu co API, ale działa jako oddzielny proces i usługa Compose.
+Scheduler korzysta z tego samego obrazu co API, ale działa jako oddzielny proces Celery Beat w Compose.
 
 ### Redis
 
@@ -119,7 +120,7 @@ Redis nie jest źródłem prawdy. Po jego utracie scheduler odtwarza brakujące 
 
 ### Worker
 
-Worker wykonuje:
+Proces Celery worker wykonuje:
 
 - discovery nmap;
 - identyfikację portów i usług;
@@ -129,7 +130,7 @@ Worker wykonuje:
 - normalizację evidence i obliczanie confidence score;
 - bezpieczne zbieranie evidence.
 
-Worker otrzymuje jedynie token umożliwiający pobieranie zadań i przesyłanie wyników. Nie posiada poświadczeń administracyjnych bazy ani dostępu do socketu Dockera.
+Worker otrzymuje jedynie token umożliwiający pobieranie zadań i przesyłanie wyników. Nie posiada poświadczeń administracyjnych bazy ani dostępu do socketu Dockera. Zadania Celery są publikowane przez Redis; wynik trafia z powrotem do API HTTP, a nie przez bezpośredni zapis ORM z sieci `scanner`.
 
 Na zgodnym Linuksie worker używa SYN scan. Na Docker Desktop lub bez raw sockets przechodzi na TCP connect scan. Tryb skanu jest zapisany przy wyniku. Domyślne profile portów, limity i flagi httpx opisuje `docs/scanning-policy.md`.
 
@@ -139,9 +140,9 @@ Pipeline workera:
 nmap → endpointy HTTP(S) → httpx JSONL → własne sygnatury → evidence → confidence score
 ```
 
-httpx jest uruchamiany dla partii endpointów, a jego JSONL jest przetwarzany strumieniowo. Wersja narzędzia, użyte opcje i limity trafiają do metadanych przebiegu. Detekcje technologii są dowodami wejściowymi dla wspólnego modelu pewności, a nie bezwarunkowym wynikiem.
+httpx jest uruchamiany dla partii endpointów, a jego JSONL jest przetwarzany strumieniowo w Pythonie. Wersja narzędzia, użyte opcje i limity trafiają do metadanych przebiegu. Detekcje technologii są dowodami wejściowymi dla wspólnego modelu pewności, a nie bezwarunkowym wynikiem.
 
-Własny moduł Go uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, ograniczone fragmenty HTML i dozwolone ścieżki. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
+Własny moduł Pythona uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, ograniczone fragmenty HTML i dozwolone ścieżki. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
 
 WhatWeb może zostać dodany w przyszłości jako opcjonalny, domyślnie wyłączony drugi etap dla ręcznie wybranych endpointów wymagających głębszej identyfikacji. Nie może działać dla całego zakresu bez osobnego limitu ruchu ani przyjmować pluginów dostarczonych przez użytkownika. Jego wyniki muszą zostać zapisane jako evidence i ocenione przez ten sam model pewności co wyniki httpx. Uzasadnienie wyboru opisuje `docs/adr-001-http-fingerprinting.md`.
 
@@ -209,7 +210,7 @@ Własne obrazy są budowane przez `docker buildx bake` dla:
 - `linux/amd64`;
 - `linux/arm64`.
 
-Kod Go jest kompilowany dla `TARGETOS/TARGETARCH` bez zależności wymagających CGO. nmap pochodzi z repozytorium pakietów obrazu bazowego dla właściwej architektury. Przypięta wersja ProjectDiscovery httpx jest budowana ze źródeł dla docelowej architektury w wieloetapowym Dockerfile. Frontend jest zestawem statycznych plików niezależnych od CPU.
+Obrazy Pythona/Django budują się dla `TARGETOS/TARGETARCH` z wheels bez zbędnej kompilacji natywnej. nmap pochodzi z repozytorium pakietów obrazu bazowego dla właściwej architektury. Przypięta wersja ProjectDiscovery httpx jest budowana ze źródeł dla docelowej architektury w wieloetapowym Dockerfile workera. Frontend jest zestawem statycznych plików niezależnych od CPU.
 
 Ten sam commit musi przejść build, migracje, healthcheck, logowanie, import, testowy skan i eksport na obu architekturach.
 

@@ -27,7 +27,7 @@ httpx będzie:
 - przetwarzany strumieniowo przez parser JSONL;
 - traktowany jako źródło evidence, a nie ostateczna prawda.
 
-Własny moduł Go uzupełni dane wymagane przez deklaratywne sygnatury oraz obliczy wspólny confidence score.
+Własny moduł Pythona uzupełni dane wymagane przez deklaratywne sygnatury oraz obliczy wspólny confidence score. ProjectDiscovery httpx pozostaje zewnętrznym binarnym CLI i nie jest tożsamy z pakietem Pythona `httpx`.
 
 ## Dlaczego nie WhatWeb jako podstawa
 
@@ -65,9 +65,9 @@ Nie jest to element obowiązkowego MVP.
 Korzyści:
 
 - lepsza wydajność dla dużych zakresów;
-- prostszy wieloarchitekturowy worker;
-- spójność ze stosem Go;
-- łatwiejsze strumieniowe przetwarzanie;
+- prostszy wieloarchitekturowy worker Celery;
+- wygodne wywołanie z Pythona jako przypiętego CLI;
+- łatwiejsze strumieniowe przetwarzanie JSONL;
 - prostsze egzekwowanie limitów ruchu.
 
 Koszty:

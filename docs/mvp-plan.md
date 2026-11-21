@@ -24,14 +24,15 @@ System służy wyłącznie do discovery. Nie wykonuje logowania, brute force ani
 
 ## Stos technologiczny
 
-- Go: API, scheduler i workery;
+- Python / Django / Django REST Framework: API, uwierzytelnianie, RBAC i persystencja;
+- Celery: scheduler, batche i workery skanujące;
 - React/TypeScript: interfejs użytkownika;
 - PostgreSQL: główne źródło prawdy;
-- Redis: sesje, kolejka i koordynacja zadań;
+- Redis: sesje, broker Celery i koordynacja zadań;
 - Docker Compose: lokalne uruchamianie całego stosu;
 - nmap: discovery i identyfikacja portów oraz usług;
 - ProjectDiscovery httpx: wydajne sondowanie HTTP/HTTPS, TLS i wstępna detekcja technologii;
-- własny silnik sygnatur: normalizacja evidence i obliczanie poziomu pewności.
+- własny silnik sygnatur w Pythonie: normalizacja evidence i obliczanie poziomu pewności.
 
 Oficjalnie wspierane platformy:
 
@@ -154,7 +155,7 @@ httpx odpowiada za:
 - favicon hash;
 - wstępną detekcję technologii.
 
-Własny moduł Go normalizuje JSONL z httpx, zbiera ograniczone dane wymagane przez customowe sygnatury i tworzy evidence dla:
+Własny moduł Pythona normalizuje JSONL z httpx, zbiera ograniczone dane wymagane przez customowe sygnatury i tworzy evidence dla:
 
 - nagłówków;
 - nazw cookies;
@@ -177,13 +178,15 @@ Wymagania operacyjne httpx:
 
 ProjectDiscovery httpx jest podstawowym narzędziem MVP, ponieważ:
 
-- jest napisany w Go i dobrze pasuje do workera;
+- działa jako lekki, przypięty binarny CLI wywoływany z workera Celery;
 - przetwarza duże listy endpointów współbieżnie;
-- udostępnia strumieniowy JSONL;
+- udostępnia strumieniowy JSONL łatwy do parsowania w Pythonie;
 - ma wbudowaną kontrolę tempa, timeoutów i równoległości;
-- łatwo buduje się natywnie dla `linux/amd64` i `linux/arm64`;
+- buduje się natywnie dla `linux/amd64` i `linux/arm64` w obrazie workera;
 - ma mniejszy narzut uruchomieniowy niż stos Ruby;
 - dostarcza wystarczające dane HTTP/TLS i wstępne fingerprinty technologii.
+
+Uwaga: ProjectDiscovery httpx to osobne narzędzie Go. Nie mylić go z pakietem Pythona o nazwie `httpx`.
 
 WhatWeb posiada rozbudowany system pluginów i może zapewnić głębsze rozpoznanie części CMS-ów lub starszych technologii, ale:
 
@@ -259,7 +262,7 @@ Import i eksport CSV/JSON używa wersjonowanego schematu opisanego w `docs/impor
 
 `compose.yml` nie wymusza `linux/amd64`, nie używa `network_mode: host`, ścieżek właściwych dla pojedynczego systemu ani binariów kopiowanych z hosta.
 
-API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika zależności wymagających CGO. Przypięta wersja httpx jest budowana ze źródeł w wieloetapowym Dockerfile dla docelowej architektury. Frontend buduje się do statycznych zasobów niezależnych od CPU.
+Obrazy Django, Celery i frontendu budują się dla `TARGETOS/TARGETARCH`. Zależności Pythona pochodzą z wheels zgodnych z docelową architekturą; unikamy pakietów wymagających lokalnej kompilacji C, o ile to możliwe. Przypięta wersja ProjectDiscovery httpx jest budowana ze źródeł w wieloetapowym Dockerfile workera. Frontend buduje się do statycznych zasobów niezależnych od CPU.
 
 `docker buildx bake` buduje obrazy `linux/amd64` i `linux/arm64`. Emulacja QEMU służy do walidacji, natomiast lokalnie uruchamiany jest natywny wariant.
 
@@ -269,7 +272,7 @@ API, scheduler i worker są kompilowane dla `TARGETOS/TARGETARCH`. Kod Go unika 
 - Docker Engine z Compose albo Docker Desktop;
 - udokumentowanej minimalnej ilości RAM i miejsca.
 
-Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis, nmap ani httpx.
+Nie wymaga lokalnej instalacji Pythona, Node.js, PostgreSQL, Redis, nmap ani httpx.
 
 ## Kryteria akceptacji
 
@@ -294,7 +297,7 @@ Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis, nmap ani httpx.
 
 ## Plan realizacji
 
-1. Utworzenie monorepo i wieloarchitekturowego Docker Compose.
+1. Utworzenie monorepo Django/Celery i wieloarchitekturowego Docker Compose.
 2. Model PostgreSQL, migracje, logowanie, sesje i RBAC.
 3. Formularze oraz import celów i wyników CSV/JSON.
 4. Scheduler, kolejka, batche, checkpointy i okna czasowe.
@@ -308,16 +311,23 @@ Nie wymaga lokalnej instalacji Go, Node.js, PostgreSQL, Redis, nmap ani httpx.
 ## Docelowa struktura repozytorium
 
 ```text
-apps/
-  api/
-  worker/
-  web/
-internal/
-  crypto/
-  diff/
-  domain/
-  fingerprint/
-  scanner/
+backend/
+  manage.py
+  config/
+  apps/
+    accounts/
+    targets/
+    scans/
+    fingerprints/
+    audit/
+  services/
+    crypto/
+    diff/
+    fingerprint/
+    scanner/
+workers/
+  celery_app.py
+web/
 deploy/docker/
 docs/
 schemas/

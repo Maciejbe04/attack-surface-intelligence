@@ -15,7 +15,7 @@ Read `docs/mvp-plan.md` for acceptance criteria and `docs/architecture.md` for c
 
 - Runtime orchestration: Docker Compose.
 - Do not add Terraform, Ansible, Kubernetes, Helm or Swarm.
-- Application stack: Go, React/TypeScript, PostgreSQL and Redis.
+- Application stack: Python/Django/DRF, Celery, React/TypeScript, PostgreSQL and Redis.
 - Scanning stack: nmap discovery, ProjectDiscovery httpx and custom declarative signatures.
 - Supported image architectures: `linux/amd64` and `linux/arm64`.
 - Supported local environments: Linux Docker Engine and Docker Desktop on Intel/Apple Silicon macOS.
@@ -28,11 +28,11 @@ Treat a proposal that violates these decisions as an architecture change. Explai
 
 - gateway: only host-published entry point and TLS termination;
 - web: React frontend;
-- api: RBAC, validation, persistence, diff and exports;
-- scheduler: scan windows, snapshots, batches, checkpoints and ETA;
-- redis: sessions, queue and leases;
+- api: Django/DRF for RBAC, validation, persistence, diff and exports;
+- scheduler: Celery Beat for scan windows, snapshots, batches, checkpoints and ETA;
+- redis: sessions, Celery broker and leases;
 - postgres: durable source of truth;
-- worker: nmap discovery, ProjectDiscovery httpx, evidence normalization and signatures;
+- worker: Celery worker for nmap discovery, ProjectDiscovery httpx, evidence normalization and signatures;
 - backup: encrypted PostgreSQL backup and restore verification.
 
 Workers send results through the internal API. They do not receive administrative database credentials.
@@ -74,7 +74,7 @@ On native Linux, prefer nmap SYN scan when raw sockets work. On Docker Desktop o
 
 ## Delivery invariants
 
-A fresh local install requires only Git and Docker with Compose. It must not require host-installed Go, Node.js, PostgreSQL, Redis or nmap.
+A fresh local install requires only Git and Docker with Compose. It must not require host-installed Python, Node.js, PostgreSQL, Redis or nmap.
 
 Every release candidate must:
 

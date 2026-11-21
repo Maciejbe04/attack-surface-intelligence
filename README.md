@@ -21,7 +21,8 @@ Projekt jest w fazie dokumentacji i projektowania MVP. Kod aplikacji oraz `compo
 
 | Warstwa | Technologia |
 |---|---|
-| API / scheduler / worker | Go |
+| API | Python / Django / Django REST Framework |
+| Scheduler / worker | Celery |
 | UI | React / TypeScript |
 | Dane | PostgreSQL |
 | Kolejka i sesje | Redis |
