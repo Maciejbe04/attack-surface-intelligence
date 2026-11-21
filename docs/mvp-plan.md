@@ -58,6 +58,8 @@ Podstawowe encje:
 - `roles`;
 - `audit_log`.
 
+Szczegóły relacji, kluczy i cyklu życia opisuje `docs/data-model.md`.
+
 Surowa obserwacja skanera jest niemutowalna. Edycje użytkownika zapisują się jako osobny `manual_override`. Widok prezentowany użytkownikowi składa aktualną obserwację z ręcznym nadpisaniem, dlatego kolejny skan nie usuwa notatek, tagów ani korekt analityka.
 
 Konfigurację można edytować podczas aktywnego skanu. Rozpoczęty przebieg korzysta z własnego snapshotu konfiguracji, a zmiany obowiązują od następnego przebiegu.
@@ -75,7 +77,7 @@ System posiada cztery role:
 
 Uprawnienia są egzekwowane przez API, a nie tylko przez interfejs. Każda zmiana konfiguracji, wyniku, sygnatury lub roli trafia do `audit_log`.
 
-Hasła są haszowane Argon2id. Losowe identyfikatory sesji są przechowywane w Redisie i przekazywane w cookie `HttpOnly`, `Secure`, `SameSite=Strict`. Sesje mają czas bezczynności i maksymalny czas życia. Próby logowania są ograniczane tempem i audytowane.
+Hasła są haszowane Argon2id. Losowe identyfikatory sesji są przechowywane w Redisie i przekazywane w cookie `HttpOnly`, `SameSite=Strict`. Flaga `Secure` jest wymagana przy HTTPS; lokalny profil bez TLS może ją wyłączyć wyłącznie w `local-dev`. Sesje mają czas bezczynności i maksymalny czas życia. Próby logowania są ograniczane tempem i audytowane. Szczegóły ról opisuje `docs/rbac.md`.
 
 ## Szyfrowanie danych
 
@@ -92,7 +94,7 @@ Jawne pozostają jedynie metadane wymagane do indeksowania, np. kod HTTP, nazwa 
 
 Zaszyfrowana wartość zawiera wersję klucza, nonce, ciphertext oraz tag. Rotacja klucza działa partiami bez zatrzymywania systemu. Klucze są montowane jako lokalne sekrety, nie trafiają do obrazu ani repozytorium.
 
-Backup PostgreSQL jest szyfrowany osobnym kluczem i cyklicznie testowany przez odtworzenie do tymczasowej bazy.
+Backup PostgreSQL jest szyfrowany osobnym kluczem i cyklicznie testowany przez odtworzenie do tymczasowej bazy. Listę pól i procedurę rotacji opisuje `docs/encryption.md`.
 
 ## Skanowanie, okna i estymacja
 
@@ -216,7 +218,7 @@ Poziomy:
 - `medium`: 40–69;
 - `high`: 70–100.
 
-Customowe sygnatury są deklaratywne i mogą sprawdzać nagłówek, nazwę cookie, fragment HTML, favicon hash, status dozwolonej ścieżki lub ograniczony regex wersji.
+Customowe sygnatury są deklaratywne i mogą sprawdzać nagłówek, nazwę cookie, fragment HTML, favicon hash, status dozwolonej ścieżki lub ograniczony regex wersji. Format YAML i przykłady opisuje `docs/signatures.md`. Politykę portów, flag httpx i limitów opisuje `docs/scanning-policy.md`.
 
 ## Historia i stany
 
@@ -251,7 +253,7 @@ Dashboard pokazuje:
 - wyniki customowych sygnatur;
 - czas, ETA i postęp skanów.
 
-Import i eksport CSV/JSON używa wersjonowanego schematu. Wybrane obserwacje mogą być przesyłane do DefectDojo jako finding informacyjny z idempotency key i evidence.
+Import i eksport CSV/JSON używa wersjonowanego schematu opisanego w `docs/import-export.md`. Wybrane obserwacje mogą być przesyłane do DefectDojo jako finding informacyjny z idempotency key i evidence.
 
 ## Lokalne uruchomienie i wiele architektur
 
@@ -329,20 +331,27 @@ compose.demo.yml
 docker-bake.hcl
 ```
 
-## Dokumentacja końcowa
+## Dokumentacja
 
-- `README.md`: instalacja, inicjalizacja sekretów i szybki test;
+Dostępne:
+
+- `README.md`: status projektu i indeks;
+- `docs/mvp-plan.md`: zakres MVP i kryteria akceptacji;
 - `docs/architecture.md`: komponenty, sieci i przepływ danych;
 - `docs/data-model.md`: obserwacje, historia i overrides;
-- `docs/api.md`: API oraz OpenAPI;
-- `docs/scanning-policy.md`: limity i zasady bezpieczeństwa;
+- `docs/scanning-policy.md`: porty, limity, nmap i httpx;
 - `docs/signatures.md`: format własnych sygnatur;
 - `docs/import-export.md`: wersjonowane formaty CSV/JSON;
 - `docs/rbac.md`: macierz uprawnień;
 - `docs/encryption.md`: pola, klucze i rotacja;
+- `docs/demo-script.md`: demonstracja dwóch skanów;
+- `docs/adr-001-http-fingerprinting.md`: wybór httpx.
+
+Do uzupełnienia wraz z implementacją:
+
+- `docs/api.md`: API oraz OpenAPI;
 - `docs/security.md`: threat model i ograniczenia;
 - `docs/operations.md`: healthchecki i skalowanie workerów;
 - `docs/backup-restore.md`: backup i test odtworzenia;
 - `docs/local-platforms.md`: Linux/macOS, amd64/arm64 i tryby nmap;
-- `docs/demo-script.md`: demonstracja krok po kroku;
 - `presentation/`: prezentacja do 10 slajdów.

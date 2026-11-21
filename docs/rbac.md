@@ -1,0 +1,48 @@
+# RBAC
+
+## Role
+
+| Rola | Zakres |
+|---|---|
+| `admin` | użytkownicy, role, sekrety, konfiguracja globalna, pełny dostęp |
+| `operator` | cele, skany, harmonogramy, sygnatury |
+| `analyst` | odczyt oraz edycja wyników, tagów, notatek i overrides |
+| `viewer` | wyłącznie odczyt |
+
+Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
+
+## Macierz uprawnień
+
+| Akcja | admin | operator | analyst | viewer |
+|---|---|---|---|---|
+| Logowanie / własna sesja | tak | tak | tak | tak |
+| Zarządzanie użytkownikami i rolami | tak | nie | nie | nie |
+| Rotacja kluczy i sekrety systemowe | tak | nie | nie | nie |
+| Zarządzanie allowlistą | tak | tak | nie | nie |
+| CRUD celów | tak | tak | nie | nie |
+| CRUD profili i harmonogramów | tak | tak | nie | nie |
+| Start / stop / wznowienie skanu | tak | tak | nie | nie |
+| CRUD sygnatur | tak | tak | nie | nie |
+| Podgląd dashboardu i historii | tak | tak | tak | tak |
+| Eksport CSV/JSON | tak | tak | tak | tak |
+| Import celów | tak | tak | nie | nie |
+| Import wyników | tak | tak | tak | nie |
+| Manual override / tagi / notatki | tak | tak | tak | nie |
+| Eksport do DefectDojo | tak | tak | tak | nie |
+| Podgląd audit log | tak | nie | nie | nie |
+
+## Uwierzytelnianie
+
+- hasła: Argon2id;
+- sesje: losowy identyfikator w Redis;
+- cookie: `HttpOnly`, `SameSite=Strict`;
+- flaga `Secure`: wymagana przy HTTPS; lokalnie bez TLS dopuszczalne jest wyłączenie `Secure` wyłącznie w profilu `local-dev`;
+- limit prób logowania oraz audyt nieudanych logowań;
+- sesja ma idle timeout i absolute timeout.
+
+## Zasady egzekwowania
+
+- brak uprawnienia = HTTP `403`;
+- brak sesji = HTTP `401`;
+- każda zmiana konfiguracji, wyniku, sygnatury lub roli trafia do `audit_log`;
+- worker używa osobnego tokenu serwisowego z uprawnieniem wyłącznie do pobierania zadań i przesyłania wyników.
