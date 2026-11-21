@@ -98,15 +98,13 @@ def assert_target_allowed(owner: User, address: str, target_type: str) -> None:
 
 
 def resolve_ips(hostname: str) -> list[str]:
+    """Resolve hostname to IPs. Raises socket.gaierror on DNS failure."""
     ips: list[str] = []
-    try:
-        for family, _, _, _, sockaddr in socket.getaddrinfo(
-            hostname, None, type=socket.SOCK_STREAM
-        ):
-            if family in (socket.AF_INET, socket.AF_INET6):
-                ips.append(sockaddr[0])
-    except socket.gaierror as exc:
-        raise AllowlistDenied(f"DNS resolution failed for {hostname}: {exc}") from exc
+    for family, _, _, _, sockaddr in socket.getaddrinfo(
+        hostname, None, type=socket.SOCK_STREAM
+    ):
+        if family in (socket.AF_INET, socket.AF_INET6):
+            ips.append(sockaddr[0])
     # unique preserve order
     seen: set[str] = set()
     out: list[str] = []
@@ -117,12 +115,35 @@ def resolve_ips(hostname: str) -> list[str]:
     return out
 
 
+def _allowlist_has_ip_or_cidr(owner: User) -> bool:
+    return AllowlistEntry.objects.filter(
+        owner=owner, enabled=True, entry_type__in=("ip", "cidr")
+    ).exists()
+
+
 def assert_resolvable_allowed(owner: User, address: str, target_type: str) -> list[str]:
-    """Check allowlist for the target; for domains also re-check every resolved IP."""
+    """
+    Check allowlist for the target before the worker connects.
+
+    Domain entries authorize that hostname. Resolved IPs are only enforced when
+    the allowlist also contains IP/CIDR rows (intersection with network ranges).
+    DNS failures on the API (internal network) do not deny an already-allowlisted
+    domain — the scanner network resolves at probe time.
+    """
     assert_target_allowed(owner, address, target_type)
     if target_type != Target.Type.DOMAIN and target_type != "domain":
         return []
-    resolved = resolve_ips(address)
+
+    try:
+        resolved = resolve_ips(address)
+    except socket.gaierror:
+        # API runs on an internal Docker network without external DNS; domain
+        # name already passed allowlist — let the worker resolve on scanner net.
+        return []
+
+    if not _allowlist_has_ip_or_cidr(owner):
+        return resolved
+
     denied = [ip for ip in resolved if not is_value_allowed(owner, ip, "ip")]
     if denied:
         raise AllowlistDenied(

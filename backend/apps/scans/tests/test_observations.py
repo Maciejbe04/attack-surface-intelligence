@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -9,7 +11,13 @@ from rest_framework.test import APIClient
 from apps.accounts.models import UserProfile
 from apps.scans.crypto import open_sealed, seal
 from apps.scans.models import Observation, ScanBatch, ScanRun, Target
-from apps.scans.normalize import finalize_run_lifecycle, persist_batch_observations
+from apps.scans.models import TargetGroup
+from apps.scans.normalize import (
+    finalize_run_lifecycle,
+    persist_batch_observations,
+    previous_completed_run,
+    same_scan_scope,
+)
 from apps.scans.signatures import evaluate_signature, load_signatures, match_http_records
 
 
@@ -54,6 +62,120 @@ class NormalizeLifecycleTests(TestCase):
         run.save()
         finalize_run_lifecycle(run)
         return run
+
+    def test_previous_completed_run_matches_same_host_not_other(self) -> None:
+        first = self._run_with_batch(
+            {
+                "hosts": [
+                    {
+                        "address": "192.0.2.50",
+                        "status": "up",
+                        "ports": [{"port": 80, "protocol": "tcp", "state": "open"}],
+                    }
+                ]
+            }
+        )
+        other_target = Target.objects.create(
+            owner=self.owner,
+            address="198.51.100.10",
+            target_type=Target.Type.IP,
+        )
+        other = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.COMPLETED,
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=other,
+            target=other_target,
+            target_address=other_target.address,
+            target_type=other_target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        second = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.COMPLETED,
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=second,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        prev = previous_completed_run(second)
+        self.assertEqual(prev, first)
+        self.assertTrue(same_scan_scope(second, first))
+        self.assertFalse(same_scan_scope(second, other))
+
+    def test_previous_completed_run_matches_same_group(self) -> None:
+        group = TargetGroup.objects.create(owner=self.owner, name="lab")
+        group.targets.add(self.target)
+        older = ScanRun.objects.create(
+            owner=self.owner,
+            group=group,
+            status=ScanRun.Status.COMPLETED,
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=older,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        host_only = self._run_with_batch(
+            {
+                "hosts": [
+                    {
+                        "address": "192.0.2.50",
+                        "status": "up",
+                        "ports": [{"port": 443, "protocol": "tcp", "state": "open"}],
+                    }
+                ]
+            }
+        )
+        newer = ScanRun.objects.create(
+            owner=self.owner,
+            group=group,
+            status=ScanRun.Status.COMPLETED,
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=newer,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        prev = previous_completed_run(newer)
+        self.assertEqual(prev, older)
+        self.assertFalse(same_scan_scope(newer, host_only))
 
     def test_normalize_and_lifecycle_new_then_changed_gone(self) -> None:
         first = self._run_with_batch(
@@ -165,6 +287,50 @@ class NormalizeLifecycleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertGreaterEqual(body["counts"]["added"], 1)
+
+    def test_diff_api_rejects_different_host_set(self) -> None:
+        first = self._run_with_batch(
+            {
+                "hosts": [
+                    {
+                        "address": "192.0.2.50",
+                        "status": "up",
+                        "ports": [{"port": 80, "protocol": "tcp", "state": "open"}],
+                    }
+                ]
+            }
+        )
+        other_target = Target.objects.create(
+            owner=self.owner,
+            address="198.51.100.77",
+            target_type=Target.Type.IP,
+        )
+        other = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.COMPLETED,
+            finished_at=timezone.now(),
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+        )
+        ScanBatch.objects.create(
+            run=other,
+            target=other_target,
+            target_address=other_target.address,
+            target_type=other_target.target_type,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={},
+            finished_at=timezone.now(),
+        )
+        client = APIClient()
+        client.force_login(self.owner)
+        response = client.get(
+            reverse("scan-diff", args=[first.pk]),
+            {"against": other.pk},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("same group", response.json()["detail"].lower())
 
 
 class SignatureEngineTests(TestCase):
@@ -307,3 +473,64 @@ class PauseResumeTests(TestCase):
         self.assertNotEqual(str(batch.delivery_id), old_delivery)
         self.assertEqual(run.status, ScanRun.Status.RUNNING)
         self.assertFalse(run.resume_available)
+
+    @override_settings(WORKER_TOKEN="test-worker-token")
+    def test_deadline_pause_requests_cancel_and_rejects_late_complete(self) -> None:
+        run = ScanRun.objects.create(
+            owner=self.owner,
+            status=ScanRun.Status.RUNNING,
+            modules_snapshot=[{"id": "port-scan", "filters": {}}],
+            total_batches=1,
+            completed_batches=0,
+            progress=10,
+            started_at=timezone.now() - timedelta(minutes=5),
+            deadline_at=timezone.now() - timedelta(seconds=5),
+        )
+        batch = ScanBatch.objects.create(
+            run=run,
+            target=self.target,
+            target_address=self.target.address,
+            target_type=self.target.target_type,
+            status=ScanBatch.Status.RUNNING,
+            progress=40,
+            claimed_at=timezone.now() - timedelta(minutes=2),
+        )
+        headers = {"HTTP_X_WORKER_TOKEN": "test-worker-token"}
+        identity = {"delivery_id": str(batch.delivery_id)}
+
+        response = self.client.get(
+            reverse("internal-batch-cancel", args=[batch.pk]),
+            identity,
+            **headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertTrue(body["cancel_requested"])
+        self.assertEqual(body["status"], ScanBatch.Status.PAUSED)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, ScanBatch.Status.PAUSED)
+
+        # Worker kill acknowledgement must leave the batch PAUSED for resume.
+        response = self.client.post(
+            reverse("internal-batch-fail", args=[batch.pk]),
+            {**identity, "error": "Scan cancelled", "cancelled": True},
+            format="json",
+            **headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, ScanBatch.Status.PAUSED)
+
+        # Late complete after deadline must not revive work.
+        response = self.client.post(
+            reverse("internal-batch-complete", args=[batch.pk]),
+            {
+                **identity,
+                "result": {"hosts": [{"address": self.target.address, "ports": []}]},
+            },
+            format="json",
+            **headers,
+        )
+        self.assertEqual(response.status_code, 409)
+        batch.refresh_from_db()
+        self.assertEqual(batch.status, ScanBatch.Status.PAUSED)

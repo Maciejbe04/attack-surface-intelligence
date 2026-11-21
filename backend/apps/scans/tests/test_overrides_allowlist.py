@@ -1,10 +1,12 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
-from apps.scans.allowlist import is_value_allowed
+from apps.scans.allowlist import assert_resolvable_allowed, is_value_allowed
 from apps.scans.models import AllowlistEntry, ManualOverride, Observation, ScanRun, Target
 from apps.scans.overrides import effective_attrs, notes_plaintext
 
@@ -65,6 +67,45 @@ class AllowlistTests(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_domain_allowlist_allows_cdn_ips(self) -> None:
+        AllowlistEntry.objects.create(
+            owner=self.user, value="onet.pl", entry_type="domain"
+        )
+        with patch(
+            "apps.scans.allowlist.resolve_ips",
+            return_value=["13.249.8.126", "52.85.154.72"],
+        ):
+            resolved = assert_resolvable_allowed(self.user, "onet.pl", "domain")
+        self.assertEqual(resolved, ["13.249.8.126", "52.85.154.72"])
+
+    def test_domain_allowlist_tolerates_dns_failure(self) -> None:
+        import socket
+
+        AllowlistEntry.objects.create(
+            owner=self.user, value="onet.pl", entry_type="domain"
+        )
+        with patch(
+            "apps.scans.allowlist.resolve_ips",
+            side_effect=socket.gaierror(-3, "Temporary failure in name resolution"),
+        ):
+            resolved = assert_resolvable_allowed(self.user, "onet.pl", "domain")
+        self.assertEqual(resolved, [])
+
+    def test_domain_plus_cidr_enforces_resolved_ip(self) -> None:
+        AllowlistEntry.objects.create(
+            owner=self.user, value="onet.pl", entry_type="domain"
+        )
+        AllowlistEntry.objects.create(
+            owner=self.user, value="192.0.2.0/24", entry_type="cidr"
+        )
+        with patch(
+            "apps.scans.allowlist.resolve_ips",
+            return_value=["198.51.100.9"],
+        ):
+            with self.assertRaises(Exception) as ctx:
+                assert_resolvable_allowed(self.user, "onet.pl", "domain")
+        self.assertIn("outside allowlist", str(ctx.exception))
 
 
 class OverrideTests(TestCase):

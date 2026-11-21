@@ -41,11 +41,15 @@ Pozostają indeksowalne i jawne:
 
 ## Rotacja kluczy
 
+Docelowy przepływ:
+
 1. Operator dodaje nową wersję klucza.
 2. Nowe zapisy używają najnowszej wersji.
 3. Zadanie wsadowe przepisuje stare rekordy partiami.
 4. Po zakończeniu migracji stary klucz można wyłączyć.
 5. Rotacja nie wymaga postoju systemu.
+
+**Stan MVP:** envelope `sx1:` (AES-256-GCM) działa na bieżącym kluczu z sekretu. Pole `key_version` i automatyczny job rotacji nie są jeszcze wdrożone — rotacja = wymiana sekretu + ewentualne ręczne przepisanie.
 
 ## Backup
 

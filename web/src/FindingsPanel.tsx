@@ -1,12 +1,17 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  ApiError,
   apiErrorMessage,
   downloadScanExport,
+  getScanDiff,
   listObservations,
   Observation,
   ObservationLifecycle,
   resumeScan,
   Scan,
+  ScanDiff,
+  ScanDiffChange,
+  ScanDiffObservation,
   upsertOverride,
 } from "./api/scans";
 import { Translate } from "./i18n";
@@ -20,6 +25,8 @@ const LIFECYCLES: Array<ObservationLifecycle | ""> = [
   "GONE",
   "UNCHANGED",
 ];
+
+const PREVIOUS = "";
 
 function formatEta(seconds: number | null | undefined): string {
   if (seconds == null || seconds < 0) return "";
@@ -39,8 +46,25 @@ function attrsPreview(attrs: Record<string, unknown>): string {
   return parts.slice(0, 4).join(" · ") || "—";
 }
 
+function attrDiffLines(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  const keys = Array.from(new Set([...Object.keys(before), ...Object.keys(after)])).sort();
+  const lines: string[] = [];
+  for (const key of keys) {
+    const left = before[key];
+    const right = after[key];
+    if (JSON.stringify(left) === JSON.stringify(right)) continue;
+    lines.push(`${key}: ${left == null ? "—" : String(left)} → ${right == null ? "—" : String(right)}`);
+  }
+  return lines;
+}
+
+type DiffRow =
+  | { kind: "added" | "removed"; item: ScanDiffObservation }
+  | { kind: "changed"; item: ScanDiffChange };
+
 type Props = {
   scan: Scan | null;
+  scans?: Scan[];
   canMutate: boolean;
   canExport: boolean;
   onScanUpdated: (scan: Scan) => void;
@@ -50,6 +74,7 @@ type Props = {
 
 export function FindingsPanel({
   scan,
+  scans = [],
   canMutate,
   canExport,
   onScanUpdated,
@@ -61,11 +86,56 @@ export function FindingsPanel({
   const [summary, setSummary] = useState<Partial<Record<ObservationLifecycle, number>>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editTech, setEditTech] = useState("");
+  const [compareMode, setCompareMode] = useState(false);
+  const [againstId, setAgainstId] = useState<string>(PREVIOUS);
+  const [diff, setDiff] = useState<ScanDiff | null>(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+
+  const againstOptions = useMemo(() => {
+    if (!scan) return [];
+    const finished = (item: Scan) =>
+      Boolean(item.finished_at) &&
+      (item.status === "completed" || item.status === "partial" || item.status === "failed");
+    const sameTargets = (item: Scan) => {
+      const left = [...(scan.targets || [])].map((v) => v.toLowerCase()).sort();
+      const right = [...(item.targets || [])].map((v) => v.toLowerCase()).sort();
+      if (left.length === 0 || right.length === 0) return false;
+      return left.length === right.length && left.every((value, index) => value === right[index]);
+    };
+    return scans.filter((item) => {
+      if (item.id === scan.id || !finished(item)) return false;
+      if (scan.group_id != null) {
+        return item.group_id === scan.group_id;
+      }
+      // Host / ad-hoc scan: only the same target host set.
+      return item.group_id == null && sameTargets(item);
+    });
+  }, [scan, scans]);
 
   useEffect(() => {
-    if (!scan || !scan.finished_at) {
-      setRows([]);
-      setSummary({});
+    setCompareMode(false);
+    setAgainstId(PREVIOUS);
+    setDiff(null);
+    setEditingKey(null);
+  }, [scan?.id]);
+
+  useEffect(() => {
+    if (againstId === PREVIOUS) return;
+    if (!againstOptions.some((item) => String(item.id) === againstId)) {
+      setAgainstId(PREVIOUS);
+    }
+  }, [againstId, againstOptions]);
+
+  useEffect(() => {
+    if (!scan || !scan.finished_at || compareMode) {
+      if (!scan || !scan.finished_at) {
+        setRows([]);
+        setSummary({});
+      }
       return;
     }
     const controller = new AbortController();
@@ -83,13 +153,53 @@ export function FindingsPanel({
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         if (error instanceof DOMException && error.name === "AbortError") return;
+        // Auth loss is handled globally; avoid toast+rerender fetch storms.
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return;
         pushToast("error", t("Findings unavailable"), apiErrorMessage(error, t("Could not load findings.")));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [scan?.id, scan?.finished_at, lifecycle, pushToast, t]);
+    // pushToast/t are stable enough via parent useCallback; omit to avoid refetch loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [scan?.id, scan?.finished_at, lifecycle, compareMode]);
+
+  useEffect(() => {
+    if (!scan || !scan.finished_at || !compareMode) {
+      if (!compareMode) setDiff(null);
+      return;
+    }
+    const controller = new AbortController();
+    setDiffLoading(true);
+    const against = againstId === PREVIOUS ? null : Number(againstId);
+    getScanDiff(scan.id, against, controller.signal)
+      .then((payload) => {
+        if (controller.signal.aborted) return;
+        setDiff(payload);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return;
+        setDiff(null);
+        pushToast("error", t("Compare unavailable"), apiErrorMessage(error, t("Could not load scan diff.")));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDiffLoading(false);
+      });
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
+  }, [scan?.id, scan?.finished_at, compareMode, againstId]);
+
+  const diffRows: DiffRow[] = useMemo(() => {
+    if (!diff) return [];
+    return [
+      ...diff.added.map((item) => ({ kind: "added" as const, item })),
+      ...diff.removed.map((item) => ({ kind: "removed" as const, item })),
+      ...diff.changed.map((item) => ({ kind: "changed" as const, item })),
+    ];
+  }, [diff]);
 
   if (!scan) return null;
 
@@ -120,11 +230,6 @@ export function FindingsPanel({
       setBusy(false);
     }
   }
-
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editNotes, setEditNotes] = useState("");
-  const [editTags, setEditTags] = useState("");
-  const [editTech, setEditTech] = useState("");
 
   function openOverride(row: Observation) {
     setEditingKey(row.entity_key);
@@ -193,6 +298,17 @@ export function FindingsPanel({
               {t("Resume")}
             </button>
           )}
+          {finished && (
+            <button
+              type="button"
+              className="btn btn--normal"
+              aria-pressed={compareMode}
+              disabled={busy}
+              onClick={() => setCompareMode((value) => !value)}
+            >
+              {compareMode ? t("Hide compare") : t("Compare")}
+            </button>
+          )}
           {finished && canExport && (
             <>
               <button type="button" className="btn btn--normal" disabled={busy} onClick={() => void onExport("json")}>
@@ -206,29 +322,144 @@ export function FindingsPanel({
         </div>
       </div>
       <div className="panel__body">
-        <div className="findings-kpis">
-          {(["NEW", "CHANGED", "GONE"] as ObservationLifecycle[]).map((key) => (
-            <div key={key} className="findings-kpi">
-              <span className={`lifecycle-badge lifecycle-badge--${key}`}>{key}</span>
-              <strong className="mono">{lifecycleFromScan[key] ?? 0}</strong>
-            </div>
-          ))}
-          {(scan.eta_seconds != null || scan.resume_available) && (
-            <div className="findings-kpi">
-              {scan.resume_available ? (
-                <span className="status-badge status-badge--partial">{t("Paused")}</span>
-              ) : (
-                <span className="field-help">{t("ETA")}</span>
-              )}
-              <strong className="mono">
-                {scan.resume_available ? t("Resume available") : formatEta(scan.eta_seconds)}
-              </strong>
-            </div>
-          )}
-        </div>
+        {!compareMode && (
+          <div className="findings-kpis">
+            {(["NEW", "CHANGED", "GONE"] as ObservationLifecycle[]).map((key) => (
+              <div key={key} className="findings-kpi">
+                <span className={`lifecycle-badge lifecycle-badge--${key}`}>{key}</span>
+                <strong className="mono">{lifecycleFromScan[key] ?? 0}</strong>
+              </div>
+            ))}
+            {(scan.eta_seconds != null || scan.resume_available) && (
+              <div className="findings-kpi">
+                {scan.resume_available ? (
+                  <span className="status-badge status-badge--partial">{t("Paused")}</span>
+                ) : (
+                  <span className="field-help">{t("ETA")}</span>
+                )}
+                <strong className="mono">
+                  {scan.resume_available ? t("Resume available") : formatEta(scan.eta_seconds)}
+                </strong>
+              </div>
+            )}
+          </div>
+        )}
 
         {!finished ? (
           <p className="field-help">{t("Findings appear after the scan finishes.")}</p>
+        ) : compareMode ? (
+          <>
+            <div className="form-row">
+              <label htmlFor="findings-against">{t("Against")}</label>
+              <select
+                id="findings-against"
+                className="input input--select"
+                value={againstId}
+                onChange={(e) => setAgainstId(e.target.value)}
+                disabled={diffLoading}
+              >
+                <option value={PREVIOUS}>{t("Previous completed")}</option>
+                {againstOptions.map((item) => (
+                  <option key={item.id} value={String(item.id)}>
+                    #{item.id}
+                    {item.group_name ? ` · ${item.group_name}` : ""}
+                    {!item.group_name && item.targets?.length
+                      ? ` · ${item.targets.join(", ")}`
+                      : ""}{" "}
+                    · {item.status} · {new Date(item.finished_at || item.created_at).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+              <p className="field-help">{t("Only scans for the same group or host set.")}</p>
+            </div>
+
+            {diffLoading ? (
+              <p className="field-help" role="status">
+                {t("Loading…")}
+              </p>
+            ) : !diff || diff.against_run_id == null ? (
+              <p className="field-help">{diff?.detail || t("No previous run to compare.")}</p>
+            ) : (
+              <>
+                <p className="field-help">
+                  {t("Comparing scan")} #{diff.current_run_id} {t("vs")} #{diff.against_run_id}
+                </p>
+                <div className="findings-kpis">
+                  <div className="findings-kpi">
+                    <span className="lifecycle-badge lifecycle-badge--NEW">{t("Added")}</span>
+                    <strong className="mono">{diff.counts.added}</strong>
+                  </div>
+                  <div className="findings-kpi">
+                    <span className="lifecycle-badge lifecycle-badge--GONE">{t("Removed")}</span>
+                    <strong className="mono">{diff.counts.removed}</strong>
+                  </div>
+                  <div className="findings-kpi">
+                    <span className="lifecycle-badge lifecycle-badge--CHANGED">{t("Changed")}</span>
+                    <strong className="mono">{diff.counts.changed}</strong>
+                  </div>
+                </div>
+                {diffRows.length === 0 ? (
+                  <p className="field-help">{t("No differences between these scans.")}</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="hosts">
+                      <caption className="sr-only">{t("Scan comparison")}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t("Change")}</th>
+                          <th scope="col">{t("Entity")}</th>
+                          <th scope="col">{t("Details")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {diffRows.slice(0, 300).map((row) => {
+                          if (row.kind === "changed") {
+                            const lines = attrDiffLines(row.item.before, row.item.after);
+                            return (
+                              <tr key={`changed-${row.item.entity_key}`}>
+                                <td>
+                                  <span className="lifecycle-badge lifecycle-badge--CHANGED">
+                                    {t("Changed")}
+                                  </span>
+                                </td>
+                                <td className="mono">{row.item.entity_key}</td>
+                                <td>
+                                  {lines.length > 0 ? (
+                                    <ul className="diff-attr-list">
+                                      {lines.map((line) => (
+                                        <li key={line} className="mono">
+                                          {line}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          }
+                          const badge =
+                            row.kind === "added" ? "lifecycle-badge--NEW" : "lifecycle-badge--GONE";
+                          return (
+                            <tr key={`${row.kind}-${row.item.entity_key}`}>
+                              <td>
+                                <span className={`lifecycle-badge ${badge}`}>
+                                  {row.kind === "added" ? t("Added") : t("Removed")}
+                                </span>
+                              </td>
+                              <td className="mono">{row.item.entity_key}</td>
+                              <td>{attrsPreview(row.item.attrs)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </>
         ) : (
           <>
             <div className="form-row">
@@ -374,7 +605,7 @@ export function LifecycleKpis({
   t: Translate;
 }) {
   const latest = scans.find(
-    (scan) => scan.status === "completed" && scan.result_summary?.lifecycle,
+    (item) => item.status === "completed" && item.result_summary?.lifecycle,
   );
   const counts = latest?.result_summary?.lifecycle;
   if (!counts) return null;

@@ -477,6 +477,28 @@ class InternalWorkerAPITests(TestCase):
         self.run.refresh_from_db()
         self.assertEqual(self.run.status, ScanRun.Status.CANCELLED)
 
+    def test_progress_reports_cancel_after_deadline_pause(self) -> None:
+        self.client.post(
+            reverse("internal-batch-claim", args=(self.batch.id,)),
+            self.identity,
+            format="json",
+            **self.headers,
+        )
+        self.run.deadline_at = timezone.now() - timedelta(seconds=1)
+        self.run.save(update_fields=("deadline_at", "updated_at"))
+
+        response = self.client.post(
+            reverse("internal-batch-progress", args=(self.batch.id,)),
+            {**self.identity, "progress": 55, "message": "still scanning"},
+            format="json",
+            **self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["cancel_requested"])
+        self.assertEqual(response.json()["status"], ScanBatch.Status.PAUSED)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, ScanBatch.Status.PAUSED)
+
     @override_settings(
         SCAN_RECONCILE_STALE_SECONDS=600,
         SCAN_RECONCILE_BATCH_LIMIT=100,

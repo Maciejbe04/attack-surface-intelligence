@@ -338,7 +338,6 @@ schemas/
 signatures/
 tests/lab/
 demo/
-presentation/
 scripts/
 compose.yml
 compose.demo.yml
@@ -363,10 +362,16 @@ Dostępne:
 - `docs/auth-mfa.md`: logowanie i TOTP MFA;
 - `docs/adr-001-http-fingerprinting.md`: wybór httpx.
 
-Do uzupełnienia wraz z implementacją:
+Uzupełnione:
 
-- `docs/api.md`: API oraz OpenAPI;
+- `docs/api.md`: kontrakt endpointów;
 - `docs/security.md`: threat model i ograniczenia;
 - `docs/operations.md`: healthchecki i skalowanie workerów;
-- `docs/backup-restore.md`: backup i test odtworzenia;
-- `presentation/`: prezentacja do 10 slajdów.
+- `docs/backup-restore.md`: backup i procedura odtworzenia;
+- `demo/`: cele labowe i skrypt jury.
+
+Uzupełnione także:
+
+- `scripts/preflight.sh`, `smoke-test.sh`, `backup.sh`, `restore-test.sh`.
+
+Prezentacja jury (≤10 slajdów) jest poza repozytorium.

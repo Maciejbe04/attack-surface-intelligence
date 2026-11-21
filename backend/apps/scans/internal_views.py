@@ -33,6 +33,26 @@ FINISHED_BATCH_STATUSES = TERMINAL_BATCH_STATUSES | {ScanBatch.Status.PAUSED}
 EWMA_ALPHA = 0.3
 
 
+def _run_cancel_requested(run: ScanRun) -> bool:
+    return run.status in {
+        ScanRun.Status.CANCEL_REQUESTED,
+        ScanRun.Status.CANCELLED,
+    }
+
+
+def _batch_stop_requested(batch: ScanBatch) -> bool:
+    """True when the worker must kill nmap/httpx and stop the batch.
+
+    Covers explicit cancel and window-deadline pause (batch already PAUSED).
+    """
+    if _run_cancel_requested(batch.run):
+        return True
+    return batch.status in {
+        ScanBatch.Status.CANCELLED,
+        ScanBatch.Status.PAUSED,
+    }
+
+
 def _update_eta(run: ScanRun) -> None:
     """EWMA throughput → remaining ETA in seconds."""
     if run.started_at is None or run.total_batches <= 0:
@@ -356,7 +376,7 @@ class BatchClaimView(WorkerAPIView):
                     {
                         "terminal": True,
                         "status": batch.status,
-                        "cancel_requested": batch.status == ScanBatch.Status.CANCELLED,
+                        "cancel_requested": _batch_stop_requested(batch),
                     }
                 )
 
@@ -367,7 +387,8 @@ class BatchClaimView(WorkerAPIView):
                     {
                         "terminal": True,
                         "status": batch.status,
-                        "cancel_requested": False,
+                        # Workers that already started must treat deadline pause as stop.
+                        "cancel_requested": True,
                     }
                 )
 
@@ -506,12 +527,14 @@ class BatchProgressView(WorkerAPIView):
                         batch=batch,
                         source="worker",
                     )
+            if _pause_run_for_deadline(batch.run):
+                _aggregate_run(batch.run)
+                batch.refresh_from_db()
             return Response(
                 {
                     "status": batch.status,
                     "progress": batch.progress,
-                    "cancel_requested": batch.run.status
-                    == ScanRun.Status.CANCEL_REQUESTED,
+                    "cancel_requested": _batch_stop_requested(batch),
                 }
             )
 
@@ -528,11 +551,14 @@ class BatchCancelCheckView(WorkerAPIView):
                     {"detail": "Delivery ID does not match."},
                     status=status.HTTP_409_CONFLICT,
                 )
+            # Apply deadline during cancel polls so running nmap/httpx is killed
+            # without waiting for the next reconcile tick.
+            if _pause_run_for_deadline(batch.run):
+                _aggregate_run(batch.run)
+                batch.refresh_from_db()
             return Response(
                 {
-                    "cancel_requested": batch.run.status
-                    in {ScanRun.Status.CANCEL_REQUESTED, ScanRun.Status.CANCELLED}
-                    or batch.status == ScanBatch.Status.CANCELLED,
+                    "cancel_requested": _batch_stop_requested(batch),
                     "status": batch.status,
                 }
             )
@@ -561,6 +587,15 @@ class BatchCompleteView(WorkerAPIView):
                 )
             if batch.status == ScanBatch.Status.COMPLETED:
                 return Response({"status": batch.status})
+            if batch.status == ScanBatch.Status.PAUSED:
+                # Late complete after window deadline must not revive the batch.
+                return Response(
+                    {
+                        "detail": "Batch is paused for the scan window; result discarded.",
+                        "status": batch.status,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
             if batch.status in {ScanBatch.Status.FAILED, ScanBatch.Status.CANCELLED}:
                 return Response(
                     {"detail": f"Batch is already {batch.status}."},
@@ -646,6 +681,10 @@ class BatchFailView(WorkerAPIView):
                 ScanBatch.Status.CANCELLED if cancelled else ScanBatch.Status.FAILED
             )
             if batch.status == desired_status:
+                return Response({"status": batch.status})
+            # Window pause must survive worker kill acknowledgements so resume
+            # can republish the same unfinished work later.
+            if batch.status == ScanBatch.Status.PAUSED:
                 return Response({"status": batch.status})
             if batch.status in TERMINAL_BATCH_STATUSES:
                 return Response(

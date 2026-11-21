@@ -1,59 +1,64 @@
 # Scenariusz demonstracyjny
 
-Cel: pokazać dwa pełne przebiegi skanu oraz eksport zmian w czasie poniżej 15 minut.
+Cel: dwa pełne przebiegi skanu oraz eksport zmian w czasie poniżej 15 minut.
+
+Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README.md`](../demo/README.md).
 
 ## Przygotowanie
 
-1. Uruchomić lokalny lab z co najmniej:
-   - hostem A: HTTP na `:80` z nagłówkiem `Server: nginx`;
-   - hostem B: HTTPS na `:443` z certyfikatem ważnym > 30 dni;
-   - hostem C: tymczasowo wyłączonym przed drugim skanem.
-2. Zaimportować cele z `demo/targets.json`.
-3. Zalogować się jako `operator`.
+1. Stos: `./scripts/init-secrets.sh && docker compose up --build -d`.
+2. Lab HTTP (Proxmox lxcvnet albo lokalne odpowiedniki):
+   - host A `10.99.0.70` — Lab Alpha (nginx);
+   - host B `10.99.0.71` — Lab Bravo;
+   - host C `10.99.0.72` — Lab Charlie (do wyłączenia przed drugim skanem).
+3. Allowlista: wpisy IP `10.99.0.70–72` (admin/operator).
+4. Import celów z [`demo/targets.json`](../demo/targets.json) albo użyj grupy `lab-lxc`.
+5. Zaloguj się jako `operator` (albo `admin`).
 
 ## Przebieg 1
 
-1. Utworzyć profil `discovery-web`.
-2. Uruchomić skan na allowlistowanym zakresie lab.
-3. Pokazać postęp, ETA i metadane trybu nmap.
-4. Po zakończeniu wskazać:
+1. Uruchom skan grupy `lab-lxc` (moduł full-pipeline). Opcjonalnie ustaw krótkie okno, żeby pokazać pause/kill.
+2. Pokaż postęp, ETA i tryb nmap (`syn` / `connect`) w konsoli skanu.
+3. Po zakończeniu wskaż:
    - hosty `NEW`;
-   - wykryty nginx z confidence ≥ 40;
-   - certyfikat hosta B;
-   - evidence z httpx.
-5. Jako `analyst` dodać notatkę i tag do hosta A.
+   - fingerprint / confidence (np. nginx / lab headers);
+   - evidence HTTP.
+4. Jako `analyst` dodaj notatkę/override do hosta A (`10.99.0.70`).
 
 ## Zmiana środowiska
 
-Przed drugim skanem:
+Przed drugim skanem (na Proxmox):
 
-1. zmienić tytuł strony na hoście A;
-2. wymienić albo skrócić ważność certyfikatu na hoście B;
-3. wyłączyć host C;
-4. dodać nowy host D z otwartym `:8080`.
+```bash
+pct exec 220 -- bash -lc 'sed -i "s/Lab Alpha/Lab Alpha CHANGED/" /var/www/html/index.html'
+pct exec 222 -- systemctl stop nginx
+```
+
+Opcjonalnie dodaj nowy host D do grupy.
 
 ## Przebieg 2
 
-1. Uruchomić ten sam profil.
-2. Pokazać stany:
-   - host A / tytuł: `CHANGED`;
-   - certyfikat B: `CHANGED`;
-   - host C: `MISSING`;
-   - host D: `NEW`.
-3. Potwierdzić, że notatka i tag z przebiegu 1 pozostały na hoście A.
-4. Opcjonalnie wykonać trzeci i czwarty przebieg bez hosta C, aby pokazać przejście `MISSING → FLAKY/GONE`.
+1. Uruchom ten sam zakres / grupę.
+2. Findings / Compare:
+   - host A tytuł: `CHANGED`;
+   - host C: `MISSING` (po completed run bez odpowiedzi);
+   - override z przebiegu 1 nadal widoczny na A.
+3. Trzeci completed run bez C → ścieżka do `FLAKY`/`GONE`.
 
 ## Eksport i RBAC
 
-1. Wyeksportować wynik do CSV i JSON.
-2. Zalogować się jako `viewer` i pokazać brak przycisków zapisu.
-3. Spróbować startu skanu jako `analyst` — oczekiwane `403`.
-4. Pokazać wpisy w `audit_log` jako `admin`.
+1. Eksport CSV i JSON (`schema_version` 1).
+2. Opcjonalnie DefectDojo — status w liście skanów.
+3. `viewer` — brak zapisu; `analyst` — brak startu skanu (403); `admin` — audit log.
+
+## Okno skanu (kill)
+
+Przy przekroczonym `window_seconds`: unfinished → `PAUSED`, worker dostaje `cancel_requested` i kończy nmap/httpx; late complete jest odrzucany. **Resume** wznawia tylko wstrzymane batche.
 
 ## Kryteria sukcesu demo
 
 - dwa ukończone skany;
-- widoczne `NEW` i `CHANGED`;
+- widoczne `NEW` i `CHANGED` (oraz `MISSING` po wyłączeniu C);
 - zachowany manual override;
-- eksport CSV/JSON zgodny ze schematem `1`;
-- brak procesów nmap/httpx po zamknięciu okna lub zakończeniu demo.
+- eksport CSV/JSON;
+- brak osieroconych procesów nmap/httpx po cancel/deadline.

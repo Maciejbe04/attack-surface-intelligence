@@ -54,7 +54,7 @@ from .models import (
     TargetGroup,
 )
 from .modules import validate_modules
-from .normalize import diff_runs, previous_completed_run
+from .normalize import diff_runs, previous_completed_run, same_scan_scope
 from .overrides import overrides_for_keys
 from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
@@ -645,6 +645,13 @@ class ScanDiffView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             against = get_object_or_404(_runs_for(request.user), pk=int(against_raw))
+            if not same_scan_scope(run, against):
+                return Response(
+                    {
+                        "detail": "Can only compare scans for the same group or the same target host set.",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         else:
             against = previous_completed_run(run)
             if against is None:

@@ -1,4 +1,4 @@
-import { apiFetch } from "../auth";
+import { apiFetch, emitSessionExpired } from "../auth";
 import { ModuleFilterValues } from "../modules";
 
 export type TargetType = "ip" | "cidr" | "domain";
@@ -263,11 +263,16 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
-    throw new ApiError(
-      firstError(body) ?? `Request failed with HTTP ${response.status}.`,
-      response.status,
-      body,
-    );
+    const message = firstError(body) ?? `Request failed with HTTP ${response.status}.`;
+    // Unauthenticated (lost session cookie) — not a normal RBAC denial.
+    if (
+      response.status === 401 ||
+      (response.status === 403 &&
+        /authentication credentials were not provided/i.test(message))
+    ) {
+      emitSessionExpired();
+    }
+    throw new ApiError(message, response.status, body);
   }
   return body as T;
 }
@@ -520,6 +525,48 @@ export function listObservations(
   if (params?.entity_type) query.set("entity_type", params.entity_type);
   const suffix = query.toString() ? `?${query}` : "";
   return request(`/api/scans/${id}/observations/${suffix}`, { signal });
+}
+
+export type ScanDiffObservation = {
+  id: number;
+  entity_type: string;
+  entity_key: string;
+  lifecycle: ObservationLifecycle;
+  target_address: string;
+  attrs: Record<string, unknown>;
+  miss_streak: number;
+};
+
+export type ScanDiffChange = {
+  entity_key: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  lifecycle: ObservationLifecycle;
+};
+
+export type ScanDiff = {
+  current_run_id: number;
+  against_run_id: number | null;
+  added: ScanDiffObservation[];
+  removed: ScanDiffObservation[];
+  changed: ScanDiffChange[];
+  counts: {
+    added: number;
+    removed: number;
+    changed: number;
+  };
+  detail?: string;
+};
+
+export function getScanDiff(
+  id: number,
+  againstId?: number | null,
+  signal?: AbortSignal,
+): Promise<ScanDiff> {
+  const query = new URLSearchParams();
+  if (againstId != null) query.set("against", String(againstId));
+  const suffix = query.toString() ? `?${query}` : "";
+  return request<ScanDiff>(`/api/scans/${id}/diff/${suffix}`, { signal });
 }
 
 export function listAudit(signal?: AbortSignal): Promise<{ results: AuditEvent[] }> {

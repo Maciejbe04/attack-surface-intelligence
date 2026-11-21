@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type Language = "en" | "pl";
 export type Translate = (text: string) => string;
@@ -18,6 +18,8 @@ const PL: Record<string, string> = {
   "Authentication error": "Błąd uwierzytelniania",
   Username: "Nazwa użytkownika",
   Password: "Hasło",
+  "Repeat password": "Powtórz hasło",
+  "Passwords do not match.": "Hasła nie są takie same.",
   "Signing in…": "Logowanie…",
   "MFA code": "Kod MFA",
   "TOTP from Google Authenticator, 1Password, or Authy.":
@@ -39,6 +41,62 @@ const PL: Record<string, string> = {
   Dashboard: "Panel główny",
   Targets: "Cele",
   Scans: "Skanowania",
+  Users: "Użytkownicy",
+  "Users & roles": "Użytkownicy i role",
+  "Manage accounts and RBAC roles. Only admins can change users.":
+    "Zarządzaj kontami i rolami RBAC. Tylko admin może zmieniać użytkowników.",
+  "Create user": "Utwórz użytkownika",
+  admin: "admin",
+  operator: "operator",
+  analyst: "analyst",
+  viewer: "viewer",
+  "Role permissions": "Uprawnienia ról",
+  "Hide role permissions": "Ukryj uprawnienia ról",
+  "What each RBAC role can do in SurfaceX.":
+    "Co może robić każda rola RBAC w SurfaceX.",
+  "Full access: targets, groups, scans, findings, export, allowlist.":
+    "Pełny dostęp: cele, grupy, skany, findings, eksport, allowlista.",
+  "Manage users and roles.": "Zarządzanie użytkownikami i rolami.",
+  "System settings and integrations.": "Ustawienia systemowe i integracje.",
+  "Create and change targets, groups, and scans.":
+    "Tworzenie i zmiana celów, grup oraz skanów.",
+  "Export findings and manage allowlist.":
+    "Eksport findings i zarządzanie allowlistą.",
+  "Cannot manage users or system admin settings.":
+    "Bez zarządzania użytkownikami i ustawieniami admina.",
+  "Read targets, groups, scans, and findings.":
+    "Podgląd celów, grup, skanów i findings.",
+  "Export findings (JSON / CSV / DefectDojo).":
+    "Eksport findings (JSON / CSV / DefectDojo).",
+  "Cannot start scans or change inventory.":
+    "Bez uruchamiania skanów i zmiany inventory.",
+  "Read-only access to targets, groups, scans, and findings.":
+    "Tylko odczyt: cele, grupy, skany i findings.",
+  "Cannot export, scan, or change any data.":
+    "Bez eksportu, skanowania i zmiany danych.",
+  Accounts: "Konta",
+  users: "użytkowników",
+  Disabled: "Wyłączony",
+  MFA: "MFA",
+  On: "Włączone",
+  Off: "Wyłączone",
+  Disable: "Wyłącz",
+  Enable: "Włącz",
+  "User created": "Utworzono użytkownika",
+  "User not created": "Nie utworzono użytkownika",
+  "Could not create the user.": "Nie udało się utworzyć użytkownika.",
+  "Users unavailable": "Użytkownicy niedostępni",
+  "Could not load users.": "Nie udało się wczytać użytkowników.",
+  "Role updated": "Zaktualizowano rolę",
+  "Role not updated": "Nie zaktualizowano roli",
+  "Could not update the user.": "Nie udało się zaktualizować użytkownika.",
+  "User disabled": "Wyłączono użytkownika",
+  "User enabled": "Włączono użytkownika",
+  "User not updated": "Nie zaktualizowano użytkownika",
+  'Delete user "{name}"?': 'Usunąć użytkownika „{name}”?',
+  "User deleted": "Usunięto użytkownika",
+  "User not deleted": "Nie usunięto użytkownika",
+  "Could not delete the user.": "Nie udało się usunąć użytkownika.",
   "Pick a host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
     "Wybierz host i uruchom moduły rozpoznania. SurfaceX wykonuje wyłącznie bezpieczne sondy — bez logowania, brute force i exploitacji.",
   "Pick a target group or host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.":
@@ -190,7 +248,6 @@ const PL: Record<string, string> = {
   Pipeline: "Potok",
   "Run a combined discovery workflow.": "Uruchom połączony proces rozpoznania.",
   Enabled: "Włączony",
-  Disabled: "Wyłączony",
   Filters: "Filtry",
   "Hide filters": "Ukryj filtry",
   "No filters": "Brak filtrów",
@@ -515,6 +572,22 @@ const PL: Record<string, string> = {
   "Findings / Changes": "Findings / Changes",
   "Findings unavailable": "Findings niedostępne",
   "Could not load findings.": "Nie udało się wczytać findings.",
+  Compare: "Porównaj",
+  "Hide compare": "Ukryj porównanie",
+  Against: "Porównaj z",
+  "Previous completed": "Poprzedni ukończony",
+  "Comparing scan": "Porównanie skanu",
+  vs: "vs",
+  Removed: "Usunięte",
+  Changed: "Zmienione",
+  Change: "Zmiana",
+  "Scan comparison": "Porównanie skanów",
+  "No previous run to compare.": "Brak poprzedniego skanu do porównania.",
+  "Only scans for the same group or host set.":
+    "Tylko skany tej samej grupy albo tego samego zestawu hostów.",
+  "No differences between these scans.": "Brak różnic między tymi skanami.",
+  "Compare unavailable": "Porównanie niedostępne",
+  "Could not load scan diff.": "Nie udało się wczytać porównania skanów.",
   "Export ready": "Eksport gotowy",
   "Export failed": "Eksport nieudany",
   "Could not export scan.": "Nie udało się wyeksportować skanu.",
@@ -572,7 +645,10 @@ export function useLanguage() {
     }
   }, [language]);
 
-  const t: Translate = (text) => (language === "pl" ? PL[text] ?? text : text);
+  const t: Translate = useCallback(
+    (text) => (language === "pl" ? PL[text] ?? text : text),
+    [language],
+  );
 
   return { language, setLanguage, t };
 }

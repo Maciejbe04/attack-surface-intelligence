@@ -43,6 +43,12 @@ x-defectdojo-env: &defectdojo-env
   DD_SECRET_KEY_FILE: /run/secrets/defectdojo_secret_key
   DD_CREDENTIAL_AES_256_KEY_FILE: /run/secrets/defectdojo_credential_key
   DD_DATABASE_READINESS_TIMEOUT: "60"
+  # CSRF is disabled via deploy/defectdojo/extra_settings/local_settings.py
+  # (CsrfViewMiddleware removed). Keep trusted origins as a safety net if
+  # someone re-enables the middleware later.
+  DD_CSRF_TRUSTED_ORIGINS: ${DD_CSRF_TRUSTED_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081,http://localhost:18081,http://127.0.0.1:18081,https://dojo.opselis.pl,http://dojo.opselis.pl}
+
+x-defectdojo-extra-settings-vol: &defectdojo-extra-settings-vol ./deploy/defectdojo/extra_settings:/app/docker/extra_settings:ro
 
 services:
   gateway:
@@ -308,6 +314,7 @@ services:
         condition: service_healthy
     volumes:
       - defectdojo_media:/app/media
+      - *defectdojo-extra-settings-vol
     networks:
       - defectdojo
     security_opt:
@@ -341,6 +348,8 @@ services:
         condition: service_healthy
       defectdojo-valkey:
         condition: service_healthy
+    volumes:
+      - *defectdojo-extra-settings-vol
     networks:
       - defectdojo
     security_opt:
@@ -376,6 +385,7 @@ services:
         condition: service_healthy
     volumes:
       - defectdojo_media:/app/media
+      - *defectdojo-extra-settings-vol
     networks:
       - defectdojo
     security_opt:
@@ -412,6 +422,8 @@ services:
     depends_on:
       defectdojo-postgres:
         condition: service_healthy
+    volumes:
+      - *defectdojo-extra-settings-vol
     networks:
       - defectdojo
     security_opt:

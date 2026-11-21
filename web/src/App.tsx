@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ACTIVE_SCAN_STATUSES,
   apiErrorMessage,
@@ -23,7 +23,14 @@ import {
   scanGroup,
   updateGroupMembers,
 } from "./api/scans";
-import { apiFetch, AuthUser } from "./auth";
+import {
+  apiFetch,
+  AuthUser,
+  clearSessionId,
+  confirmSessionLost,
+  onSessionExpired,
+  setSessionId,
+} from "./auth";
 import { HostSearch } from "./HostSearch";
 import { newUuid } from "./uuid";
 import { AppFooter } from "./AppFooter";
@@ -40,6 +47,7 @@ import {
 } from "./modules";
 import { ScanConsole } from "./ScanConsole";
 import { SystemLockButton, SystemPanel } from "./SystemPanel";
+import { UsersPanel } from "./UsersPanel";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
@@ -51,7 +59,7 @@ function formatEta(seconds: number | null | undefined): string {
   return `~${Math.round(minutes / 60)}h`;
 }
 
-type NavId = "dashboard" | "targets" | "groups" | "scans" | "system";
+type NavId = "dashboard" | "targets" | "groups" | "scans" | "users" | "system";
 
 /** Select value meaning "create a new group with the typed name". */
 const NEW_GROUP = "__new__";
@@ -297,6 +305,7 @@ function LoginScreen({
         setMfaToken(data.mfa_token);
         return;
       }
+      if (data.sessionid) setSessionId(data.sessionid);
       onAuthenticated(data.user as AuthUser);
     } catch {
       setError(t("Cannot reach authentication API."));
@@ -321,6 +330,7 @@ function LoginScreen({
         if (data.mfa_token) setMfaToken(data.mfa_token);
         return;
       }
+      if (data.sessionid) setSessionId(data.sessionid);
       onAuthenticated(data.user as AuthUser);
     } catch {
       setError(t("Cannot reach authentication API."));
@@ -476,25 +486,10 @@ function LoginScreen({
   );
 }
 
-function DashboardLoader({ t }: { t: Translate }) {
-  return (
-    <div className="dashboard-loader" role="status" aria-live="polite">
-      <div className="dashboard-loader__card">
-        <Logo />
-        <div className="dashboard-loader__bar" aria-hidden="true">
-          <span />
-        </div>
-        <p>{t("Preparing dashboard…")}</p>
-      </div>
-    </div>
-  );
-}
-
 export function App() {
   const { highContrast, toggleHighContrast } = useHighContrast();
   const { language, setLanguage, t } = useLanguage();
   const [bootstrapping, setBootstrapping] = useState(true);
-  const [enteringDashboard, setEnteringDashboard] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("dashboard");
   const [targets, setTargets] = useState<Target[]>([]);
@@ -543,40 +538,87 @@ export function App() {
   const canExport =
     user?.role === "admin" || user?.role === "operator" || user?.role === "analyst";
 
-  function pushToast(kind: Toast["kind"], title: string, message: string) {
-    const id = newUuid();
-    setToasts((prev) => [...prev, { id, kind, title, message }]);
+  const pushToast = useCallback((kind: Toast["kind"], title: string, message: string) => {
+    let id = "";
+    setToasts((prev) => {
+      // One visible copy of the same message is enough (poll/retry spam).
+      if (prev.some((toast) => toast.kind === kind && toast.title === title && toast.message === message)) {
+        return prev;
+      }
+      id = newUuid();
+      return [...prev, { id, kind, title, message }];
+    });
     window.setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
+      if (!id) return;
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
     }, 6000);
-  }
+  }, []);
 
   function completeAuthentication(authenticatedUser: AuthUser) {
-    setEnteringDashboard(true);
-    window.setTimeout(() => {
-      setUser(authenticatedUser);
-      setEnteringDashboard(false);
-    }, 300);
+    // Enter the app immediately — the old 300ms loader caused a visible jump
+    // and raced with the first data polls.
+    setUser(authenticatedUser);
   }
 
   function dismissToast(id: string) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }
 
-  useEffect(() => {
-    apiFetch("/api/auth/me/")
+  function refreshSessionUser(opts: { clearIfAnonymous?: boolean } = {}) {
+    const clearIfAnonymous = opts.clearIfAnonymous ?? true;
+    return apiFetch("/api/auth/me/")
       .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        // Network/gateway blip — keep the current UI session.
+        if (!r.ok) return;
         return r.json();
       })
-      .then((me) => {
-        if (me.authenticated) setUser(me.user as AuthUser);
-      })
+      .then(async (me) => {
+        if (!me) return;
+        if (me.authenticated) {
+          setUser(me.user as AuthUser);
+          return;
+        }
+        if (!clearIfAnonymous) return;
+        // Double-check before kicking to login (avoids tab-focus false logouts).
+        if (await confirmSessionLost()) {
+          clearSessionId();
+          setUser(null);
+          setScans([]);
+          setConsoleScan(null);
+          setConsoleScanId(null);
+        }
+      });
+  }
+
+  useEffect(() => {
+    refreshSessionUser({ clearIfAnonymous: true })
       .catch(() => {
         pushToast("error", "No connection", "Cannot reach SurfaceX API. Check Docker Compose.");
       })
       .finally(() => setBootstrapping(false));
+  }, [pushToast]);
+
+  useEffect(() => {
+    return onSessionExpired(() => {
+      clearSessionId();
+      setUser(null);
+      setScans([]);
+      setConsoleScan(null);
+      setConsoleScanId(null);
+    });
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const onVisibility = () => {
+      if (!document.hidden) {
+        // Never clear solely because one visibility probe failed.
+        void refreshSessionUser({ clearIfAnonymous: true }).catch(() => undefined);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -634,6 +676,8 @@ export function App() {
         timer = window.setTimeout(poll, active ? 2000 : 15000);
       } catch (error) {
         if (!disposed && !isAbortError(error)) {
+          // Soft session check via emitSessionExpired inside request(); keep polling
+          // unless the shell clears the user after confirmation.
           pushToast(
             "error",
             t("Scans unavailable"),
@@ -665,7 +709,7 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
     // nav: refetch immediately when the user switches pages.
-  }, [user?.id, language, scanRefreshKey, nav]);
+  }, [user?.id, language, scanRefreshKey, nav, pushToast, t]);
 
   useEffect(() => {
     if (!user || consoleScanId === null) {
@@ -686,7 +730,7 @@ export function App() {
     };
 
     const pollDetail = async () => {
-      if (disposed || document.hidden) return;
+      if (disposed) return;
       controller?.abort();
       const request = new AbortController();
       controller = request;
@@ -722,7 +766,10 @@ export function App() {
         const exportInFlight =
           detail.defectdojo_export_status === "pending" ||
           detail.defectdojo_export_status === "sending";
-        if (ACTIVE_SCAN_STATUSES.has(detail.status) || exportInFlight) {
+        if (
+          !document.hidden &&
+          (ACTIVE_SCAN_STATUSES.has(detail.status) || exportInFlight)
+        ) {
           timer = window.setTimeout(pollDetail, 1500);
         }
       } catch (error) {
@@ -732,7 +779,9 @@ export function App() {
           t("Console unavailable"),
           apiErrorMessage(error, t("Could not load scan activity.")),
         );
-        timer = window.setTimeout(pollDetail, 4000);
+        if (!document.hidden) {
+          timer = window.setTimeout(pollDetail, 4000);
+        }
       } finally {
         if (controller === request) controller = null;
         if (!disposed) setConsoleLoading(false);
@@ -759,7 +808,19 @@ export function App() {
     };
   }, [user?.id, language, consoleScanId, scanRefreshKey, consoleReloadKey]);
 
-  function openScanConsole(scanId: number) {
+  function openScanConsole(scan: number | Scan | ScanDetail) {
+    const scanId = typeof scan === "number" ? scan : scan.id;
+    if (typeof scan !== "number") {
+      setConsoleScan((prev) => {
+        if (prev?.id === scanId && (prev.events?.length ?? 0) > 0) return prev;
+        const detail = scan as ScanDetail;
+        return {
+          ...scan,
+          events: detail.events ?? [],
+          batches: detail.batches ?? [],
+        };
+      });
+    }
     setConsoleScanId(scanId);
     setConsoleReloadKey((value) => value + 1);
     window.requestAnimationFrame(() => {
@@ -834,6 +895,7 @@ export function App() {
     } catch {
       pushToast("error", "No connection", "Sign-out request failed.");
     }
+    clearSessionId();
     setUser(null);
   }
 
@@ -1357,10 +1419,6 @@ export function App() {
     );
   }
 
-  if (enteringDashboard) {
-    return <DashboardLoader t={t} />;
-  }
-
   if (!user) {
     return (
       <LoginScreen
@@ -1467,6 +1525,16 @@ export function App() {
           >
             {t("Scans")}
           </button>
+          {user?.role === "admin" && (
+            <button
+              type="button"
+              className={`sidenav__item ${nav === "users" ? "is-active" : ""}`}
+              aria-current={nav === "users" ? "page" : undefined}
+              onClick={() => setNav("users")}
+            >
+              {t("Users")}
+            </button>
+          )}
           <button
             type="button"
             className={`sidenav__item ${nav === "system" ? "is-active" : ""}`}
@@ -1620,14 +1688,25 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan.id)}
+                    onOpenConsole={(scan) => openScanConsole(scan)}
                     t={t}
                   />
                 </div>
               </section>
 
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
+
               <FindingsPanel
                 scan={consoleScan}
+                scans={scans}
                 canMutate={canMutate}
                 canExport={canExport}
                 onScanUpdated={(updated) => {
@@ -1640,16 +1719,6 @@ export function App() {
                   setScanRefreshKey((value) => value + 1);
                 }}
                 pushToast={pushToast}
-                t={t}
-              />
-
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
                 t={t}
               />
             </>
@@ -2216,14 +2285,25 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan.id)}
+                    onOpenConsole={(scan) => openScanConsole(scan)}
                     t={t}
                   />
                 </div>
               </div>
 
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
+
               <FindingsPanel
                 scan={consoleScan}
+                scans={scans}
                 canMutate={canMutate}
                 canExport={canExport}
                 onScanUpdated={(updated) => {
@@ -2238,17 +2318,30 @@ export function App() {
                 pushToast={pushToast}
                 t={t}
               />
-
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
             </>
+          )}
+
+          {nav === "users" && user?.role === "admin" && (
+            <UsersPanel
+              active
+              currentUsername={user.username}
+              onUserUpdated={(updated) => {
+                if (updated.id === user.id) {
+                  setUser((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          role: updated.role,
+                          mfa_enabled: updated.mfa_enabled,
+                        }
+                      : prev,
+                  );
+                }
+                void refreshSessionUser().catch(() => undefined);
+              }}
+              pushToast={pushToast}
+              t={t}
+            />
           )}
 
           {nav === "system" && (

@@ -215,15 +215,41 @@ def extract_observation_rows(
     return rows
 
 
+def _run_target_addresses(run: ScanRun) -> set[str]:
+    return {batch.target_address for batch in run.batches.all() if batch.target_address}
+
+
+def same_scan_scope(current: ScanRun, other: ScanRun) -> bool:
+    """True when both runs cover the same group or the same host/target set."""
+    if current.group_id or other.group_id:
+        return bool(current.group_id) and current.group_id == other.group_id
+    return _run_target_addresses(current) == _run_target_addresses(other) and bool(
+        _run_target_addresses(current)
+    )
+
+
 def previous_completed_run(run: ScanRun) -> ScanRun | None:
-    qs = ScanRun.objects.filter(
-        owner_id=run.owner_id,
-        status=ScanRun.Status.COMPLETED,
-        finished_at__isnull=False,
-    ).exclude(pk=run.pk)
+    qs = (
+        ScanRun.objects.filter(
+            owner_id=run.owner_id,
+            status=ScanRun.Status.COMPLETED,
+            finished_at__isnull=False,
+        )
+        .exclude(pk=run.pk)
+        .prefetch_related("batches")
+    )
     if run.group_id:
         qs = qs.filter(group_id=run.group_id)
-    return qs.order_by("-finished_at", "-id").first()
+        return qs.order_by("-finished_at", "-id").first()
+
+    current_targets = _run_target_addresses(run)
+    if not current_targets:
+        return None
+    # Host / ad-hoc scans: only previous runs with the exact same target set.
+    for candidate in qs.filter(group_id__isnull=True).order_by("-finished_at", "-id")[:50]:
+        if _run_target_addresses(candidate) == current_targets:
+            return candidate
+    return None
 
 
 def _previous_map(prev: ScanRun | None) -> dict[str, Observation]:

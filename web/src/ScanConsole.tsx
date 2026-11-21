@@ -176,7 +176,7 @@ export function ScanConsole({ scan, loading, t, onClear }: Props) {
 
   useEffect(() => {
     if (!scan) return;
-    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [scan?.id]);
 
   useEffect(() => {

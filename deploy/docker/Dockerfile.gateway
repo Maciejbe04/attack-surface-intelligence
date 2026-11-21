@@ -10,6 +10,7 @@ RUN apk add --no-cache wget \
       /var/run \
     && chown -R nginx:nginx /var/cache/nginx /var/run
 COPY deploy/docker/nginx-gateway.conf /etc/nginx/conf.d/default.conf
+COPY deploy/docker/maintenance.html /usr/share/nginx/html/maintenance.html
 USER nginx
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null || exit 1

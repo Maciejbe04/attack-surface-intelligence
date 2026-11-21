@@ -1599,3 +1599,41 @@ table.hosts .mono {
   background: #fff4de;
   border-color: #f0d59a;
 }
+
+.role-permissions {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.role-permissions__item {
+  display: grid;
+  gap: 6px;
+}
+
+.role-permissions__item dt {
+  margin: 0;
+}
+
+.role-permissions__item dd {
+  margin: 0;
+}
+
+.role-permissions__item ul {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--aws-color-text-body, #414d5c);
+}
+
+.role-permissions__item li + li {
+  margin-top: 2px;
+}
+
+.diff-attr-list {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
+.diff-attr-list li + li {
+  margin-top: 2px;
+}
