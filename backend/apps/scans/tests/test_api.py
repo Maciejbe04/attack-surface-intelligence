@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
+from apps.scans.auto_export import perform_automatic_defectdojo_export
 from apps.scans.defectdojo import build_generic_findings_report
 from apps.scans.models import QueueState, ScanBatch, ScanRun, Target
 
@@ -380,14 +381,37 @@ class InternalWorkerAPITests(TestCase):
         )
 
         complete_url = reverse("internal-batch-complete", args=(self.batch.id,))
-        payload = {**self.identity, "result": {"hosts": []}}
-        response = self.client.post(
-            complete_url,
-            payload,
-            format="json",
-            **self.headers,
-        )
+        payload = {
+            **self.identity,
+            "result": {"hosts": [{"address": "192.0.2.40", "ports": []}]},
+        }
+        with patch("apps.scans.auto_export._start_export_thread") as start_export:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    complete_url,
+                    payload,
+                    format="json",
+                    **self.headers,
+                )
         self.assertEqual(response.status_code, 200)
+        self.run.refresh_from_db()
+        self.assertEqual(
+            self.run.defectdojo_export_status,
+            ScanRun.DefectDojoExportStatus.PENDING,
+        )
+        start_export.assert_called_once_with(self.run.id)
+
+        with patch(
+            "apps.scans.auto_export.export_scan_to_defectdojo",
+            return_value={
+                "finding_count": 1,
+                "test": 7,
+                "message": "Imported",
+            },
+        ) as export:
+            perform_automatic_defectdojo_export(self.run.id)
+        export.assert_called_once()
+
         response = self.client.post(
             complete_url,
             payload,
@@ -401,11 +425,17 @@ class InternalWorkerAPITests(TestCase):
         self.assertEqual(self.batch.status, ScanBatch.Status.COMPLETED)
         self.assertEqual(self.run.status, ScanRun.Status.COMPLETED)
         self.assertEqual(self.run.progress, 100)
+        self.assertEqual(
+            self.run.defectdojo_export_status,
+            ScanRun.DefectDojoExportStatus.SENT,
+        )
         self.client.force_login(self.owner)
         detail = self.client.get(reverse("scan-detail", args=(self.run.id,)))
         self.assertEqual(detail.status_code, 200)
+        messages = [event["message"] for event in detail.json()["events"]]
+        self.assertTrue(any("Batch completed" in message for message in messages))
         self.assertTrue(
-            any("Batch completed" in event["message"] for event in detail.json()["events"])
+            any("DefectDojo export finished" in message for message in messages)
         )
 
     def test_bad_delivery_id_is_rejected(self) -> None:

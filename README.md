@@ -32,17 +32,38 @@ Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
 
 ### DefectDojo
 
-DefectDojo 3.5.202 działa jako opcjonalny profil i nie obciąża zwykłego uruchomienia:
+DefectDojo 3.5.202 działa jako opcjonalny profil i nie startuje przy zwykłym `docker compose up`.
 
 ```bash
-docker compose --profile defectdojo up --build
+./scripts/init-secrets.sh
+./scripts/start-defectdojo.sh
+```
+
+Albo ręcznie:
+
+```bash
+./scripts/init-secrets.sh
+docker compose --profile defectdojo up -d
 ```
 
 - UI DefectDojo: [http://localhost:8081](http://localhost:8081)
 - Użytkownik: `admin`
 - Hasło: zawartość lokalnego pliku `secrets/defectdojo_admin_password`
 
-Po zakończeniu skanu użyj przycisku **Send to DefectDojo**. SurfaceX wysyła aktywne hosty, otwarte usługi i wykryte technologie jako informacyjne findings przez oficjalny endpoint `reimport-scan`. Produkt, engagement i test są tworzone automatycznie.
+Stałe włączanie profilu: w `.env` ustaw `COMPOSE_PROFILES=defectdojo`.
+
+Jeśli u kolegi „się nie odpala”, sprawdź kolejno:
+
+1. **Profil** — bez `--profile defectdojo` (albo `COMPOSE_PROFILES`) kontenery DD w ogóle nie powstają.
+2. **Sekrety** — muszą istnieć lokalne pliki z `./scripts/init-secrets.sh` (`secrets/defectdojo_*`). Compose pada, gdy brakuje secret file.
+3. **Pull obrazów** — wymagany dostęp do `registry.defectdojo.com` (`docker pull registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202`).
+4. **Port** — domyślnie `8081`; zajęty port → `DEFECTDOJO_HTTP_PORT` w `.env`.
+5. **Initializer / wolumen** — po nieudanym pierwszym starcie:  
+   `docker compose --profile defectdojo logs defectdojo-initializer`  
+   ewentualnie usuń volume `surfacex_defectdojo_postgres` i odpal `./scripts/start-defectdojo.sh` ponownie.
+6. **RAM** — DD potrzebuje ok. 3–4 GB ponad SurfaceX; w Docker Desktop podnieś limit pamięci.
+
+Po zakończeniu skanu SurfaceX automatycznie wysyła aktywne hosty, otwarte usługi i wykryte technologie do DefectDojo jako informacyjne findings (`reimport-scan`). Status wysyłki widać w konsoli aktywności i na liście skanów. Produkt, engagement i test są tworzone automatycznie.
 
 Zatrzymanie bez usuwania wolumenów:
 

@@ -6,8 +6,9 @@ import {
   createScan,
   createTarget,
   deleteTarget,
-  exportScanToDefectDojo,
+  DefectDojoExportStatus,
   getScan,
+  importTargetsFile,
   listScans,
   listTargets,
   Scan,
@@ -29,10 +30,11 @@ import {
   summarizeFilters,
 } from "./modules";
 import { ScanConsole } from "./ScanConsole";
+import { SystemLockButton, SystemPanel } from "./SystemPanel";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
 
-type NavId = "dashboard" | "targets" | "scans";
+type NavId = "dashboard" | "targets" | "scans" | "system";
 
 type Toast = {
   id: string;
@@ -84,17 +86,23 @@ const STATUS_LABELS: Record<ScanStatus, string> = {
   cancelled: "Cancelled",
 };
 
+const DEFECTDOJO_STATUS_LABELS: Record<DefectDojoExportStatus, string> = {
+  none: "DefectDojo idle",
+  pending: "DefectDojo queued",
+  sending: "Sending to DefectDojo",
+  sent: "Sent to DefectDojo",
+  failed: "DefectDojo failed",
+  skipped: "DefectDojo skipped",
+};
+
 function ScanTable({
   scans,
   emptyTitle,
   emptyMessage,
   canMutate,
-  canExport,
   cancellingIds,
-  exportingIds,
   focusedScanId,
   onCancel,
-  onExport,
   onOpenConsole,
   t,
 }: {
@@ -102,12 +110,9 @@ function ScanTable({
   emptyTitle: string;
   emptyMessage: string;
   canMutate: boolean;
-  canExport: boolean;
   cancellingIds: Set<number>;
-  exportingIds: Set<number>;
   focusedScanId: number | null;
   onCancel: (scan: Scan) => void;
-  onExport: (scan: Scan) => void;
   onOpenConsole: (scan: Scan) => void;
   t: Translate;
 }) {
@@ -139,12 +144,8 @@ function ScanTable({
         {scans.map((scan) => {
           const active = ACTIVE_SCAN_STATUSES.has(scan.status);
           const cancelling = cancellingIds.has(scan.id);
-          const exporting = exportingIds.has(scan.id);
           const focused = focusedScanId === scan.id;
-          const exportable =
-            canExport &&
-            scan.completed_batches > 0 &&
-            ["completed", "partial", "failed"].includes(scan.status);
+          const defectdojoStatus = scan.defectdojo_export_status || "none";
           return (
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
@@ -160,6 +161,14 @@ function ScanTable({
                 <span className={`status-badge status-badge--${scan.status}`}>
                   {t(STATUS_LABELS[scan.status])}
                 </span>
+                {defectdojoStatus !== "none" && (
+                  <span
+                    className={`status-badge status-badge--dd-${defectdojoStatus}`}
+                    title={scan.defectdojo_export_detail || undefined}
+                  >
+                    {t(DEFECTDOJO_STATUS_LABELS[defectdojoStatus])}
+                  </span>
+                )}
                 {scan.error && <span className="scan-error">{scan.error}</span>}
               </td>
               <td>
@@ -195,17 +204,6 @@ function ScanTable({
                     aria-busy={cancelling}
                   >
                     {cancelling ? t("Cancelling…") : t("Cancel")}
-                  </button>
-                )}
-                {exportable && (
-                  <button
-                    type="button"
-                    className="btn btn--normal"
-                    onClick={() => onExport(scan)}
-                    disabled={exporting}
-                    aria-busy={exporting}
-                  >
-                    {exporting ? t("Exporting…") : t("Send to DefectDojo")}
                   </button>
                 )}
               </td>
@@ -470,18 +468,20 @@ export function App() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [probeHost, setProbeHost] = useState("");
   const [addPending, setAddPending] = useState(false);
+  const [importPending, setImportPending] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importStartScan, setImportStartScan] = useState(true);
   const [removePending, setRemovePending] = useState(false);
   const [scanPending, setScanPending] = useState<"dashboard" | "targets" | null>(null);
   const [cancellingIds, setCancellingIds] = useState<Set<number>>(new Set());
-  const [exportingIds, setExportingIds] = useState<Set<number>>(new Set());
   const [consoleScanId, setConsoleScanId] = useState<number | null>(null);
   const [consoleScan, setConsoleScan] = useState<ScanDetail | null>(null);
   const [consoleLoading, setConsoleLoading] = useState(false);
+  const [consoleReloadKey, setConsoleReloadKey] = useState(0);
   const [moduleState, setModuleState] = useState<ModuleRegistryState>(() =>
     createInitialModuleState(),
   );
   const canMutate = user?.role === "admin" || user?.role === "operator";
-  const canExport = Boolean(user && user.role !== "viewer");
 
   function pushToast(kind: Toast["kind"], title: string, message: string) {
     const id = crypto.randomUUID();
@@ -624,13 +624,20 @@ export function App() {
     };
 
     const pollDetail = async () => {
-      if (disposed || document.hidden || controller) return;
-      controller = new AbortController();
+      if (disposed || document.hidden) return;
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
       setConsoleLoading(true);
       try {
-        const detail = await getScan(consoleScanId, controller.signal);
-        if (disposed) return;
-        setConsoleScan(detail);
+        const detail = await getScan(consoleScanId, request.signal);
+        if (disposed || controller !== request) return;
+        setConsoleScan({
+          ...detail,
+          events: detail.events ?? [],
+          batches: detail.batches ?? [],
+        });
+
         setScans((prev) =>
           prev.map((item) =>
             item.id === detail.id
@@ -642,26 +649,30 @@ export function App() {
                   failed_batches: detail.failed_batches,
                   result_summary: detail.result_summary,
                   error: detail.error,
+                  defectdojo_export_status: detail.defectdojo_export_status,
+                  defectdojo_export_detail: detail.defectdojo_export_detail,
                   started_at: detail.started_at,
                   finished_at: detail.finished_at,
                 }
               : item,
           ),
         );
-        if (ACTIVE_SCAN_STATUSES.has(detail.status)) {
+        const exportInFlight =
+          detail.defectdojo_export_status === "pending" ||
+          detail.defectdojo_export_status === "sending";
+        if (ACTIVE_SCAN_STATUSES.has(detail.status) || exportInFlight) {
           timer = window.setTimeout(pollDetail, 1500);
         }
       } catch (error) {
-        if (!disposed && !isAbortError(error)) {
-          pushToast(
-            "error",
-            t("Console unavailable"),
-            apiErrorMessage(error, t("Could not load scan activity.")),
-          );
-          timer = window.setTimeout(pollDetail, 4000);
-        }
+        if (disposed || controller !== request || isAbortError(error)) return;
+        pushToast(
+          "error",
+          t("Console unavailable"),
+          apiErrorMessage(error, t("Could not load scan activity.")),
+        );
+        timer = window.setTimeout(pollDetail, 4000);
       } finally {
-        controller = null;
+        if (controller === request) controller = null;
         if (!disposed) setConsoleLoading(false);
       }
     };
@@ -684,7 +695,18 @@ export function App() {
       controller?.abort();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [user?.id, language, consoleScanId, scanRefreshKey]);
+  }, [user?.id, language, consoleScanId, scanRefreshKey, consoleReloadKey]);
+
+  function openScanConsole(scanId: number) {
+    setConsoleScanId(scanId);
+    setConsoleReloadKey((value) => value + 1);
+    window.requestAnimationFrame(() => {
+      document.getElementById("scan-activity-console")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
 
   useEffect(() => {
     if (!probeHost && targets.length > 0) {
@@ -829,6 +851,68 @@ export function App() {
     }
   }
 
+  async function onImportFile(event: FormEvent) {
+    event.preventDefault();
+    if (!canMutate || importPending || !importFile) return;
+    const modules = selectedModules();
+    if (importStartScan && modules.length === 0) {
+      pushToast("error", t("No modules"), t("Select at least one discovery module."));
+      return;
+    }
+    setImportPending(true);
+    try {
+      const result = await importTargetsFile(importFile, {
+        startScan: importStartScan,
+        modules: importStartScan ? modules : undefined,
+        clientRequestId: crypto.randomUUID(),
+      });
+      const refreshed = await listTargets();
+      setTargets(refreshed);
+      setImportFile(null);
+      const fileInput = document.getElementById("targets-import-file") as HTMLInputElement | null;
+      if (fileInput) fileInput.value = "";
+      setFlash(
+        `${t("Imported targets")}: ${result.total_count} ` +
+          `(${t("new")}: ${result.created_count}, ${t("existing")}: ${result.existing_count})` +
+          (result.scan ? ` · ${t("Scan")} #${result.scan.id}` : ""),
+      );
+      if (result.scan) {
+        setScans((prev) => [result.scan!, ...prev.filter((item) => item.id !== result.scan!.id)]);
+        setConsoleScan({
+          ...result.scan,
+          events: result.scan.events ?? [],
+          batches: result.scan.batches ?? [],
+        });
+        openScanConsole(result.scan.id);
+        setScanRefreshKey((value) => value + 1);
+        setNav("scans");
+      }
+      if (result.parse_errors.length > 0) {
+        pushToast(
+          "error",
+          t("Some rows were skipped"),
+          result.parse_errors.slice(0, 3).join(" · "),
+        );
+      } else {
+        pushToast(
+          "ok",
+          t("Import finished"),
+          result.scan
+            ? t("Hosts loaded and scan queued automatically.")
+            : t("Hosts loaded into the target list."),
+        );
+      }
+    } catch (error) {
+      pushToast(
+        "error",
+        t("Import failed"),
+        apiErrorMessage(error, t("Could not import the host file.")),
+      );
+    } finally {
+      setImportPending(false);
+    }
+  }
+
   async function removeSelected() {
     if (!canMutate || selected.size === 0 || removePending) return;
     const ids = [...selected];
@@ -873,8 +957,12 @@ export function App() {
         client_request_id: crypto.randomUUID(),
       });
       setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
-      setConsoleScanId(scan.id);
-      setConsoleScan(scan);
+      setConsoleScan({
+        ...scan,
+        events: scan.events ?? [],
+        batches: scan.batches ?? [],
+      });
+      openScanConsole(scan.id);
       setScanRefreshKey((value) => value + 1);
       pushToast(
         "ok",
@@ -941,33 +1029,6 @@ export function App() {
     }
   }
 
-  async function onExportScan(scan: Scan) {
-    if (!canExport || exportingIds.has(scan.id)) return;
-    setExportingIds((prev) => new Set(prev).add(scan.id));
-    try {
-      const result = await exportScanToDefectDojo(scan.id);
-      pushToast(
-        "ok",
-        t("Sent to DefectDojo"),
-        `${t("Findings")}: ${result.finding_count}${
-          result.test ? ` · ${t("Test")}: #${result.test}` : ""
-        }`,
-      );
-    } catch (error) {
-      pushToast(
-        "error",
-        t("DefectDojo export failed"),
-        apiErrorMessage(error, t("Could not send scan results to DefectDojo.")),
-      );
-    } finally {
-      setExportingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(scan.id);
-        return next;
-      });
-    }
-  }
-
   if (bootstrapping) {
     return (
       <div className="login-page" role="status" aria-live="polite">
@@ -1010,6 +1071,11 @@ export function App() {
         >
           {highContrast ? t("Standard contrast") : t("High contrast")}
         </button>
+        <SystemLockButton
+          className="topnav__system"
+          onClick={() => setNav("system")}
+          t={t}
+        />
         <LanguageSelect
           language={language}
           onChange={setLanguage}
@@ -1073,6 +1139,14 @@ export function App() {
           >
             {t("Scans")}
           </button>
+          <button
+            type="button"
+            className={`sidenav__item ${nav === "system" ? "is-active" : ""}`}
+            aria-current={nav === "system" ? "page" : undefined}
+            onClick={() => setNav("system")}
+          >
+            {t("System")}
+          </button>
         </nav>
 
         <main
@@ -1135,16 +1209,6 @@ export function App() {
                 t={t}
               />
 
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
-
               <section className="panel">
                 <div className="panel__header">
                   <h2>{t("Recent probe jobs")}</h2>
@@ -1155,17 +1219,24 @@ export function App() {
                     emptyTitle="No probe jobs"
                     emptyMessage="Select modules and run a discovery probe against a host."
                     canMutate={canMutate}
-                    canExport={canExport}
                     cancellingIds={cancellingIds}
-                    exportingIds={exportingIds}
                     focusedScanId={consoleScanId}
                     onCancel={onCancelScan}
-                    onExport={onExportScan}
-                    onOpenConsole={(scan) => setConsoleScanId(scan.id)}
+                    onOpenConsole={(scan) => openScanConsole(scan.id)}
                     t={t}
                   />
                 </div>
               </section>
+
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
             </>
           )}
 
@@ -1190,6 +1261,70 @@ export function App() {
               )}
 
               {canMutate ? (
+                <>
+                <section className="panel">
+                  <div className="panel__header">
+                    <h2>{t("Import hosts file")}</h2>
+                  </div>
+                  <form
+                    className="panel__body"
+                    onSubmit={onImportFile}
+                    aria-busy={importPending}
+                  >
+                    <div className="form-row">
+                      <label htmlFor="targets-import-file">{t("Host list file")}</label>
+                      <div>
+                        <input
+                          id="targets-import-file"
+                          className="input"
+                          type="file"
+                          accept=".txt,.csv,.json,text/plain,text/csv,application/json"
+                          onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                        />
+                        <p className="field-help">
+                          {t(
+                            "TXT: one host per line. CSV/JSON: value/address column. Up to 10 000 hosts. Uses modules selected on the Dashboard.",
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <label htmlFor="targets-import-autoscan">
+                        {t("Start scan automatically")}
+                      </label>
+                      <div>
+                        <label className="filter-row filter-row--bool" htmlFor="targets-import-autoscan">
+                          <input
+                            id="targets-import-autoscan"
+                            type="checkbox"
+                            checked={importStartScan}
+                            onChange={(e) => setImportStartScan(e.target.checked)}
+                          />
+                          <span className="field-help">
+                            {t(
+                              "After import, queue discovery for every loaded host and send results to DefectDojo when finished.",
+                            )}
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="actions">
+                      <button
+                        type="submit"
+                        className="btn btn--primary"
+                        disabled={!importFile || importPending}
+                        aria-busy={importPending}
+                      >
+                        {importPending
+                          ? t("Importing…")
+                          : importStartScan
+                            ? t("Import and scan")
+                            : t("Import hosts")}
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
                 <section className="panel">
                   <div className="panel__header">
                     <h2>{t("Add target")}</h2>
@@ -1245,6 +1380,7 @@ export function App() {
                   </div>
                   </form>
                 </section>
+                </>
               ) : (
                 <div className="flash" role="note">
                   <div>
@@ -1374,6 +1510,22 @@ export function App() {
                 <h1>{t("Scans")}</h1>
                 <p>{t("Queued discovery jobs from the dashboard and target list.")}</p>
               </header>
+              <div className="panel">
+                <div className="table-wrap" aria-busy={dataLoading}>
+                  <ScanTable
+                    scans={scans}
+                    emptyTitle="No scan runs yet"
+                    emptyMessage="Use Dashboard modules to probe a host."
+                    canMutate={canMutate}
+                    cancellingIds={cancellingIds}
+                    focusedScanId={consoleScanId}
+                    onCancel={onCancelScan}
+                    onOpenConsole={(scan) => openScanConsole(scan.id)}
+                    t={t}
+                  />
+                </div>
+              </div>
+
               <ScanConsole
                 scan={consoleScan}
                 loading={consoleLoading}
@@ -1383,32 +1535,17 @@ export function App() {
                 }}
                 t={t}
               />
-              <div className="panel">
-                <div className="table-wrap" aria-busy={dataLoading}>
-                  <ScanTable
-                    scans={scans}
-                    emptyTitle="No scan runs yet"
-                    emptyMessage="Use Dashboard modules to probe a host."
-                    canMutate={canMutate}
-                    canExport={canExport}
-                    cancellingIds={cancellingIds}
-                    exportingIds={exportingIds}
-                    focusedScanId={consoleScanId}
-                    onCancel={onCancelScan}
-                    onExport={onExportScan}
-                    onOpenConsole={(scan) => setConsoleScanId(scan.id)}
-                    t={t}
-                  />
-                </div>
-              </div>
             </>
           )}
+
+          {nav === "system" && <SystemPanel active t={t} />}
         </main>
       </div>
 
       <AppFooter
         highContrast={highContrast}
         onToggleContrast={toggleHighContrast}
+        onOpenSystem={() => setNav("system")}
         language={language}
         onLanguageChange={setLanguage}
         t={t}

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from functools import partial
 
+from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404
@@ -10,15 +12,19 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import ValidationError as SerializerValidationError
 from rest_framework.views import APIView
 
+from .auto_export import queue_automatic_defectdojo_export
 from .defectdojo import (
     DefectDojoError,
     DefectDojoNotConfigured,
     export_scan_to_defectdojo,
 )
 from .events import append_scan_event
+from .import_targets import MAX_IMPORT_TARGETS, parse_import_payload
 from .models import ScanBatch, ScanEvent, ScanRun, Target
+from .modules import validate_modules
 from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
     ScanCreateSerializer,
@@ -121,6 +127,213 @@ class TargetDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _queue_scan_for_targets(
+    *,
+    owner: User,
+    targets: list[Target],
+    modules: list[dict],
+    client_request_id: str = "",
+) -> tuple[ScanRun, bool]:
+    """Create a scan run for targets. Returns (run, created)."""
+    if not targets:
+        raise ValueError("At least one target is required.")
+
+    with transaction.atomic():
+        if client_request_id:
+            existing = (
+                ScanRun.objects.select_for_update()
+                .filter(owner=owner, client_request_id=client_request_id)
+                .first()
+            )
+            if existing is not None:
+                return existing, False
+
+        try:
+            with transaction.atomic():
+                run = ScanRun.objects.create(
+                    owner=owner,
+                    modules_snapshot=modules,
+                    client_request_id=client_request_id,
+                    total_batches=len(targets),
+                )
+        except IntegrityError:
+            run = ScanRun.objects.get(
+                owner=owner,
+                client_request_id=client_request_id,
+            )
+            return run, False
+
+        batches = ScanBatch.objects.bulk_create(
+            [
+                ScanBatch(
+                    run=run,
+                    target=target,
+                    target_address=target.address,
+                    target_type=target.target_type,
+                )
+                for target in targets
+            ]
+        )
+        for batch in batches:
+            transaction.on_commit(
+                partial(_publish_batch, batch.pk, str(batch.delivery_id))
+            )
+
+        module_ids = [
+            module.get("id", "?")
+            for module in modules
+            if isinstance(module, dict)
+        ]
+        append_scan_event(
+            run,
+            (
+                f"Queued scan #{run.pk} for {len(batches)} target(s); "
+                f"modules: {', '.join(str(item) for item in module_ids) or 'none'}."
+            ),
+            source="api",
+        )
+        if len(batches) <= 50:
+            for batch in batches:
+                append_scan_event(
+                    run,
+                    f"Batch queued for {batch.target_address} ({batch.target_type}).",
+                    batch=batch,
+                    source="api",
+                )
+        else:
+            append_scan_event(
+                run,
+                (
+                    f"Queued {len(batches)} batches "
+                    "(individual host lines omitted for large imports)."
+                ),
+                source="api",
+            )
+    return run, True
+
+
+class TargetImportView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminOrOperator)
+
+    def post(self, request: Request) -> Response:
+        upload = request.FILES.get("file")
+        if upload is None:
+            return Response(
+                {"detail": "Multipart field 'file' is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        raw = upload.read(MAX_IMPORT_TARGETS * 256 + 1)
+        parsed = parse_import_payload(filename=upload.name or "hosts.txt", raw=raw)
+        if not parsed.targets and parsed.errors:
+            return Response(
+                {"detail": parsed.errors[0], "errors": parsed.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not parsed.targets:
+            return Response(
+                {"detail": "No valid targets found in the file."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        start_scan_raw = request.data.get("start_scan", "true")
+        if isinstance(start_scan_raw, bool):
+            start_scan = start_scan_raw
+        else:
+            start_scan = str(start_scan_raw).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+        modules_raw = request.data.get("modules")
+        if modules_raw in (None, ""):
+            modules = validate_modules([{"id": "full-pipeline", "filters": {}}])
+        else:
+            if isinstance(modules_raw, (bytes, bytearray)):
+                modules_raw = modules_raw.decode("utf-8")
+            if isinstance(modules_raw, str):
+                try:
+                    modules_raw = json.loads(modules_raw)
+                except json.JSONDecodeError:
+                    return Response(
+                        {"detail": "modules must be valid JSON."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            try:
+                modules = validate_modules(modules_raw)
+            except SerializerValidationError as exc:
+                return Response(
+                    {"detail": exc.detail},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        client_request_id = str(
+            request.data.get("client_request_id") or ""
+        ).strip()[:128]
+
+        owner = request.user
+        addresses = [item.address for item in parsed.targets]
+        existing_by_address = {
+            target.address: target
+            for target in Target.objects.filter(owner=owner, address__in=addresses)
+        }
+        existing_addresses = set(existing_by_address)
+
+        to_create = [
+            Target(
+                owner=owner,
+                address=item.address,
+                target_type=item.target_type,
+                comment=item.comment,
+            )
+            for item in parsed.targets
+            if item.address not in existing_addresses
+        ]
+        if to_create:
+            Target.objects.bulk_create(to_create, ignore_conflicts=True)
+
+        all_targets = list(
+            Target.objects.filter(owner=owner, address__in=addresses).order_by("id")
+        )
+        created_count = sum(
+            1 for target in all_targets if target.address not in existing_addresses
+        )
+        existing_count = len(all_targets) - created_count
+
+        scan_payload = None
+        if start_scan and all_targets:
+            run, _created = _queue_scan_for_targets(
+                owner=owner,
+                targets=all_targets,
+                modules=modules,
+                client_request_id=client_request_id,
+            )
+            run = (
+                ScanRun.objects.prefetch_related("batches", "events__batch")
+                .get(pk=run.pk)
+            )
+            scan_payload = ScanRunSerializer(run).data
+
+        return Response(
+            {
+                "created_count": created_count,
+                "existing_count": existing_count,
+                "total_count": len(all_targets),
+                "parse_errors": parsed.errors,
+                "skipped_duplicates_in_file": parsed.skipped_duplicates_in_file,
+                "target_ids": [target.pk for target in all_targets],
+                "targets": TargetSerializer(
+                    all_targets[:500],
+                    many=True,
+                ).data,
+                "scan": scan_payload,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class ScanListCreateView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -141,77 +354,20 @@ class ScanListCreateView(APIView):
         serializer = ScanCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         client_request_id = serializer.validated_data.get("client_request_id", "")
-
-        with transaction.atomic():
-            if client_request_id:
-                existing = (
-                    ScanRun.objects.select_for_update()
-                    .filter(
-                        owner=request.user,
-                        client_request_id=client_request_id,
-                    )
-                    .first()
-                )
-                if existing is not None:
-                    return Response(ScanRunSerializer(existing).data)
-
-            try:
-                with transaction.atomic():
-                    run = ScanRun.objects.create(
-                        owner=request.user,
-                        modules_snapshot=serializer.validated_data["modules"],
-                        client_request_id=client_request_id,
-                        total_batches=len(serializer.context["targets"]),
-                    )
-            except IntegrityError:
-                run = ScanRun.objects.get(
-                    owner=request.user,
-                    client_request_id=client_request_id,
-                )
-                return Response(ScanRunSerializer(run).data)
-
-            batches = ScanBatch.objects.bulk_create(
-                [
-                    ScanBatch(
-                        run=run,
-                        target=target,
-                        target_address=target.address,
-                        target_type=target.target_type,
-                    )
-                    for target in serializer.context["targets"]
-                ]
-            )
-            for batch in batches:
-                transaction.on_commit(
-                    partial(_publish_batch, batch.pk, str(batch.delivery_id))
-                )
-
-            module_ids = [
-                module.get("id", "?")
-                for module in serializer.validated_data["modules"]
-                if isinstance(module, dict)
-            ]
-            append_scan_event(
-                run,
-                (
-                    f"Queued scan #{run.pk} for {len(batches)} target(s); "
-                    f"modules: {', '.join(str(item) for item in module_ids) or 'none'}."
-                ),
-                source="api",
-            )
-            for batch in batches:
-                append_scan_event(
-                    run,
-                    f"Batch queued for {batch.target_address} ({batch.target_type}).",
-                    batch=batch,
-                    source="api",
-                )
-
+        run, created = _queue_scan_for_targets(
+            owner=request.user,
+            targets=serializer.context["targets"],
+            modules=serializer.validated_data["modules"],
+            client_request_id=client_request_id,
+        )
         run = (
             ScanRun.objects.prefetch_related("batches", "events__batch")
             .get(pk=run.pk)
         )
-        return Response(ScanRunSerializer(run).data, status=status.HTTP_201_CREATED)
+        return Response(
+            ScanRunSerializer(run).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class ScanDetailView(APIView):
@@ -303,6 +459,7 @@ class ScanCancelView(APIView):
                     level=ScanEvent.Level.WARN,
                     source="api",
                 )
+                queue_automatic_defectdojo_export(run)
 
         run = (
             ScanRun.objects.prefetch_related("batches", "events__batch")
@@ -346,4 +503,25 @@ class ScanDefectDojoExportView(APIView):
                 {"detail": str(exc)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+        run.defectdojo_export_status = ScanRun.DefectDojoExportStatus.SENT
+        run.defectdojo_export_detail = (
+            f"Sent {result.get('finding_count', 0)} finding(s)"
+            + (
+                f" to test #{result.get('test')}."
+                if result.get("test")
+                else "."
+            )
+        )[:500]
+        run.save(
+            update_fields=(
+                "defectdojo_export_status",
+                "defectdojo_export_detail",
+                "updated_at",
+            )
+        )
+        append_scan_event(
+            run,
+            f"Manual DefectDojo export finished: {run.defectdojo_export_detail}",
+            source="defectdojo",
+        )
         return Response(result)
