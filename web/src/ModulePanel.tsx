@@ -1,3 +1,4 @@
+import { Translate } from "./i18n";
 import {
   FilterField,
   ModuleFilterValues,
@@ -13,6 +14,7 @@ type Props = {
   onToggleExpanded: (id: string) => void;
   onFilterChange: (id: string, key: string, value: string | number | boolean) => void;
   onRun: () => void;
+  t: Translate;
 };
 
 const CATEGORY_LABEL: Record<ProbeModule["category"], string> = {
@@ -23,16 +25,34 @@ const CATEGORY_LABEL: Record<ProbeModule["category"], string> = {
   pipeline: "Pipeline",
 };
 
+const CATEGORY_DESCRIPTION: Record<ProbeModule["category"], string> = {
+  discovery: "Find live hosts and exposed network services.",
+  http: "Inspect web endpoints and response metadata.",
+  tls: "Collect certificate and TLS configuration details.",
+  signatures: "Match observed services against known fingerprints.",
+  pipeline: "Run a combined discovery workflow.",
+};
+
+const CATEGORY_ORDER: ProbeModule["category"][] = [
+  "discovery",
+  "http",
+  "tls",
+  "signatures",
+  "pipeline",
+];
+
 function FilterControl({
   moduleId,
   field,
   value,
   onChange,
+  t,
 }: {
   moduleId: string;
   field: FilterField;
   value: string | number | boolean;
   onChange: (key: string, value: string | number | boolean) => void;
+  t: Translate;
 }) {
   const inputId = `${moduleId}-${field.key}`;
 
@@ -46,8 +66,8 @@ function FilterControl({
           onChange={(e) => onChange(field.key, e.target.checked)}
         />
         <span>
-          <span className="filter-row__label">{field.label}</span>
-          {field.help && <span className="field-help">{field.help}</span>}
+          <span className="filter-row__label">{t(field.label)}</span>
+          {field.help && <span className="field-help">{t(field.help)}</span>}
         </span>
       </label>
     );
@@ -55,7 +75,7 @@ function FilterControl({
 
   return (
     <div className="filter-row">
-      <label htmlFor={inputId}>{field.label}</label>
+      <label htmlFor={inputId}>{t(field.label)}</label>
       <div>
         {field.type === "select" && (
           <select
@@ -66,7 +86,7 @@ function FilterControl({
           >
             {field.options.map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {t(opt.label)}
               </option>
             ))}
           </select>
@@ -92,7 +112,7 @@ function FilterControl({
             onChange={(e) => onChange(field.key, Number(e.target.value))}
           />
         )}
-        {field.help && <p className="field-help">{field.help}</p>}
+        {field.help && <p className="field-help">{t(field.help)}</p>}
       </div>
     </div>
   );
@@ -106,6 +126,7 @@ function ModuleTile({
   onToggleEnabled,
   onToggleExpanded,
   onFilterChange,
+  t,
 }: {
   module: ProbeModule;
   enabled: boolean;
@@ -114,6 +135,7 @@ function ModuleTile({
   onToggleEnabled: () => void;
   onToggleExpanded: () => void;
   onFilterChange: (key: string, value: string | number | boolean) => void;
+  t: Translate;
 }) {
   const titleId = `module-title-${module.id}`;
   const filtersId = `module-filters-${module.id}`;
@@ -133,8 +155,7 @@ function ModuleTile({
       aria-labelledby={titleId}
     >
       <div className="module-tile__face">
-        <div className="module-tile__top">
-          <span className="module-tile__category">{CATEGORY_LABEL[module.category]}</span>
+        <div className="module-tile__identity">
           <label className="module-tile__check">
             <input
               type="checkbox"
@@ -142,18 +163,32 @@ function ModuleTile({
               onChange={onToggleEnabled}
               aria-describedby={`${titleId}-summary`}
             />
-            <span className="sr-only">Enable {module.name}</span>
+            <span className="sr-only">{t("Enabled")} {t(module.name)}</span>
           </label>
+          <div>
+            <h3 className="module-tile__name" id={titleId}>
+              {t(module.name)}
+            </h3>
+            <p className="module-tile__summary" id={`${titleId}-summary`}>
+              {t(module.summary)}
+            </p>
+          </div>
         </div>
 
-        <h3 className="module-tile__name" id={titleId}>
-          {module.name}
-        </h3>
-        <p className="module-tile__summary" id={`${titleId}-summary`}>
-          {module.summary}
-        </p>
-        <p className="module-tile__tool mono">{module.tool}</p>
+        <div className="module-tile__meta">
+          <span className="module-tile__tool mono">{module.tool}</span>
+          {hasFilters && (
+            <span className="module-tile__chip mono" title={filterPreview}>
+              {filterPreview}
+            </span>
+          )}
+        </div>
+      </div>
 
+      <footer className="module-tile__footer">
+        <span className={`module-tile__state ${enabled ? "is-on" : ""}`}>
+          {enabled ? t("Enabled") : t("Disabled")}
+        </span>
         <div className="module-tile__actions">
           <button
             type="button"
@@ -163,73 +198,40 @@ function ModuleTile({
             disabled={!hasFilters && !expanded}
             onClick={onToggleExpanded}
           >
-            {expanded ? "Hide filters" : hasFilters ? "Filters" : "No filters"}
+            {expanded ? t("Hide filters") : hasFilters ? t("Filters") : t("No filters")}
           </button>
-          {enabled && (
-            <span className="module-tile__status" aria-hidden="true">
-              On
-            </span>
-          )}
         </div>
-
-        {!expanded && hasFilters && (
-          <p className="module-tile__chip mono" title={filterPreview}>
-            {filterPreview}
-          </p>
-        )}
-      </div>
+      </footer>
 
       {expanded && hasFilters && (
-        <div
-          className="module-drawer-backdrop"
-          onMouseDown={onToggleExpanded}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onToggleExpanded();
-          }}
+        <section
+          className="module-tile__drawer"
+          id={filtersId}
+          aria-label={`${module.name} filters`}
         >
-          <aside
-            className="module-drawer"
-            id={filtersId}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`${titleId}-drawer`}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <header className="module-drawer__header">
-              <div>
-                <span className="module-tile__category">{CATEGORY_LABEL[module.category]}</span>
-                <h2 id={`${titleId}-drawer`}>{module.name} filters</h2>
-                <p>{module.summary}</p>
-              </div>
-              <button
-                type="button"
-                className="module-drawer__close"
-                aria-label={`Close ${module.name} filters`}
-                onClick={onToggleExpanded}
-                autoFocus
-              >
-                ×
-              </button>
-            </header>
-            <div className="module-drawer__body">
-              {module.filters.map((field) => (
-                <FilterControl
-                  key={field.key}
-                  moduleId={module.id}
-                  field={field}
-                  value={filters[field.key] ?? field.default}
-                  onChange={onFilterChange}
-                />
-              ))}
-            </div>
-            <footer className="module-drawer__footer">
-              <p className="module-tile__preview mono">Active: {filterPreview}</p>
-              <button type="button" className="btn btn--primary" onClick={onToggleExpanded}>
-                Done
-              </button>
-            </footer>
-          </aside>
-        </div>
+          <div className="module-tile__drawer-head">
+            <strong>{t("Module filters")}</strong>
+            <span>{t("Configure this module before running discovery.")}</span>
+          </div>
+          <div className="module-tile__filter-grid">
+            {module.filters.map((field) => (
+              <FilterControl
+                key={field.key}
+                moduleId={module.id}
+                field={field}
+                value={filters[field.key] ?? field.default}
+                onChange={onFilterChange}
+                t={t}
+              />
+            ))}
+          </div>
+          <div className="module-tile__drawer-bottom">
+            <p className="module-tile__preview mono">{t("Active")}: {filterPreview}</p>
+            <button type="button" className="btn btn--normal" onClick={onToggleExpanded}>
+              {t("Close filters")}
+            </button>
+          </div>
+        </section>
       )}
     </article>
   );
@@ -241,42 +243,66 @@ export function ModulePanel({
   onToggleExpanded,
   onFilterChange,
   onRun,
+  t,
 }: Props) {
   const enabledCount = Object.values(state).filter((s) => s.enabled).length;
 
   return (
     <section className="panel">
       <div className="panel__header">
-        <h2>Discovery modules</h2>
+        <h2>{t("Discovery modules")}</h2>
         <div className="actions">
           <button type="button" className="btn btn--primary" onClick={onRun}>
-            Run selected
+            {t("Run selected")}
           </button>
         </div>
       </div>
-      <div className="module-grid" role="list">
-        {PROBE_MODULES.map((mod) => {
-          const cfg = state[mod.id];
-          if (!cfg) return null;
+      <div className="module-groups">
+        {CATEGORY_ORDER.map((category) => {
+          const modules = PROBE_MODULES.filter((module) => module.category === category);
+          if (modules.length === 0) return null;
+
           return (
-            <div key={mod.id} role="listitem" className="module-grid__item">
-              <ModuleTile
-                module={mod}
-                enabled={cfg.enabled}
-                expanded={cfg.expanded}
-                filters={cfg.filters}
-                onToggleEnabled={() => onToggleEnabled(mod.id)}
-                onToggleExpanded={() => onToggleExpanded(mod.id)}
-                onFilterChange={(key, value) => onFilterChange(mod.id, key, value)}
-              />
-            </div>
+            <section
+              className={`module-group module-group--${category}`}
+              key={category}
+              aria-labelledby={`module-category-${category}`}
+            >
+              <header className="module-group__header">
+                <div>
+                  <h3 id={`module-category-${category}`}>{t(CATEGORY_LABEL[category])}</h3>
+                  <p>{t(CATEGORY_DESCRIPTION[category])}</p>
+                </div>
+                <span>{modules.length}</span>
+              </header>
+              <div className="module-list" role="list">
+                {modules.map((mod) => {
+                  const cfg = state[mod.id];
+                  if (!cfg) return null;
+                  return (
+                    <div key={mod.id} role="listitem">
+                      <ModuleTile
+                        module={mod}
+                        enabled={cfg.enabled}
+                        expanded={cfg.expanded}
+                        filters={cfg.filters}
+                        onToggleEnabled={() => onToggleEnabled(mod.id)}
+                        onToggleExpanded={() => onToggleExpanded(mod.id)}
+                        onFilterChange={(key, value) => onFilterChange(mod.id, key, value)}
+                        t={t}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           );
         })}
       </div>
       <div className="panel__footer">
         <span className="table-toolbar__count">
-          {enabledCount} module{enabledCount === 1 ? "" : "s"} selected · filters open in a side
-          panel
+          {enabledCount} module{enabledCount === 1 ? "" : "s"} selected · filters expand below
+          each module
         </span>
       </div>
     </section>

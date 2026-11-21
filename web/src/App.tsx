@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, AuthUser, ensureCsrf } from "./auth";
 import { AppFooter } from "./AppFooter";
+import { Language, Translate, useLanguage } from "./i18n";
+import { LanguageSelect } from "./LanguageSelect";
 import { Logo } from "./Logo";
 import { ModulePanel } from "./ModulePanel";
 import {
@@ -15,6 +17,7 @@ type HostTarget = {
   id: string;
   value: string;
   type: "ip" | "cidr" | "domain";
+  comment: string;
   addedAt: string;
 };
 
@@ -72,7 +75,9 @@ function loadTargets(): HostTarget[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as HostTarget[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed)
+      ? parsed.map((target) => ({ ...target, comment: target.comment ?? "" }))
+      : [];
   } catch {
     return [];
   }
@@ -93,10 +98,16 @@ function LoginScreen({
   onAuthenticated,
   highContrast,
   onToggleContrast,
+  language,
+  onLanguageChange,
+  t,
 }: {
   onAuthenticated: (user: AuthUser) => void;
   highContrast: boolean;
   onToggleContrast: () => void;
+  language: Language;
+  onLanguageChange: (language: Language) => void;
+  t: Translate;
 }) {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
@@ -117,7 +128,7 @@ function LoginScreen({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.detail || "Sign-in failed.");
+        setError(data.detail || t("Sign-in failed."));
         return;
       }
       if (data.mfa_required) {
@@ -126,7 +137,7 @@ function LoginScreen({
       }
       onAuthenticated(data.user as AuthUser);
     } catch {
-      setError("Cannot reach authentication API.");
+      setError(t("Cannot reach authentication API."));
     } finally {
       setBusy(false);
     }
@@ -144,13 +155,13 @@ function LoginScreen({
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.detail || "Invalid MFA code.");
+        setError(data.detail || t("Invalid MFA code."));
         if (data.mfa_token) setMfaToken(data.mfa_token);
         return;
       }
       onAuthenticated(data.user as AuthUser);
     } catch {
-      setError("Cannot reach authentication API.");
+      setError(t("Cannot reach authentication API."));
     } finally {
       setBusy(false);
     }
@@ -159,11 +170,20 @@ function LoginScreen({
   return (
     <div className="login-page">
       <a className="skip-link" href="#login-form">
-        Skip to sign-in form
+        {t("Skip to sign-in form")}
       </a>
+      <div className="login-language">
+        <LanguageSelect
+          language={language}
+          onChange={onLanguageChange}
+          label={t("Language")}
+        />
+      </div>
       <main className="login-card panel" id="login-form" aria-labelledby="login-title">
         <div className="panel__header">
-          <h2 id="login-title">{mfaToken ? "Multi-factor authentication" : "Sign in"}</h2>
+          <h2 id="login-title">
+            {mfaToken ? t("Multi-factor authentication") : t("Sign in")}
+          </h2>
         </div>
         <div className="panel__body">
           <div className="login-brand">
@@ -171,17 +191,18 @@ function LoginScreen({
           </div>
           <p className="field-help" style={{ marginBottom: 16 }} id="login-help">
             {mfaToken
-              ? "Enter the 6-digit code from your authenticator app."
-              : "Use your console username and password."}
+              ? t("Enter the 6-digit code from your authenticator app.")
+              : t("Use your console username and password.")}
           </p>
 
           {!mfaToken && (
             <div className="flash flash--error" role="alert">
               <div>
-                <strong>Warning: MFA is disabled</strong>
+                <strong>{t("Warning: MFA is disabled")}</strong>
                 <p>
-                  Multi-factor authentication is currently turned off for this console.
-                  Accounts are protected by password only.
+                  {t(
+                    "Multi-factor authentication is currently turned off for this console. Accounts are protected by password only.",
+                  )}
                 </p>
               </div>
             </div>
@@ -190,7 +211,7 @@ function LoginScreen({
           {error && (
             <div className="flash flash--error" role="alert">
               <div>
-                <strong>Authentication error</strong>
+                <strong>{t("Authentication error")}</strong>
                 <p>{error}</p>
               </div>
             </div>
@@ -199,7 +220,7 @@ function LoginScreen({
           {!mfaToken ? (
             <form onSubmit={submitPassword} aria-describedby="login-help">
               <div className="form-row">
-                <label htmlFor="username">Username</label>
+                <label htmlFor="username">{t("Username")}</label>
                 <input
                   id="username"
                   className="input"
@@ -211,7 +232,7 @@ function LoginScreen({
                 />
               </div>
               <div className="form-row">
-                <label htmlFor="password">Password</label>
+                <label htmlFor="password">{t("Password")}</label>
                 <input
                   id="password"
                   type="password"
@@ -225,14 +246,14 @@ function LoginScreen({
               </div>
               <div className="actions">
                 <button type="submit" className="btn btn--primary" disabled={busy} aria-busy={busy}>
-                  {busy ? "Signing in…" : "Sign in"}
+                  {busy ? t("Signing in…") : t("Sign in")}
                 </button>
               </div>
             </form>
           ) : (
             <form onSubmit={submitMfa} aria-describedby="login-help">
               <div className="form-row">
-                <label htmlFor="mfa">MFA code</label>
+                <label htmlFor="mfa">{t("MFA code")}</label>
                 <div>
                   <input
                     id="mfa"
@@ -248,7 +269,7 @@ function LoginScreen({
                     aria-describedby="mfa-help"
                   />
                   <p className="field-help" id="mfa-help">
-                    TOTP from Google Authenticator, 1Password, or Authy.
+                    {t("TOTP from Google Authenticator, 1Password, or Authy.")}
                   </p>
                 </div>
               </div>
@@ -259,7 +280,7 @@ function LoginScreen({
                   disabled={busy || mfaCode.length < 6}
                   aria-busy={busy}
                 >
-                  {busy ? "Verifying…" : "Verify"}
+                  {busy ? t("Verifying…") : t("Verify")}
                 </button>
                 <button
                   type="button"
@@ -271,14 +292,20 @@ function LoginScreen({
                     setError(null);
                   }}
                 >
-                  Back
+                  {t("Back")}
                 </button>
               </div>
             </form>
           )}
         </div>
       </main>
-      <AppFooter highContrast={highContrast} onToggleContrast={onToggleContrast} />
+      <AppFooter
+        highContrast={highContrast}
+        onToggleContrast={onToggleContrast}
+        language={language}
+        onLanguageChange={onLanguageChange}
+        t={t}
+      />
       <div id="a11y-help" className="sr-only" tabIndex={-1}>
         {APP_NAME} version {APP_VERSION}. Keyboard users can tab through form fields. Screen
         reader users: alerts are announced automatically. Use High contrast for stronger colors.
@@ -289,12 +316,14 @@ function LoginScreen({
 
 export function App() {
   const { highContrast, toggleHighContrast } = useHighContrast();
+  const { language, setLanguage, t } = useLanguage();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [nav, setNav] = useState<NavId>("dashboard");
   const [targets, setTargets] = useState<HostTarget[]>(() => loadTargets());
   const [jobs, setJobs] = useState<ProbeJob[]>(() => loadJobs());
   const [draft, setDraft] = useState("");
+  const [draftComment, setDraftComment] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<string | null>(null);
@@ -455,11 +484,13 @@ export function App() {
         id: crypto.randomUUID(),
         value,
         type: detectType(value),
+        comment: draftComment.trim(),
         addedAt: new Date().toISOString(),
       },
       ...prev,
     ]);
     setDraft("");
+    setDraftComment("");
     setDraftError(null);
     setFlash(`Added ${value}`);
     if (!probeHost) setProbeHost(value);
@@ -526,6 +557,9 @@ export function App() {
         onAuthenticated={setUser}
         highContrast={highContrast}
         onToggleContrast={toggleHighContrast}
+        language={language}
+        onLanguageChange={setLanguage}
+        t={t}
       />
     );
   }
@@ -533,13 +567,13 @@ export function App() {
   return (
     <div className="app">
       <a className="skip-link" href="#main-content">
-        Skip to main content
+        {t("Skip to main content")}
       </a>
       <header className="topnav" role="banner">
         <a className="topnav__brand" href="/" aria-label={`${APP_NAME} home`}>
           <Logo />
         </a>
-        <span className="topnav__meta" aria-label="Signed-in account">
+        <span className="topnav__meta" aria-label={t("Signed-in account")}>
           {user.username} · {user.role}
           {user.mfa_enabled ? " · MFA" : ""}
         </span>
@@ -549,10 +583,16 @@ export function App() {
           aria-pressed={highContrast}
           onClick={toggleHighContrast}
         >
-          {highContrast ? "Standard contrast" : "High contrast"}
+          {highContrast ? t("Standard contrast") : t("High contrast")}
         </button>
+        <LanguageSelect
+          language={language}
+          onChange={setLanguage}
+          label={t("Language")}
+          className="language-select--topnav"
+        />
         <button type="button" className="btn btn--normal topnav__signout" onClick={signOut}>
-          Sign out
+          {t("Sign out")}
         </button>
       </header>
 
@@ -570,7 +610,7 @@ export function App() {
             <button
               type="button"
               className="toast__close"
-              aria-label="Dismiss"
+              aria-label={t("Dismiss")}
               onClick={() => dismissToast(toast.id)}
             >
               ×
@@ -580,9 +620,9 @@ export function App() {
       </div>
 
       <div className="layout">
-        <nav className="sidenav" aria-label="Primary">
+        <nav className="sidenav" aria-label={t("Primary")}>
           <div className="sidenav__section" id="nav-section-label">
-            Attack surface
+            {t("Attack surface")}
           </div>
           <button
             type="button"
@@ -590,7 +630,7 @@ export function App() {
             aria-current={nav === "dashboard" ? "page" : undefined}
             onClick={() => setNav("dashboard")}
           >
-            Dashboard
+            {t("Dashboard")}
           </button>
           <button
             type="button"
@@ -598,7 +638,7 @@ export function App() {
             aria-current={nav === "targets" ? "page" : undefined}
             onClick={() => setNav("targets")}
           >
-            Targets
+            {t("Targets")}
           </button>
           <button
             type="button"
@@ -606,7 +646,7 @@ export function App() {
             aria-current={nav === "scans" ? "page" : undefined}
             onClick={() => setNav("scans")}
           >
-            Scans
+            {t("Scans")}
           </button>
         </nav>
 
@@ -614,20 +654,21 @@ export function App() {
           {nav === "dashboard" && (
             <>
               <header className="page-header">
-                <h1>Dashboard</h1>
+                <h1>{t("Dashboard")}</h1>
                 <p>
-                  Pick a host and run discovery modules. SurfaceX probes only — no login,
-                  brute force, or exploitation.
+                  {t(
+                    "Pick a host and run discovery modules. SurfaceX probes only — no login, brute force, or exploitation.",
+                  )}
                 </p>
               </header>
 
               <section className="panel">
                 <div className="panel__header">
-                  <h2>Target host</h2>
+                  <h2>{t("Target host")}</h2>
                 </div>
                 <div className="panel__body">
                   <div className="form-row">
-                    <label htmlFor="probe-host">Host / IP</label>
+                    <label htmlFor="probe-host">{t("Host / IP")}</label>
                     <div>
                       <input
                         id="probe-host"
@@ -645,7 +686,7 @@ export function App() {
                         ))}
                       </datalist>
                       <p className="field-help">
-                        Type an address or choose from saved targets.
+                        {t("Type an address or choose from saved targets.")}
                       </p>
                     </div>
                   </div>
@@ -658,27 +699,28 @@ export function App() {
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
                 onRun={runProbe}
+                t={t}
               />
 
               <section className="panel">
                 <div className="panel__header">
-                  <h2>Recent probe jobs</h2>
+                  <h2>{t("Recent probe jobs")}</h2>
                 </div>
                 <div className="table-wrap">
                   {jobs.length === 0 ? (
                     <div className="empty">
-                      <strong>No probe jobs</strong>
-                      Select modules and run a discovery probe against a host.
+                      <strong>{t("No probe jobs")}</strong>
+                      {t("Select modules and run a discovery probe against a host.")}
                     </div>
                   ) : (
                     <table className="hosts">
                       <caption className="sr-only">Recent probe jobs</caption>
                       <thead>
                         <tr>
-                          <th scope="col">Host</th>
-                          <th scope="col">Modules</th>
-                          <th scope="col">Status</th>
-                          <th scope="col">Queued</th>
+                          <th scope="col">{t("Host")}</th>
+                          <th scope="col">{t("Modules")}</th>
+                          <th scope="col">{t("Status")}</th>
+                          <th scope="col">{t("Queued")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -705,17 +747,18 @@ export function App() {
           {nav === "targets" && (
             <>
               <header className="page-header">
-                <h1>Targets</h1>
+                <h1>{t("Targets")}</h1>
                 <p>
-                  Add IP addresses, CIDR ranges, or hostnames. Select hosts with checkboxes,
-                  then queue a scan or remove them from the working set.
+                  {t(
+                    "Add IP addresses, CIDR ranges, or hostnames. Select hosts with checkboxes, then queue a scan or remove them from the working set.",
+                  )}
                 </p>
               </header>
 
               {flash && (
                 <div className="flash flash--ok" role="status">
                   <div>
-                    <strong>Success</strong>
+                    <strong>{t("Success")}</strong>
                     <p>{flash}</p>
                   </div>
                 </div>
@@ -723,11 +766,11 @@ export function App() {
 
               <section className="panel">
                 <div className="panel__header">
-                  <h2>Add target</h2>
+                  <h2>{t("Add target")}</h2>
                 </div>
                 <form className="panel__body" onSubmit={onAdd}>
                   <div className="form-row">
-                    <label htmlFor="host-input">IP / hostname</label>
+                    <label htmlFor="host-input">{t("IP / hostname")}</label>
                     <div>
                       <input
                         id="host-input"
@@ -746,14 +789,32 @@ export function App() {
                         <p className="field-error">{draftError}</p>
                       ) : (
                         <p className="field-help">
-                          One target per submit. CIDR is stored as a range entry.
+                          {t("One target per submit. CIDR is stored as a range entry.")}
                         </p>
                       )}
                     </div>
                   </div>
+                  <div className="form-row">
+                    <label htmlFor="target-comment">{t("Comment (optional)")}</label>
+                    <div>
+                      <textarea
+                        id="target-comment"
+                        className="input target-comment-input"
+                        value={draftComment}
+                        onChange={(e) => setDraftComment(e.target.value)}
+                        placeholder="e.g. Production API, Warsaw office router, owner: Network Team"
+                        maxLength={280}
+                        rows={3}
+                      />
+                      <p className="field-help">
+                        {t("Optional note describing the host, owner, environment, or purpose.")}{" "}
+                        {draftComment.length}/280
+                      </p>
+                    </div>
+                  </div>
                   <div className="actions">
                     <button type="submit" className="btn btn--primary">
-                      Add target
+                      {t("Add target")}
                     </button>
                   </div>
                 </form>
@@ -768,7 +829,7 @@ export function App() {
                       disabled={selected.size === 0}
                       onClick={queueSelected}
                     >
-                      Scan selected ({selected.size})
+                      {t("Scan selected")} ({selected.size})
                     </button>
                     <button
                       type="button"
@@ -776,7 +837,7 @@ export function App() {
                       disabled={selected.size === 0}
                       onClick={removeSelected}
                     >
-                      Remove
+                      {t("Remove")}
                     </button>
                     <button
                       type="button"
@@ -784,7 +845,7 @@ export function App() {
                       disabled={selected.size === 0}
                       onClick={() => setSelected(new Set())}
                     >
-                      Clear selection
+                      {t("Clear selection")}
                     </button>
                   </div>
                   <div className="table-toolbar__count">
@@ -795,8 +856,8 @@ export function App() {
                 <div className="table-wrap">
                   {targets.length === 0 ? (
                     <div className="empty">
-                      <strong>No targets</strong>
-                      Add an IP address or hostname to start building the scan set.
+                      <strong>{t("No targets")}</strong>
+                      {t("Add an IP address or hostname to start building the scan set.")}
                     </div>
                   ) : (
                     <table className="hosts">
@@ -814,9 +875,10 @@ export function App() {
                               aria-label="Select all hosts"
                             />
                           </th>
-                          <th scope="col">Host / IP</th>
-                          <th scope="col">Type</th>
-                          <th scope="col">Added</th>
+                          <th scope="col">{t("Host / IP")}</th>
+                          <th scope="col">{t("Comment")}</th>
+                          <th scope="col">{t("Type")}</th>
+                          <th scope="col">{t("Added")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -836,6 +898,9 @@ export function App() {
                                 />
                               </td>
                               <td className="mono">{target.value}</td>
+                              <td className="target-comment">
+                                {target.comment || <span className="target-comment--empty">—</span>}
+                              </td>
                               <td>{target.type}</td>
                               <td>{new Date(target.addedAt).toLocaleString()}</td>
                             </tr>
@@ -852,25 +917,25 @@ export function App() {
           {nav === "scans" && (
             <>
               <header className="page-header">
-                <h1>Scans</h1>
-                <p>Queued discovery jobs from the dashboard and target list.</p>
+                <h1>{t("Scans")}</h1>
+                <p>{t("Queued discovery jobs from the dashboard and target list.")}</p>
               </header>
               <div className="panel">
                 <div className="table-wrap">
                   {jobs.length === 0 ? (
                     <div className="empty">
-                      <strong>No scan runs yet</strong>
-                      Use Dashboard modules to probe a host.
+                      <strong>{t("No scan runs yet")}</strong>
+                      {t("Use Dashboard modules to probe a host.")}
                     </div>
                   ) : (
                     <table className="hosts">
                       <caption className="sr-only">Queued discovery scan runs</caption>
                       <thead>
                         <tr>
-                          <th scope="col">Host</th>
-                          <th scope="col">Modules</th>
-                          <th scope="col">Status</th>
-                          <th scope="col">Queued</th>
+                          <th scope="col">{t("Host")}</th>
+                          <th scope="col">{t("Modules")}</th>
+                          <th scope="col">{t("Status")}</th>
+                          <th scope="col">{t("Queued")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -896,7 +961,13 @@ export function App() {
         </main>
       </div>
 
-      <AppFooter highContrast={highContrast} onToggleContrast={toggleHighContrast} />
+      <AppFooter
+        highContrast={highContrast}
+        onToggleContrast={toggleHighContrast}
+        language={language}
+        onLanguageChange={setLanguage}
+        t={t}
+      />
       <div id="a11y-help" className="sr-only" tabIndex={-1}>
         Keyboard: Tab moves focus, Enter activates buttons, Escape dismisses toasts when focused.
         Navigation uses aria-current for the active page. Status messages use live regions.
