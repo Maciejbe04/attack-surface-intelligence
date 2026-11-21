@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
+from apps.scans.defectdojo import build_generic_findings_report
 from apps.scans.models import QueueState, ScanBatch, ScanRun, Target
 
 
@@ -205,6 +206,123 @@ class PublicScanAPITests(TestCase):
         self.assertEqual(response.status_code, 404)
         response = self.client.post(reverse("scan-cancel", args=(own_run.id,)))
         self.assertEqual(response.status_code, 403)
+
+    def test_finished_scan_can_be_exported_to_defectdojo(self) -> None:
+        analyst = create_user("analyst", UserProfile.Role.ANALYST)
+        run = ScanRun.objects.create(
+            owner=analyst,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[],
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+            finished_at=timezone.now(),
+        )
+        ScanBatch.objects.create(
+            run=run,
+            target_address="192.0.2.80",
+            target_type=Target.Type.IP,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={"hosts": [{"address": "192.0.2.80", "ports": []}]},
+            finished_at=timezone.now(),
+        )
+        self.client.force_login(analyst)
+
+        with patch(
+            "apps.scans.views.export_scan_to_defectdojo",
+            return_value={
+                "finding_count": 1,
+                "test": 42,
+                "message": "Imported",
+            },
+        ) as export:
+            response = self.client.post(
+                reverse("scan-defectdojo-export", args=(run.id,))
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["finding_count"], 1)
+        export.assert_called_once()
+
+        self.client.force_login(self.viewer)
+        response = self.client.post(
+            reverse("scan-defectdojo-export", args=(run.id,))
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_defectdojo_report_contains_stable_attack_surface_findings(self) -> None:
+        run = ScanRun.objects.create(
+            owner=self.operator,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[],
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+            finished_at=timezone.now(),
+        )
+        ScanBatch.objects.create(
+            run=run,
+            target_address="app.example.test",
+            target_type=Target.Type.DOMAIN,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={
+                "hosts": [
+                    {
+                        "address": "192.0.2.81",
+                        "ports": [
+                            {
+                                "port": 443,
+                                "protocol": "tcp",
+                                "service": "https",
+                                "product": "nginx",
+                                "version": "1.27",
+                            }
+                        ],
+                    }
+                ],
+                "http": [
+                    {
+                        "url": "https://app.example.test:443",
+                        "tech": ["nginx"],
+                    }
+                ],
+                "signatures": [
+                    {
+                        "endpoint": "https://app.example.test:443",
+                        "technology": "nginx",
+                        "confidence": 80,
+                        "evidence": "server header",
+                    }
+                ],
+            },
+            finished_at=timezone.now(),
+        )
+
+        report = build_generic_findings_report(
+            ScanRun.objects.prefetch_related("batches").get(pk=run.pk)
+        )
+
+        self.assertEqual(report["type"], "SurfaceX")
+        self.assertEqual(len(report["findings"]), 3)
+        self.assertEqual(
+            {finding["vuln_id_from_tool"] for finding in report["findings"]},
+            {
+                "surfacex.live-host",
+                "surfacex.open-service",
+                "surfacex.technology",
+            },
+        )
+        self.assertEqual(
+            len(
+                {
+                    finding["unique_id_from_tool"]
+                    for finding in report["findings"]
+                }
+            ),
+            3,
+        )
 
 
 @override_settings(WORKER_TOKEN="worker-test-token")

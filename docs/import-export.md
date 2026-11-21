@@ -121,8 +121,26 @@ Eksport używa tych samych schematów. Dodatkowo może zawierać:
 
 ## DefectDojo (opcjonalnie)
 
-Wybrane obserwacje mogą być wysłane jako finding informacyjny:
+Ukończony lub częściowo ukończony przebieg można wysłać z UI albo przez:
 
-- `idempotency_key = scan_run_id + host + port + technology`;
-- evidence w załączniku lub opisie;
-- ponowny eksport tego samego klucza aktualizuje finding zamiast tworzyć duplikat.
+```text
+POST /api/scans/<scan_run_id>/export/defectdojo/
+```
+
+Eksporter tworzy raport `Generic Findings Import` i przesyła go przez
+`POST /api/v2/reimport-scan/`. Jako findings poziomu `Info` trafiają:
+
+- aktywne hosty;
+- otwarte porty i usługi wraz z produktem oraz wersją;
+- technologie wykryte przez httpx i sygnatury SurfaceX.
+
+`unique_id_from_tool` jest stabilnym skrótem typu obserwacji, hosta, portu,
+protokołu, endpointu i technologii. Nie zawiera identyfikatora przebiegu,
+dzięki czemu ponowny eksport aktualizuje istniejące findings. Eksport ustawia
+`close_old_findings=false`, ponieważ pojedynczy przebieg może obejmować tylko
+część zapisanych targetów.
+
+Lokalny stos uruchamia się profilem `defectdojo`. Dla zewnętrznej instancji
+ustaw `DEFECTDOJO_URL` oraz `DEFECTDOJO_API_TOKEN`. Nazwy Product Type,
+Product, Engagement i Test konfiguruje się zmiennymi `DEFECTDOJO_*`
+opisanymi w `.env.example`.

@@ -20,3 +20,13 @@ class IsAdminOrOperator(BasePermission):
             request.user.is_authenticated
             and role_for(request.user) in {"admin", "operator"}
         )
+
+
+class CanExportFindings(BasePermission):
+    message = "Admin, operator, or analyst role required."
+
+    def has_permission(self, request: Request, view: object) -> bool:
+        return bool(
+            request.user.is_authenticated
+            and role_for(request.user) in {"admin", "operator", "analyst"}
+        )

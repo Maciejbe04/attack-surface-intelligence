@@ -191,3 +191,34 @@ SESSION_HMAC = read_secret("session_hmac")
 WORKER_TOKEN = read_secret("worker_token")
 API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
+
+DEFECTDOJO_URL = os.environ.get("DEFECTDOJO_URL", "").strip()
+DEFECTDOJO_USERNAME = os.environ.get("DEFECTDOJO_USERNAME", "admin")
+DEFECTDOJO_PASSWORD = read_secret(
+    "defectdojo_admin_password",
+    os.environ.get("DEFECTDOJO_PASSWORD", ""),
+)
+DEFECTDOJO_API_TOKEN = read_secret(
+    "defectdojo_api_token",
+    os.environ.get("DEFECTDOJO_API_TOKEN", ""),
+)
+DEFECTDOJO_PRODUCT_TYPE = os.environ.get(
+    "DEFECTDOJO_PRODUCT_TYPE",
+    "SurfaceX",
+)
+DEFECTDOJO_PRODUCT_NAME = os.environ.get(
+    "DEFECTDOJO_PRODUCT_NAME",
+    "Attack Surface",
+)
+DEFECTDOJO_ENGAGEMENT_NAME = os.environ.get(
+    "DEFECTDOJO_ENGAGEMENT_NAME",
+    "SurfaceX Discovery",
+)
+DEFECTDOJO_TEST_TITLE = os.environ.get(
+    "DEFECTDOJO_TEST_TITLE",
+    "SurfaceX Discovery",
+)
+DEFECTDOJO_TIMEOUT_SECONDS = max(
+    5,
+    min(120, int(os.environ.get("DEFECTDOJO_TIMEOUT_SECONDS", "30"))),
+)

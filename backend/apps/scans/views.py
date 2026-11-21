@@ -12,8 +12,13 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .defectdojo import (
+    DefectDojoError,
+    DefectDojoNotConfigured,
+    export_scan_to_defectdojo,
+)
 from .models import ScanBatch, ScanRun, Target
-from .permissions import IsAdminOrOperator
+from .permissions import CanExportFindings, IsAdminOrOperator
 from .serializers import (
     ScanCreateSerializer,
     ScanRunListSerializer,
@@ -261,3 +266,41 @@ class ScanCancelView(APIView):
             )
 
         return Response(ScanRunSerializer(run).data)
+
+
+class ScanDefectDojoExportView(APIView):
+    permission_classes = (IsAuthenticated, CanExportFindings)
+
+    def post(self, request: Request, run_id: int) -> Response:
+        run = get_object_or_404(
+            _runs_for(request.user).prefetch_related("batches"),
+            pk=run_id,
+        )
+        if run.status in {
+            ScanRun.Status.QUEUED,
+            ScanRun.Status.RUNNING,
+            ScanRun.Status.CANCEL_REQUESTED,
+        }:
+            return Response(
+                {"detail": "Only a finished scan can be exported."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not run.batches.filter(status=ScanBatch.Status.COMPLETED).exists():
+            return Response(
+                {"detail": "The scan has no completed batches to export."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            result = export_scan_to_defectdojo(run)
+        except DefectDojoNotConfigured as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except DefectDojoError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(result)

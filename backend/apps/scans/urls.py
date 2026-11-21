@@ -21,6 +21,11 @@ urlpatterns = [
         name="scan-cancel",
     ),
     path(
+        "scans/<int:run_id>/export/defectdojo/",
+        views.ScanDefectDojoExportView.as_view(),
+        name="scan-defectdojo-export",
+    ),
+    path(
         "internal/batches/reconcile/",
         internal_views.BatchReconcileView.as_view(),
         name="internal-batch-reconcile",

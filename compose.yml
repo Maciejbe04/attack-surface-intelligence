@@ -22,6 +22,21 @@ x-api-env: &api-env
   CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:18080,http://127.0.0.1:18080}
   BOOTSTRAP_ADMIN_USER: ${BOOTSTRAP_ADMIN_USER:-admin}
   BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-changeme}
+  DEFECTDOJO_URL: ${DEFECTDOJO_URL:-http://defectdojo:8080}
+  DEFECTDOJO_USERNAME: ${DEFECTDOJO_USERNAME:-admin}
+  DEFECTDOJO_PRODUCT_TYPE: ${DEFECTDOJO_PRODUCT_TYPE:-SurfaceX}
+  DEFECTDOJO_PRODUCT_NAME: ${DEFECTDOJO_PRODUCT_NAME:-Attack Surface}
+  DEFECTDOJO_ENGAGEMENT_NAME: ${DEFECTDOJO_ENGAGEMENT_NAME:-SurfaceX Discovery}
+  DEFECTDOJO_TEST_TITLE: ${DEFECTDOJO_TEST_TITLE:-SurfaceX Discovery}
+  DEFECTDOJO_TIMEOUT_SECONDS: ${DEFECTDOJO_TIMEOUT_SECONDS:-30}
+
+x-defectdojo-env: &defectdojo-env
+  DD_DATABASE_URL_FILE: /run/secrets/defectdojo_database_url
+  DD_CELERY_BROKER_URL: redis://defectdojo-valkey:6379/0
+  DD_CACHE_URL: redis://defectdojo-valkey:6379/1
+  DD_SECRET_KEY_FILE: /run/secrets/defectdojo_secret_key
+  DD_CREDENTIAL_AES_256_KEY_FILE: /run/secrets/defectdojo_credential_key
+  DD_DATABASE_READINESS_TIMEOUT: "60"
 
 services:
   gateway:
@@ -87,6 +102,7 @@ services:
     command: ["/app/deploy/docker/entrypoint-api.sh"]
     environment:
       <<: *api-env
+      DEFECTDOJO_API_TOKEN: ${DEFECTDOJO_API_TOKEN:-}
     env_file:
       - path: .env
         required: false
@@ -96,6 +112,7 @@ services:
       - app_data_key
       - session_hmac
       - worker_token
+      - defectdojo_admin_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,6 +240,224 @@ services:
       retries: 5
       start_period: 40s
 
+  defectdojo:
+    profiles: ["defectdojo"]
+    image: registry.defectdojo.com/defectdojo/defectdojo-nginx:3.5.202
+    restart: unless-stopped
+    depends_on:
+      defectdojo-uwsgi:
+        condition: service_started
+    environment:
+      DD_UWSGI_HOST: defectdojo-uwsgi
+      DD_UWSGI_PORT: "3031"
+      NGINX_METRICS_ENABLED: "false"
+    volumes:
+      - defectdojo_media:/usr/share/nginx/html/media
+    ports:
+      - "${DEFECTDOJO_HTTP_PORT:-8081}:8080"
+    networks:
+      - edge
+      - backend
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+
+  defectdojo-uwsgi:
+    profiles: ["defectdojo"]
+    image: registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202
+    restart: unless-stopped
+    entrypoint:
+      [
+        "/wait-for-it.sh",
+        "defectdojo-postgres:5432",
+        "-t",
+        "60",
+        "--",
+        "/entrypoint-uwsgi.sh",
+      ]
+    environment:
+      <<: *defectdojo-env
+      DD_DEBUG: "False"
+      DD_ALLOWED_HOSTS: "*"
+      DD_UWSGI_HOST: 0.0.0.0
+      DD_UWSGI_PORT: "3031"
+    secrets:
+      - defectdojo_database_url
+      - defectdojo_secret_key
+      - defectdojo_credential_key
+    depends_on:
+      defectdojo-initializer:
+        condition: service_completed_successfully
+      defectdojo-postgres:
+        condition: service_healthy
+      defectdojo-valkey:
+        condition: service_healthy
+    volumes:
+      - defectdojo_media:/app/media
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${DEFECTDOJO_APP_MEMORY_LIMIT:-1g}
+    pids_limit: 512
+
+  defectdojo-celerybeat:
+    profiles: ["defectdojo"]
+    image: registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202
+    restart: unless-stopped
+    entrypoint:
+      [
+        "/wait-for-it.sh",
+        "defectdojo-postgres:5432",
+        "-t",
+        "60",
+        "--",
+        "/entrypoint-celery-beat.sh",
+      ]
+    environment:
+      <<: *defectdojo-env
+    secrets:
+      - defectdojo_database_url
+      - defectdojo_secret_key
+      - defectdojo_credential_key
+    depends_on:
+      defectdojo-initializer:
+        condition: service_completed_successfully
+      defectdojo-postgres:
+        condition: service_healthy
+      defectdojo-valkey:
+        condition: service_healthy
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
+
+  defectdojo-celeryworker:
+    profiles: ["defectdojo"]
+    image: registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202
+    restart: unless-stopped
+    entrypoint:
+      [
+        "/wait-for-it.sh",
+        "defectdojo-postgres:5432",
+        "-t",
+        "60",
+        "--",
+        "/entrypoint-celery-worker.sh",
+      ]
+    environment:
+      <<: *defectdojo-env
+    secrets:
+      - defectdojo_database_url
+      - defectdojo_secret_key
+      - defectdojo_credential_key
+    depends_on:
+      defectdojo-initializer:
+        condition: service_completed_successfully
+      defectdojo-postgres:
+        condition: service_healthy
+      defectdojo-valkey:
+        condition: service_healthy
+    volumes:
+      - defectdojo_media:/app/media
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${DEFECTDOJO_WORKER_MEMORY_LIMIT:-1g}
+    pids_limit: 512
+
+  defectdojo-initializer:
+    profiles: ["defectdojo"]
+    image: registry.defectdojo.com/defectdojo/defectdojo-django:3.5.202
+    restart: "no"
+    entrypoint:
+      [
+        "/wait-for-it.sh",
+        "defectdojo-postgres:5432",
+        "-t",
+        "60",
+        "--",
+        "/entrypoint-initializer.sh",
+      ]
+    environment:
+      <<: *defectdojo-env
+      DD_ADMIN_USER: ${DEFECTDOJO_USERNAME:-admin}
+      DD_ADMIN_PASSWORD_FILE: /run/secrets/defectdojo_admin_password
+      DD_ADMIN_MAIL: ${DEFECTDOJO_ADMIN_EMAIL:-admin@defectdojo.local}
+      DD_ADMIN_FIRST_NAME: SurfaceX
+      DD_ADMIN_LAST_NAME: Admin
+      DD_INITIALIZE: "true"
+    secrets:
+      - defectdojo_database_url
+      - defectdojo_secret_key
+      - defectdojo_credential_key
+      - defectdojo_admin_password
+    depends_on:
+      defectdojo-postgres:
+        condition: service_healthy
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 512
+
+  defectdojo-postgres:
+    profiles: ["defectdojo"]
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_DB: defectdojo
+      POSTGRES_USER: defectdojo
+      POSTGRES_PASSWORD_FILE: /run/secrets/defectdojo_db_password
+    secrets:
+      - defectdojo_db_password
+    volumes:
+      - defectdojo_postgres:/var/lib/postgresql/data
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U defectdojo -d defectdojo"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  defectdojo-valkey:
+    profiles: ["defectdojo"]
+    image: valkey/valkey:9.1.2-alpine
+    restart: unless-stopped
+    volumes:
+      - defectdojo_valkey:/data
+    networks:
+      - defectdojo
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -299,10 +534,15 @@ networks:
   backend:
     internal: true
   scanner:
+  defectdojo:
+    internal: true
 
 volumes:
   postgres_data:
   backup_data:
+  defectdojo_postgres:
+  defectdojo_media:
+  defectdojo_valkey:
 
 secrets:
   postgres_password:
@@ -317,3 +557,13 @@ secrets:
     file: ./secrets/session_hmac
   worker_token:
     file: ./secrets/worker_token
+  defectdojo_admin_password:
+    file: ./secrets/defectdojo_admin_password
+  defectdojo_db_password:
+    file: ./secrets/defectdojo_db_password
+  defectdojo_database_url:
+    file: ./secrets/defectdojo_database_url
+  defectdojo_secret_key:
+    file: ./secrets/defectdojo_secret_key
+  defectdojo_credential_key:
+    file: ./secrets/defectdojo_credential_key

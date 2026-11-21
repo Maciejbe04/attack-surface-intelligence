@@ -66,6 +66,12 @@ export type CreateScanRequest = {
   client_request_id: string;
 };
 
+export type DefectDojoExportResult = {
+  finding_count: number;
+  test: number | null;
+  message: string;
+};
+
 export class ApiError extends Error {
   readonly status: number;
   readonly details: unknown;
@@ -176,6 +182,20 @@ export function cancelScan(id: number, signal?: AbortSignal): Promise<ScanDetail
     body: "{}",
     signal,
   });
+}
+
+export function exportScanToDefectDojo(
+  id: number,
+  signal?: AbortSignal,
+): Promise<DefectDojoExportResult> {
+  return request<DefectDojoExportResult>(
+    `/api/scans/${id}/export/defectdojo/`,
+    {
+      method: "POST",
+      body: "{}",
+      signal,
+    },
+  );
 }
 
 export const ACTIVE_SCAN_STATUSES = new Set<ScanStatus>([
