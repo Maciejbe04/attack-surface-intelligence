@@ -17,7 +17,7 @@
 | `users` / `roles` | tożsamość i RBAC |
 | `audit_log` | historia zmian konfiguracji i wyników |
 
-Implementacja kolejki MVP obejmuje `targets`, `scan_runs` i `scan_batches`. Identyfikator dostarczenia oraz stan próby są obecnie przechowywane na batchu; osobne `scan_attempts`, znormalizowane `observations` i `fingerprint_evidence` pozostają rozszerzeniem kolejnego etapu.
+Implementacja kolejki MVP obejmuje `targets`, `scan_runs`, `scan_batches` i techniczny `queue_state`. Identyfikator dostarczenia oraz stan publikacji naprawczej są przechowywane na batchu, a `queue_state` zapamiętuje ostatnią epokę brokera potrzebną do wykrycia utraty danych Redis. Osobne `scan_attempts`, znormalizowane `observations` i `fingerprint_evidence` pozostają rozszerzeniem kolejnego etapu.
 
 ## Niemutowalne obserwacje
 

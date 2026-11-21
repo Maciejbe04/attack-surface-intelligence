@@ -5,8 +5,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any
 
+import redis
 from celery import shared_task
 from django.conf import settings
 
@@ -19,6 +21,45 @@ class TransientWorkerAPIError(RuntimeError):
 
 class WorkerAPIError(RuntimeError):
     pass
+
+
+def _get_broker_epoch() -> str:
+    client = redis.Redis.from_url(
+        settings.CELERY_BROKER_URL,
+        socket_connect_timeout=5,
+        socket_timeout=5,
+    )
+    try:
+        epoch = client.get("surfacex:broker-epoch")
+        if epoch is None:
+            candidate = str(uuid.uuid4())
+            if client.set("surfacex:broker-epoch", candidate, nx=True):
+                return candidate
+            epoch = client.get("surfacex:broker-epoch")
+        if epoch is None:
+            raise TransientWorkerAPIError("Broker epoch could not be established.")
+        return epoch.decode("ascii")
+    except (redis.RedisError, UnicodeError) as exc:
+        raise TransientWorkerAPIError(
+            f"Broker epoch lookup failed: {type(exc).__name__}"
+        ) from exc
+
+
+@shared_task(
+    bind=True,
+    name="scans.reconcile_batches",
+    autoretry_for=(TransientWorkerAPIError,),
+    retry_backoff=True,
+    retry_backoff_max=60,
+    retry_jitter=True,
+    max_retries=5,
+)
+def reconcile_batches(self) -> dict[str, Any]:
+    return _api_request(
+        "POST",
+        "/api/internal/batches/reconcile/",
+        {"broker_epoch": _get_broker_epoch()},
+    )
 
 
 def _api_request(

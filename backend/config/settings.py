@@ -164,8 +164,27 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_RESULT_EXPIRES = 900
 CELERY_TASK_ROUTES = {
     "scans.execute_batch": {"queue": "scan"},
+    "scans.reconcile_batches": {"queue": "scan"},
 }
-CELERY_BEAT_SCHEDULE = {}
+SCAN_RECONCILE_INTERVAL_SECONDS = max(
+    15,
+    int(os.environ.get("SCAN_RECONCILE_INTERVAL_SECONDS", "60")),
+)
+SCAN_RECONCILE_STALE_SECONDS = max(
+    360,
+    int(os.environ.get("SCAN_RECONCILE_STALE_SECONDS", "600")),
+)
+SCAN_RECONCILE_BATCH_LIMIT = max(
+    1,
+    min(500, int(os.environ.get("SCAN_RECONCILE_BATCH_LIMIT", "100"))),
+)
+CELERY_BEAT_SCHEDULE = {
+    "reconcile-stale-scan-batches": {
+        "task": "scans.reconcile_batches",
+        "schedule": float(SCAN_RECONCILE_INTERVAL_SECONDS),
+        "options": {"queue": "scan"},
+    },
+}
 
 APP_DATA_KEY = read_secret("app_data_key")
 SESSION_HMAC = read_secret("session_hmac")

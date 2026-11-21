@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
-from apps.scans.models import ScanBatch, ScanRun, Target
+from apps.scans.models import QueueState, ScanBatch, ScanRun, Target
 
 
 def create_user(username: str, role: str) -> User:
@@ -311,6 +313,144 @@ class InternalWorkerAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.run.refresh_from_db()
         self.assertEqual(self.run.status, ScanRun.Status.CANCELLED)
+
+    @override_settings(
+        SCAN_RECONCILE_STALE_SECONDS=600,
+        SCAN_RECONCILE_BATCH_LIMIT=100,
+    )
+    def test_reconcile_republishes_stale_running_and_pending_recovery_batches(
+        self,
+    ) -> None:
+        QueueState.objects.create(name="scan", broker_epoch="current-epoch")
+        stale_running = ScanBatch.objects.create(
+            run=self.run,
+            target_address="192.0.2.41",
+            target_type=Target.Type.IP,
+            status=ScanBatch.Status.RUNNING,
+            progress=60,
+            claimed_at=timezone.now() - timedelta(minutes=20),
+        )
+        fresh = ScanBatch.objects.create(
+            run=self.run,
+            target_address="192.0.2.42",
+            target_type=Target.Type.IP,
+        )
+        stale_at = timezone.now() - timedelta(minutes=20)
+        ScanBatch.objects.filter(pk__in=(self.batch.pk, stale_running.pk)).update(
+            updated_at=stale_at
+        )
+        ScanBatch.objects.filter(pk=self.batch.pk).update(
+            queue_recovery_required=True
+        )
+        old_delivery_ids = {
+            self.batch.pk: self.batch.delivery_id,
+            stale_running.pk: stale_running.delivery_id,
+        }
+
+        with patch("apps.scans.internal_views.execute_batch.apply_async") as publish:
+            response = self.client.post(
+                reverse("internal-batch-reconcile"),
+                {"broker_epoch": "current-epoch"},
+                format="json",
+                **self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "epoch_changed": False,
+                "recovered": 2,
+                "published": 2,
+                "failed": 0,
+            },
+        )
+        recovered = list(
+            ScanBatch.objects.filter(pk__in=old_delivery_ids)
+            .order_by("pk")
+        )
+        for batch in recovered:
+            self.assertEqual(batch.status, ScanBatch.Status.QUEUED)
+            self.assertEqual(batch.progress, 0)
+            self.assertIsNone(batch.claimed_at)
+            self.assertNotEqual(batch.delivery_id, old_delivery_ids[batch.pk])
+            publish.assert_any_call(
+                args=(batch.pk, str(batch.delivery_id)),
+                queue="scan",
+            )
+
+        fresh.refresh_from_db()
+        self.assertEqual(fresh.status, ScanBatch.Status.QUEUED)
+        publish_count = publish.call_count
+        self.assertEqual(publish_count, 2)
+
+    @override_settings(
+        SCAN_RECONCILE_STALE_SECONDS=600,
+        SCAN_RECONCILE_BATCH_LIMIT=1,
+    )
+    def test_broker_epoch_change_recovers_all_active_batches_and_retries_publish(
+        self,
+    ) -> None:
+        QueueState.objects.create(name="scan", broker_epoch="old-epoch")
+        remaining = ScanBatch.objects.create(
+            run=self.run,
+            target_address="192.0.2.43",
+            target_type=Target.Type.IP,
+        )
+        ScanBatch.objects.filter(pk=self.batch.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=1)
+        )
+        old_delivery_id = self.batch.delivery_id
+        reconcile_url = reverse("internal-batch-reconcile")
+
+        with patch(
+            "apps.scans.internal_views.execute_batch.apply_async",
+            side_effect=ConnectionError("broker unavailable"),
+        ):
+            response = self.client.post(
+                reconcile_url,
+                {"broker_epoch": "new-epoch"},
+                format="json",
+                **self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "epoch_changed": True,
+                "recovered": 1,
+                "published": 0,
+                "failed": 1,
+            },
+        )
+        self.batch.refresh_from_db()
+        remaining.refresh_from_db()
+        failed_delivery_id = self.batch.delivery_id
+        self.assertNotEqual(failed_delivery_id, old_delivery_id)
+        self.assertTrue(self.batch.queue_recovery_required)
+        self.assertTrue(remaining.queue_recovery_required)
+
+        with patch("apps.scans.internal_views.execute_batch.apply_async") as publish:
+            response = self.client.post(
+                reconcile_url,
+                {"broker_epoch": "new-epoch"},
+                format="json",
+                **self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["epoch_changed"], False)
+        self.assertEqual(response.json()["published"], 1)
+        self.batch.refresh_from_db()
+        self.assertNotEqual(self.batch.delivery_id, failed_delivery_id)
+        self.assertFalse(self.batch.queue_recovery_required)
+        remaining.refresh_from_db()
+        self.assertTrue(remaining.queue_recovery_required)
+        publish.assert_called_once_with(
+            args=(self.batch.pk, str(self.batch.delivery_id)),
+            queue="scan",
+        )
 
     def test_mixed_batch_results_finish_run_as_partial(self) -> None:
         second = ScanBatch.objects.create(

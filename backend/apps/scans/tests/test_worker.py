@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, override_settings
 
 from apps.scans.modules import validate_modules
 from apps.scans.runner import _run_command, execute_scan
-from apps.scans.tasks import _api_request, execute_batch
+from apps.scans.tasks import _api_request, execute_batch, reconcile_batches
 
 
 NMAP_XML = b"""<?xml version="1.0"?>
@@ -118,6 +118,31 @@ class RunnerTests(SimpleTestCase):
     WORKER_TOKEN="worker-test-token",
 )
 class CeleryTaskTests(SimpleTestCase):
+    def test_reconciler_requests_recovery_through_internal_api(self) -> None:
+        with (
+            patch(
+                "apps.scans.tasks._get_broker_epoch",
+                return_value="broker-epoch-1",
+            ),
+            patch(
+                "apps.scans.tasks._api_request",
+                return_value={
+                    "epoch_changed": False,
+                    "recovered": 2,
+                    "published": 2,
+                    "failed": 0,
+                },
+            ) as api_request,
+        ):
+            result = reconcile_batches.run()
+
+        self.assertEqual(result["published"], 2)
+        api_request.assert_called_once_with(
+            "POST",
+            "/api/internal/batches/reconcile/",
+            {"broker_epoch": "broker-epoch-1"},
+        )
+
     def test_task_uses_internal_api_and_posts_completion(self) -> None:
         calls: list[tuple[str, str, object]] = []
 

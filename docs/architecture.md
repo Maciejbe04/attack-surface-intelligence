@@ -116,7 +116,7 @@ Redis przechowuje:
 - sesje użytkowników;
 - krótkotrwałe blokady koordynacyjne.
 
-Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Kolejka MVP nie odtwarza jeszcze automatycznie zadań po całkowitej utracie Redis — reconciler wykonujący tę operację jest zakresem kolejnego etapu.
+Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Celery Beat uruchamia reconciler domyślnie co 60 sekund. Broker przechowuje identyfikator swojej bieżącej epoki, a API zapamiętuje go w PostgreSQL. Zmiana epoki po utracie danych Redis powoduje ponowne opublikowanie wszystkich aktywnych batchy; bez zmiany epoki odzyskiwane są tylko zadania `running` bez aktualizacji od co najmniej 10 minut oraz wcześniejsze nieudane publikacje naprawcze. Reconciler nadaje zadaniu nowy `delivery_id`, unieważniając stare komunikaty i blokując zapis wyniku przez nieaktualną kopię zadania. Progi i limit jednej iteracji można zmienić przez `SCAN_RECONCILE_INTERVAL_SECONDS`, `SCAN_RECONCILE_STALE_SECONDS` i `SCAN_RECONCILE_BATCH_LIMIT`.
 
 ### Worker
 

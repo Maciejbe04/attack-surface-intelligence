@@ -21,6 +21,11 @@ urlpatterns = [
         name="scan-cancel",
     ),
     path(
+        "internal/batches/reconcile/",
+        internal_views.BatchReconcileView.as_view(),
+        name="internal-batch-reconcile",
+    ),
+    path(
         "internal/batches/<int:batch_id>/claim/",
         internal_views.BatchClaimView.as_view(),
         name="internal-batch-claim",

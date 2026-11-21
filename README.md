@@ -8,7 +8,7 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp i anulowanie.
 
-Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Automatyczne odtwarzanie zadań po całkowitej utracie Redis, harmonogramy oraz pause/resume pozostają kolejnym etapem.
+Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Harmonogramy użytkownika oraz pause/resume pozostają kolejnym etapem.
 
 ## Szybki start
 
