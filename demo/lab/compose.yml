@@ -1,0 +1,51 @@
+# Local demo lab: fake services on an isolated network. Nothing here reaches the internet.
+# Up:      ./demo/lab/lab.sh up      (also connects the SurfaceX worker to this network)
+# Change:  ./demo/lab/lab.sh mutate  (between scan 1 and scan 2)
+name: asi-lab
+
+x-nginx: &nginx
+  image: nginx:1.27-alpine
+  restart: unless-stopped
+
+services:
+  cms:
+    <<: *nginx
+    volumes: ["./nginx/cms.conf:/etc/nginx/conf.d/default.conf:ro", "./html/cms:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.10 } }
+
+  admin:
+    <<: *nginx
+    volumes: ["./nginx/admin.conf:/etc/nginx/conf.d/default.conf:ro", "./html/admin:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.11 } }
+
+  staging:
+    <<: *nginx
+    volumes: ["./nginx/${STAGING_CONF:-staging-v1}.conf:/etc/nginx/conf.d/default.conf:ro", "./html/staging:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.12 } }
+
+  tls:
+    <<: *nginx
+    volumes: ["./nginx/tls.conf:/etc/nginx/conf.d/default.conf:ro", "./html/cms:/usr/share/nginx/html:ro", "./certs:/certs:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.13 } }
+
+  iot:
+    <<: *nginx
+    volumes: ["./nginx/iot.conf:/etc/nginx/conf.d/default.conf:ro", "./html/iot:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.14 } }
+
+  flaky:
+    <<: *nginx
+    volumes: ["./nginx/flaky.conf:/etc/nginx/conf.d/default.conf:ro", "./html/flaky:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.15 } }
+
+  newapp:
+    <<: *nginx
+    profiles: ["phase2"]
+    volumes: ["./nginx/newapp.conf:/etc/nginx/conf.d/default.conf:ro", "./html/newapp:/usr/share/nginx/html:ro"]
+    networks: { lab: { ipv4_address: 10.77.0.16 } }
+
+networks:
+  lab:
+    name: asi-lab
+    ipam:
+      config: [{ subnet: 10.77.0.0/24 }]

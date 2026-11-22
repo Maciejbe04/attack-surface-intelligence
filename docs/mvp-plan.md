@@ -1,5 +1,7 @@
 # Plan MVP Attack Surface Intelligence
 
+> **Dokument historyczny.** To pierwotny plan projektu spisany przed implementacją. Stan faktyczny, w tym odstępstwa od planu, opisuje [dokumentacja techniczna](dokumentacja-techniczna.md) (rozdział 16 — znane ograniczenia).
+
 ## Cel
 
 System ma cyklicznie i bezpiecznie obserwować dużą infrastrukturę, wykrywać aktywne hosty oraz usługi, identyfikować technologie HTTP/HTTPS i pokazywać zmiany między kolejnymi skanami.

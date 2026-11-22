@@ -1,0 +1,60 @@
+{
+  "targets": [
+    {
+      "value": "10.77.0.10",
+      "type": "ip",
+      "comment": "Strona wydziału (CMS)",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.11",
+      "type": "ip",
+      "comment": "Panel administracyjny",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.12",
+      "type": "ip",
+      "comment": "Środowisko staging",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.13",
+      "type": "ip",
+      "comment": "Intranet HTTPS",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.14",
+      "type": "ip",
+      "comment": "Kamera IP w laboratorium",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.15",
+      "type": "ip",
+      "comment": "Serwer pomiarowy (niestabilny)",
+      "groups": [
+        "Lab demo"
+      ]
+    },
+    {
+      "value": "10.77.0.16",
+      "type": "ip",
+      "comment": "Rezerwacja adresu",
+      "groups": [
+        "Lab demo"
+      ]
+    }
+  ]
+}

@@ -36,7 +36,7 @@ Komenda wypisze `secret=` oraz `otpauth=` — dodaj do Authenticatora (Google / 
 
 Logowanie:
 
-1. http://localhost:18080 (lub port z `.env`)
+1. http://localhost:8080 (lub port `GATEWAY_HTTP_PORT` z `.env`)
 2. `admin` / `changeme`
 3. 6-cyfrowy kod z aplikacji
 

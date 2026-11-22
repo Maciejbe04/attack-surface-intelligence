@@ -17,7 +17,7 @@ flowchart TB
   subgraph localHost [Lokalny host Linux macOS lub Windows]
     subgraph composeRuntime [Docker Compose]
       subgraph edgeNet [Sieć edge]
-        Gateway[Gateway TLS]
+        Gateway[Gateway nginx]
         Web[Frontend React]
       end
 
@@ -62,7 +62,9 @@ flowchart TB
 
 ### Gateway
 
-Jedyny punkt wejścia SurfaceX wystawiony poza sieci Docker Compose. Terminuje TLS, serwuje frontend oraz przekazuje żądania API. Opcjonalny profil DefectDojo publikuje własny port nginx; pozostałe usługi nie publikują portów na hoście.
+Jedyny punkt wejścia SurfaceX wystawiony poza sieci Docker Compose (HTTP, port `8080`). Serwuje frontend, przekazuje żądania `/api/` i `/admin/` do API oraz zwraca `404` dla `/api/internal/`. Przy niedostępnym API pokazuje stronę przerwy technicznej zamiast surowego błędu 502. Gateway nie terminuje TLS — przy wdrożeniu współdzielonym TLS należy zakończyć na zewnętrznym reverse proxy i ustawić `SECURE_COOKIES=1` oraz `CSRF_PROTECT=1`.
+
+Poza gatewayem porty na hoście publikują tylko: opcjonalny nginx DefectDojo (`8081`) i cel demonstracyjny `lab-target` (`18088`).
 
 ### Frontend
 
@@ -73,9 +75,9 @@ Aplikacja React/TypeScript udostępniająca:
 - moduł Passive discovery (crt.sh + RDAP) w przebiegu skanu;
 - import oraz eksport;
 - podgląd historii i różnic;
-- edycję wyników;
-- zarządzanie sygnaturami;
-- interfejs dostosowany do uprawnień użytkownika.
+- edycję wyników (tagi, notatki, nadpisania);
+- zarządzanie użytkownikami, allowlistą, grupami i harmonogramami;
+- interfejs dostosowany do uprawnień użytkownika, w języku polskim i angielskim, z trybem ciemnym i wysokiego kontrastu.
 
 ### API
 
@@ -96,27 +98,22 @@ API jest jedynym komponentem zapisującym wyniki workerów do PostgreSQL. Zapyta
 
 ### Scheduler
 
-Celery Beat / zadania okresowe:
+Celery Beat publikuje dwa zadania okresowe do kolejki `scan`:
 
-- wyznaczają terminy skanów;
-- zapisują snapshot konfiguracji przebiegu;
-- rozwijają i deduplikują cele;
-- dzielą pracę na idempotentne batche;
-- pilnują deadline okna;
-- zatrzymują i wznawiają pracę;
-- obliczają postęp oraz ETA.
+- `scans.reconcile_batches` (domyślnie co 60 s) — odtwarza osierocone batche i wstrzymuje przebiegi po przekroczeniu okna;
+- `scans.dispatch_schedules` (co 60 s) — uruchamia należne harmonogramy grup.
 
-Scheduler korzysta z tego samego obrazu co API, ale działa jako oddzielny proces Celery Beat w Compose.
+Oba zadania wykonuje worker, wywołując wewnętrzne endpointy API; właściwa logika (snapshot konfiguracji, tworzenie batchy, pilnowanie okna, postęp i ETA) działa w API na danych z PostgreSQL. Scheduler korzysta z tego samego obrazu co API, ale działa jako oddzielny proces w Compose.
 
 ### Redis
 
 Redis przechowuje:
 
-- kolejkę zadań;
-- lease workerów;
-- retry i informacje o zadaniach aktywnych;
-- sesje użytkowników;
-- krótkotrwałe blokady koordynacyjne.
+- kolejkę zadań Celery i wyniki zadań;
+- cache aplikacji (m.in. tymczasowe tokeny MFA, wyniki zapytań pasywnych);
+- identyfikator epoki brokera.
+
+Sesje użytkowników są przechowywane w PostgreSQL. Redis działa bez trwałości (`--save "" --appendonly no`).
 
 Redis nie jest źródłem prawdy; trwałe statusy przebiegów i batchy znajdują się w PostgreSQL. Celery Beat uruchamia reconciler domyślnie co 60 sekund. Broker przechowuje identyfikator swojej bieżącej epoki, a API zapamiętuje go w PostgreSQL. Zmiana epoki po utracie danych Redis powoduje ponowne opublikowanie wszystkich aktywnych batchy; bez zmiany epoki odzyskiwane są tylko zadania `running` bez aktualizacji od co najmniej 10 minut oraz wcześniejsze nieudane publikacje naprawcze. Reconciler nadaje zadaniu nowy `delivery_id`, unieważniając stare komunikaty i blokując zapis wyniku przez nieaktualną kopię zadania. Progi i limit jednej iteracji można zmienić przez `SCAN_RECONCILE_INTERVAL_SECONDS`, `SCAN_RECONCILE_STALE_SECONDS` i `SCAN_RECONCILE_BATCH_LIMIT`.
 
@@ -144,7 +141,7 @@ nmap → endpointy HTTP(S) → httpx JSONL → własne sygnatury → evidence �
 
 httpx jest uruchamiany dla partii endpointów, a jego JSONL jest przetwarzany strumieniowo w Pythonie. Wersja narzędzia, użyte opcje i limity trafiają do metadanych przebiegu. Detekcje technologii są dowodami wejściowymi dla wspólnego modelu pewności, a nie bezwarunkowym wynikiem.
 
-Własny moduł Pythona uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, ograniczone fragmenty HTML i dozwolone ścieżki. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
+Własny moduł Pythona uzupełnia dane wymagane przez deklaratywne sygnatury, w szczególności nazwy cookies, hash favicony i ograniczone fragmenty HTML. WhatWeb oraz Nuclei nie są obowiązkowymi elementami architektury MVP.
 
 WhatWeb może zostać dodany w przyszłości jako opcjonalny, domyślnie wyłączony drugi etap dla ręcznie wybranych endpointów wymagających głębszej identyfikacji. Nie może działać dla całego zakresu bez osobnego limitu ruchu ani przyjmować pluginów dostarczonych przez użytkownika. Jego wyniki muszą zostać zapisane jako evidence i ocenione przez ten sam model pewności co wyniki httpx. Uzasadnienie wyboru opisuje `docs/adr-001-http-fingerprinting.md`.
 
@@ -181,11 +178,11 @@ API SurfaceX uwierzytelnia się tokenem lub kontem lokalnego administratora i wy
 
 ### `backend`
 
-Sieć oznaczona jako `internal`, przeznaczona dla API, schedulera, Redis, PostgreSQL i zadania backupu. PostgreSQL i Redis nie są publikowane na hoście.
+Sieć oznaczona jako `internal`, przeznaczona dla API, schedulera, Redis, PostgreSQL i zadania backupu. Dołączone są do niej także gateway (ruch do API) i worker (kolejka Redis oraz wewnętrzne API). PostgreSQL i Redis nie są publikowane na hoście.
 
 ### `scanner`
 
-Sieć z kontrolowanym wyjściem do dozwolonych celów. Podłączone są do niej wyłącznie workery. API, frontend, Redis i PostgreSQL nie mają dostępu do sieci skanowanej.
+Sieć `172.30.0.0/24` z wyjściem do skanowanych celów. Podłączone są do niej wyłącznie worker oraz cel demonstracyjny `lab-target` (`172.30.0.10`). API, frontend, Redis i PostgreSQL nie mają dostępu do sieci skanowanej.
 
 ### `defectdojo`
 

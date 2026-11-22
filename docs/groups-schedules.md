@@ -4,16 +4,16 @@
 
 | Encja | Opis |
 |---|---|
-| `TargetGroup` | nazwana grupa celów jednego właściciela; nazwa unikalna per właściciel (bez rozróżniania wielkości liter) |
+| `TargetGroup` | nazwana grupa celów, wspólna dla zespołu; nazwa unikalna (bez rozróżniania wielkości liter) |
 | `TargetGroup.targets` | relacja wiele-do-wielu: host może należeć do kilku grup |
 | `GroupSchedule` | maksymalnie jeden harmonogram na grupę |
 | `ScanRun.group` / `ScanRun.schedule` | skąd pochodzi przebieg (skan grupy, import do grupy, harmonogram) |
 
-Usunięcie grupy nie usuwa hostów ani dotychczasowych skanów (`SET_NULL`). Do grupy można dodać wyłącznie cele jej właściciela — także wtedy, gdy grupę edytuje `admin`.
+Usunięcie grupy nie usuwa hostów ani dotychczasowych skanów (`SET_NULL`).
 
 ## Uprawnienia
 
-Odczyt grup: każdy zalogowany użytkownik (w zakresie własnych grup; `admin` widzi wszystkie). Tworzenie, zmiana członków, skan, harmonogram i usuwanie: `admin` i `operator`.
+Odczyt grup: każdy zalogowany użytkownik (dane są wspólne dla zespołu). Tworzenie, zmiana członków, skan, harmonogram i usuwanie: `admin` i `operator`.
 
 ## API
 

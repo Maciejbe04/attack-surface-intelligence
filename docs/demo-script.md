@@ -1,72 +1,111 @@
 # Scenariusz demonstracyjny
 
-Cel: dwa pełne przebiegi skanu oraz eksport zmian w czasie poniżej 15 minut.
+**Cel:** w kilkanaście minut pokazać dwa pełne przebiegi skanu, wykryte zmiany, trwałą edycję znaleziska, eksport, role i DefectDojo. Scenariusz jest powtarzalny i działa w całości lokalnie, na laboratorium z repozytorium ([`demo/README.md`](../demo/README.md)).
 
-Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README.md`](../demo/README.md).
+## Wymagania
+
+- działający stos SurfaceX z profilem DefectDojo (`docker compose up --build -d`, `./scripts/smoke-test.sh` → `smoke PASSED`);
+- `openssl` na hoście (skrypt laboratorium generuje certyfikat testowy);
+- konto `admin` / `changeme`.
 
 ## Przygotowanie
 
-1. Stos: `./scripts/init-secrets.sh && docker compose up --build -d`.
-2. Lab HTTP (Proxmox lxcvnet albo lokalne odpowiedniki):
-   - host A `10.99.0.70` — Lab Alpha (nginx);
-   - host B `10.99.0.71` — Lab Bravo;
-   - host C `10.99.0.72` — Lab Charlie (do wyłączenia przed drugim skanem).
-3. Allowlista: wpisy IP `10.99.0.70–72` (tylko admin; operator ma podgląd).
-4. Import celów z [`demo/targets.json`](../demo/targets.json) albo użyj grupy `lab-lxc`.
-5. Zaloguj się jako `operator` (albo `admin`).
+```bash
+./demo/lab/lab.sh up
+```
 
-## Opcjonalnie: Passive discovery
+Skrypt uruchamia sześć kontenerów w izolowanej sieci `asi-lab` (`10.77.0.0/24`) i podłącza do niej worker SurfaceX.
 
-1. Na Dashboardzie włącz moduł **Passive discovery** (sam albo z port-scan/httpx; nie z full-pipeline).
-2. Uruchom skan znanego celu domenowego / IP z allowlistą.
-3. W Findings wskaż obserwację `passive:…` (RDAP + nazwy CT) — bez auto-dodawania hostów.
+| Adres | Co udaje | Na co zwrócić uwagę |
+|---|---|---|
+| `10.77.0.10` | strona wydziału (CMS) | WordPress, `X-Powered-By: PHP/7.4.33`, cookie `PHPSESSID`, `/wp-login.php` |
+| `10.77.0.11` | panel administracyjny | przekierowanie `302` do `/admin/`, tytuł „Admin Panel – Login” |
+| `10.77.0.12` | środowisko staging | nagłówki `X-Environment: staging`, `X-App-Version` |
+| `10.77.0.13` | intranet HTTPS | certyfikat TLS, HSTS, przekierowanie z HTTP na HTTPS |
+| `10.77.0.14` | kamera IP | tytuł „NetCam-2000 IP Camera”, `X-Powered-By: Express` |
+| `10.77.0.15` | serwer pomiarowy (niestabilny) | porty 80 i 8080; zniknie przed drugim skanem |
+| `10.77.0.16` | nowa aplikacja | pojawi się dopiero przed drugim skanem |
+
+Opcjonalnie utwórz konta demonstracyjne `operator`, `analityk` (rola `analyst`) i `audytor` (rola `viewer`) w zakładce **Users** — będą potrzebne w kroku o rolach.
 
 ## Przebieg 1
 
-1. Uruchom skan grupy `lab-lxc` (moduł full-pipeline). Jako `admin` opcjonalnie ustaw 30-minutowe okno, żeby pokazać pause/kill; pozostałe role mają stałe 1 h.
-2. Pokaż postęp, ETA i tryb nmap (`syn` / `connect`) w konsoli na Dashboardzie. Start z Dashboardu nie przełącza do zakładki Scans.
-3. Po zakończeniu wskaż:
-   - hosty `NEW`;
-   - fingerprint / confidence (np. nginx / lab headers);
-   - evidence HTTP;
-   - **Ciekawość** na dashboardzie (hosty, porty, login paths).
-   - **Changes over time** z wyborem 24 h / 7 dni / 30 dni / całego okresu; wykres jest informacyjny.
-4. Jako `analyst` dodaj notatkę/override do hosta A (`10.99.0.70`).
+1. Zaloguj się jako `admin` na http://localhost:8080.
+2. **Allowlist** → dodaj `10.77.0.0/24`. Bez tego wpisu import i skan odrzucą adresy laboratorium.
+3. **Dashboard** → zaznacz moduł `full-pipeline` (albo zestaw: port scan, service detection, HTTP fingerprint, TLS certificate, custom signatures). Zapamiętaj wybór — drugi skan musi użyć tych samych modułów.
+4. **Targets** → **Import hosts** → wgraj [`demo/lab/targets.csv`](../demo/lab/targets.csv). Siedem hostów trafia do grupy „Lab demo”, każdy z komentarzem.
+5. **Groups** → przy grupie „Lab demo” kliknij **Scan now**. Opcjonalnie pokaż **Edit schedule** (np. codziennie o 02:00 UTC).
+6. W konsoli aktywności wskaż: osobny batch na każdy host, linię poleceń nmap (tryb `syn` albo `connect`, `--max-rate`), postęp i ETA.
+
+Po zakończeniu (**Scans** → **Findings**):
+
+- wszystkie obserwacje mają stan `NEW`;
+- kolumna **Curiosity** wyróżnia porty wymagające uwagi;
+- tytuły zdradzają staging, kamerę IP i panel administracyjny;
+- technologie: WordPress, PHP 7.4.33, nginx; sygnatura `wordpress-core`;
+- ciekawe nagłówki (`X-Powered-By`, `X-Environment`, `X-App-Version`) i cookie `PHPSESSID` z flagami;
+- **Dashboard**: sekcja **Curiosity** z pozycją „Admin / login / staging hints”.
+
+Następnie:
+
+7. Przy technologii PHP kliknij **Add override**, dodaj tag i notatkę (np. „PHP 7.4 bez wsparcia — do wymiany”), zapisz.
+8. Pobierz **Export JSON** i **Export CSV**.
+9. Otwórz DefectDojo (http://localhost:8081) i pokaż findings w produkcie „Attack Surface”.
 
 ## Zmiana środowiska
 
-Przed drugim skanem (na Proxmox):
-
 ```bash
-pct exec 220 -- bash -lc 'sed -i "s/Lab Alpha/Lab Alpha CHANGED/" /var/www/html/index.html'
-pct exec 222 -- systemctl stop nginx
+./demo/lab/lab.sh mutate
 ```
 
-Opcjonalnie dodaj nowy host D do grupy.
+Skrypt wyłącza serwer pomiarowy (`10.77.0.15`), podmienia staging na wersję 2 (inny tytuł i nagłówki, dodatkowy port `8443`) i uruchamia nową aplikację (`10.77.0.16`).
 
 ## Przebieg 2
 
-1. Uruchom ten sam zakres / grupę.
-2. Findings / Compare:
-   - host A tytuł: `CHANGED`;
-   - host C: `MISSING` (po completed run bez odpowiedzi);
-   - override z przebiegu 1 nadal widoczny na A.
-3. Trzeci completed run bez C → ścieżka do `FLAKY`/`GONE`.
+1. **Groups** → „Lab demo” → **Scan now** (te same moduły co w przebiegu 1).
+2. **Scans** → **Findings** drugiego przebiegu:
+   - `NEW` — host `10.77.0.16` z usługą HTTP oraz port `8443` na stagingu;
+   - `CHANGED` — staging: tytuł „Staging – Portal Studenta v2.4.0-rc1 (DEBUG)” i zmienione nagłówki;
+   - `MISSING` — usługi serwera pomiarowego `10.77.0.15` (porty 80 i 8080, strona HTTP);
+   - notatka przy PHP z przebiegu 1 jest nadal widoczna.
+3. **Compare** → zestawienie dodanych, usuniętych i zmienionych obserwacji z wartościami przed i po.
+4. **Dashboard** → **Changes over time** pokazuje słupki zmian.
 
-## Eksport i RBAC
+Opcjonalnie trzeci i czwarty skan bez zmian w laboratorium: `10.77.0.15` przechodzi kolejno w `FLAKY` i `GONE`. Jeśli wcześniej przywrócisz serwer (`docker compose -f demo/lab/compose.yml start flaky`), wróci ze stanem `FLAKY`.
 
-1. Eksport CSV i JSON (`schema_version` 1).
-2. Opcjonalnie DefectDojo — status w liście skanów.
-3. `viewer` — brak zapisu; `analyst` — brak startu skanu (403); `admin` — audit log.
+## Role
 
-## Okno skanu (kill)
+1. Zaloguj się jako użytkownik z rolą `viewer`: brak formularzy, przycisków skanu i edycji.
+2. Pokaż odmowę w API:
 
-Przy przekroczonym `window_seconds`: unfinished → `PAUSED`, worker dostaje `cancel_requested` i kończy nmap/httpx; late complete jest odrzucany. **Resume** wznawia tylko wstrzymane batche.
+   ```bash
+   curl -s -c /tmp/sx.txt -H 'Content-Type: application/json' \
+     -d '{"username":"audytor","password":"<hasło>"}' http://localhost:8080/api/auth/login/
+   curl -s -o /dev/null -w '%{http_code}\n' -b /tmp/sx.txt -X POST \
+     -H 'Content-Type: application/json' -d '{}' http://localhost:8080/api/scans/
+   # oczekiwane: 403
+   ```
 
-## Kryteria sukcesu demo
+3. Rola `analyst` może dodać korektę i wyeksportować wyniki, ale nie uruchomi skanu (`403`).
+4. Jako `admin` otwórz **System** → dziennik audytu: import, start skanów, eksporty, korekta.
 
-- dwa ukończone skany;
-- widoczne `NEW` i `CHANGED` (oraz `MISSING` po wyłączeniu C);
-- zachowany manual override;
-- eksport CSV/JSON;
-- brak osieroconych procesów nmap/httpx po cancel/deadline.
+## Okno skanu (opcjonalnie)
+
+Jako `admin` ustaw **Scan window** na 30 minut i uruchom skan większej grupy. Po przekroczeniu okna niedokończone batche przechodzą w `PAUSED`, worker kończy procesy nmap/httpx, a przy przebiegu pojawia się **Resume**, które dokańcza tylko wstrzymane batche.
+
+## Kryteria sukcesu
+
+- dwa ukończone skany tej samej grupy;
+- widoczne `NEW`, `CHANGED` i `MISSING`;
+- korekta z przebiegu 1 zachowana w przebiegu 2;
+- eksport JSON i CSV pobrany;
+- findings widoczne w DefectDojo;
+- rola `viewer` bez możliwości zmiany danych.
+
+## Sprzątanie
+
+```bash
+./demo/lab/lab.sh down
+```
+
+Dane skanów pozostają w bazie. Skrypt `demo/record/reset.sh` przywraca stan początkowy do nagrania — **usuwa wszystkie cele, grupy, skany, wyniki, allowlistę i dziennik audytu**, dlatego nadaje się wyłącznie do środowiska demonstracyjnego.

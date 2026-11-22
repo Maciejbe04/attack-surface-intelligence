@@ -16,7 +16,7 @@ SurfaceX działa jako lokalny stos Compose. Zakładamy zaufanego operatora hosta
 | Ryzyko | Kontrola |
 |---|---|
 | Skan poza zatwierdzonym zakresem | Allowlista IP/CIDR/domen; re-check DNS→IP przy claim |
-| Nadmierny ruch / DoS celu | Limity portów, timeouty, rate, tylko HEAD/GET |
+| Nadmierny ruch / DoS celu | Twarde sufity tempa nmap i httpx, limity portów, timeouty, jedno ponowienie, obowiązkowe okno skanu |
 | Ucieczka procesów skanera | Process group + SIGTERM/SIGKILL; cancel i deadline → `cancel_requested` |
 | Eskalacja roli | RBAC w API (`IsAdmin`, `IsAdminOrOperator`, `CanExportFindings`) |
 | Wyciek evidence | AES-256-GCM envelope na wrażliwych polach (`docs/encryption.md`) |
@@ -27,8 +27,8 @@ SurfaceX działa jako lokalny stos Compose. Zakładamy zaufanego operatora hosta
 ## Granice skanera
 
 - Tylko discovery: brak logowania, brute force i exploitacji.
-- HTTP: HEAD/GET, limit przekierowań i body; redirect poza allowlistę nie jest śledzony.
-- Sygnatury deklaratywne (YAML) — bez dowolnego kodu.
+- HTTP: pojedyncze żądania `GET` do wykrytych endpointów; przekierowania nie są śledzone (zapisywany jest kod `3xx` i nagłówek `Location`).
+- Sygnatury deklaratywne (YAML) — bez dowolnego kodu i bez dodatkowych żądań.
 - Adaptive nmap: SYN gdy raw socket dostępny, inaczej TCP connect; tryb w metadanych przebiegu.
 
 ## Okno skanu
@@ -37,10 +37,16 @@ Po `deadline_at` unfinished batche → `PAUSED`. Cancel-check i progress stosuj�
 
 ## Świadome ograniczenia MVP
 
+- Konfiguracja domyślna jest przeznaczona do pracy lokalnej i w laboratorium: gateway serwuje HTTP bez TLS, a `CSRF_PROTECT` i `SECURE_COOKIES` są wyłączone. Wdrożenie współdzielone wymaga TLS na reverse proxy i ustawienia obu zmiennych na `1`.
+- Domyślne konto `admin` / `changeme` (SurfaceX i lokalny DefectDojo) trzeba zmienić przed udostępnieniem instancji.
+- Nie ma limitu prób logowania; nieudane logowania trafiają do audytu.
+- Sekret TOTP jest przechowywany bez szyfrowania; nie ma kodów zapasowych.
+- Surowy wynik batcha (`ScanBatch.result`) z nagłówkami odpowiedzi i fragmentem treści strony jest zapisywany jako jawny JSON; szyfrowane są rekordy dowodów i notatki ([encryption.md](encryption.md)).
 - Sesje Django DB (Redis = cache/Celery), nie Redis session store.
-- Rotacja kluczy AES opisana w docs; pełny job rotacji nie jest jeszcze wdrożony.
-- Pusta allowlista = brak egzekucji (admin musi dodać wpisy przed skanem produkcyjnym).
-- Backup: AES-256-CBC (OpenSSL) osobnym kluczem — zob. `docs/backup-restore.md`.
+- Rotacja klucza AES jest ręczna; zadanie rotacji nie jest wdrożone.
+- Pusta allowlista = brak egzekucji (trzeba dodać wpisy przed skanem realnej sieci).
+- Sprawdzenie adresu IP rozwiązanego z domeny względem allowlisty jest opcjonalne (`SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP=1`).
+- Backup: AES-256-CBC (OpenSSL) osobnym kluczem — zob. [backup-restore.md](backup-restore.md).
 
 ## Audyt
 

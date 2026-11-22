@@ -18,13 +18,14 @@ DefectDojo (profil): `./scripts/start-defectdojo.sh` — port `${DEFECTDOJO_HTTP
 
 | Usługa | Rola |
 |---|---|
-| `gateway` | TLS/HTTP edge |
+| `gateway` | wejście HTTP (port `8080`), bez terminacji TLS |
 | `web` | UI React |
 | `api` | Django/DRF |
 | `scheduler` | Celery beat (reconcile, schedules) |
 | `worker` | Celery + nmap/httpx |
 | `postgres` / `redis` | dane / broker |
 | `backup` | zaszyfrowany `pg_dump` loop |
+| `lab-target` | cel demonstracyjny (port hosta `18088`) |
 
 Sieci: `edge`, `backend` (internal), `scanner` — szczegóły w `docs/architecture.md`.
 
@@ -46,8 +47,7 @@ docker compose config --quiet
 docker compose up --build -d
 docker compose ps
 ./scripts/smoke-test.sh
-docker compose exec -T api python manage.py test \
-  apps.scans.tests.test_groups apps.scans.tests.test_api
+docker compose exec -T api python manage.py test apps --settings=config.settings_test
 ```
 
 Smoke test sprawdza health, bazę, logowanie oraz listy targets/scans/groups. Wszystkie usługi z healthcheckiem powinny mieć status `healthy`.
@@ -79,7 +79,8 @@ Zob. `docs/backup-restore.md`. Kontener `backup` zapisuje `*.sql.enc` do wolumen
 | Objaw | Co sprawdzić |
 |---|---|
 | 502 / maintenance | gateway + `api` healthy |
-| Scan not queued / allowlist | zakładka Allowlist; wpisy właściciela |
+| Scan not queued / allowlist | zakładka Allowlist — cel musi mieścić się w aktywnym wpisie |
+| Batch kończy się błędem „exceeded the 180-second timeout” | cel jest zbyt duży dla jednego uruchomienia nmap — podziel zakres na podsieci `/24` lub zawęź profil portów |
 | Worker nie claimuje | `WORKER_TOKEN`, sieć `scanner`, logi worker |
 | DefectDojo down | `COMPOSE_PROFILES=defectdojo`, `./scripts/doctor-defectdojo.sh` |
 | Sesja „wylogowuje” | ten sam origin (IP vs domena); `X-Sessionid` fallback w UI |
