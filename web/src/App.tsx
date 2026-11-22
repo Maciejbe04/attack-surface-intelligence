@@ -1052,7 +1052,7 @@ export function App() {
     }
     setConsoleScanId(scanId);
     setConsoleReloadKey((value) => value + 1);
-    const jumpToScans = Boolean(opts.goToScans) || nav !== "scans";
+    const jumpToScans = Boolean(opts.goToScans);
     if (jumpToScans) {
       setNav("scans");
       setScansPage(1);
@@ -1447,7 +1447,6 @@ export function App() {
         openScanConsole(result.scan.id);
         setScanRefreshKey((value) => value + 1);
         setScansPage(1);
-        setNav("scans");
       }
       if (result.parse_errors.length > 0) {
         pushToast(
@@ -1526,7 +1525,7 @@ export function App() {
         events: scan.events ?? [],
         batches: scan.batches ?? [],
       });
-      openScanConsole(scan.id, { goToScans: true });
+      openScanConsole(scan.id, { goToScans: source === "targets" });
       setScanRefreshKey((value) => value + 1);
       pushToast(
         "ok",
@@ -1593,7 +1592,7 @@ export function App() {
         events: scan.events ?? [],
         batches: scan.batches ?? [],
       });
-      openScanConsole(scan.id, { goToScans: true });
+      openScanConsole(scan.id);
       setScanRefreshKey((value) => value + 1);
       refreshGroups();
       pushToast(
@@ -1615,10 +1614,10 @@ export function App() {
   function onGroupScanQueued(scan: ScanDetail) {
     setScans((prev) => [scan, ...prev.filter((item) => item.id !== scan.id)]);
     setConsoleScan({ ...scan, events: scan.events ?? [], batches: scan.batches ?? [] });
-    openScanConsole(scan.id);
     setScanRefreshKey((value) => value + 1);
     setScansPage(1);
-    setNav("scans");
+    setNav("dashboard");
+    openScanConsole(scan.id);
   }
 
   async function onResumeScan(scan: Scan) {
@@ -1824,6 +1823,7 @@ export function App() {
           </button>
         </nav>
 
+        <div className="layout__main">
         <main
           className="content content--enter"
           id="main-content"
@@ -1961,11 +1961,7 @@ export function App() {
               />
 
               <LifecycleKpis scans={scans} t={t} />
-              <ChangesOverTime
-                scans={scans}
-                t={t}
-                onOpenScan={(scanId) => openScanConsole(scanId, { goToScans: true })}
-              />
+              <ChangesOverTime scans={scans} t={t} />
               <CuriosityInsightsFromScans scans={scans} t={t} />
 
               <section className="panel">
@@ -2010,14 +2006,21 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan, { goToScans: true })}
+                    onOpenConsole={(scan) => openScanConsole(scan)}
                     t={t}
                   />
                 </div>
-                <p className="field-help">
-                  {t("Open a probe to view the activity log and findings on the Scans page.")}
-                </p>
               </section>
+
+              <ScanConsole
+                scan={consoleScan}
+                loading={consoleLoading}
+                onClear={() => {
+                  setConsoleScanId(null);
+                  setConsoleScan(null);
+                }}
+                t={t}
+              />
             </>
           )}
 
@@ -2673,18 +2676,19 @@ export function App() {
             <SystemPanel active isAdmin={user?.role === "admin"} t={t} />
           )}
         </main>
+        <AppFooter
+          darkMode={darkMode}
+          onToggleDarkMode={toggleDarkMode}
+          highContrast={highContrast}
+          onToggleContrast={toggleHighContrast}
+          onOpenSystem={() => setNav("system")}
+          language={language}
+          onLanguageChange={setLanguage}
+          t={t}
+        />
+        </div>
       </div>
 
-      <AppFooter
-        darkMode={darkMode}
-        onToggleDarkMode={toggleDarkMode}
-        highContrast={highContrast}
-        onToggleContrast={toggleHighContrast}
-        onOpenSystem={() => setNav("system")}
-        language={language}
-        onLanguageChange={setLanguage}
-        t={t}
-      />
       <div id="a11y-help" className="sr-only" tabIndex={-1}>
         Keyboard: Tab moves focus, Enter activates buttons, Escape dismisses toasts when focused.
         Navigation uses aria-current for the active page. Status messages use live regions.

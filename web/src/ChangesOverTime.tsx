@@ -50,15 +50,7 @@ function rangeLabel(key: RangeKey, t: Translate): string {
   return t("All time");
 }
 
-export function ChangesOverTime({
-  scans,
-  t,
-  onOpenScan,
-}: {
-  scans: Scan[];
-  t: Translate;
-  onOpenScan: (scanId: number) => void;
-}) {
+export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
   const [range, setRange] = useState<RangeKey>("7d");
 
   const allPoints = useMemo(() => {
@@ -105,7 +97,7 @@ export function ChangesOverTime({
       <div className="panel__header panel__header--split">
         <div>
           <h2>{t("Changes over time")}</h2>
-          <p className="field-help">{t("Click a bar to open that scan log.")}</p>
+          <p className="field-help">{t("Lifecycle counts across recent finished scans.")}</p>
         </div>
         <div className="changes-over-time__controls">
           <label className="changes-over-time__range" htmlFor="changes-range">
@@ -142,22 +134,18 @@ export function ChangesOverTime({
         ) : (
           <div
             className="changes-over-time__chart"
-            role="list"
+            role="img"
             aria-label={t("Changes over time")}
           >
             {points.map((point) => {
               const barHeight = Math.max(8, Math.round((point.total / maxTotal) * BAR_MAX_PX));
               return (
-                <button
+                <div
                   key={point.id}
-                  type="button"
                   className="changes-over-time__col"
-                  role="listitem"
-                  onClick={() => onOpenScan(point.id)}
                   title={`${point.label} · ${formatTick(point.finishedAt)} · ${SERIES.map(
                     (key) => `${key} ${point.values[key]}`,
                   ).join(", ")}`}
-                  aria-label={`${t("Open scan log")} ${point.label}`}
                 >
                   <div className="changes-over-time__plot">
                     <div className="changes-over-time__stack" style={{ height: `${barHeight}px` }}>
@@ -178,7 +166,7 @@ export function ChangesOverTime({
                   <span className="changes-over-time__when">
                     {formatTick(point.finishedAt, compactLabels)}
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
