@@ -118,6 +118,50 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+let cancelSectionScroll: (() => void) | null = null;
+
+/**
+ * Scroll `.layout__main` so the section sits at the top, re-aligning while
+ * lazy content (console events, findings) keeps growing — otherwise Chrome
+ * clamps the first scroll to the pre-load height and the section lands mid-page.
+ */
+function scrollToSection(id: string, settleMs = 2500) {
+  cancelSectionScroll?.();
+  const scroller = document.querySelector(".layout__main");
+  const target = document.getElementById(id);
+  if (!(scroller instanceof HTMLElement) || !target) {
+    target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  const align = () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const top =
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+    const clamped = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight));
+    if (Math.abs(clamped - scroller.scrollTop) > 2) {
+      scroller.scrollTo({ top: clamped, behavior: "smooth" });
+    }
+  };
+  const content = scroller.firstElementChild ?? scroller;
+  const observer = new ResizeObserver(align);
+  observer.observe(content);
+  const stop = () => {
+    observer.disconnect();
+    window.clearTimeout(timer);
+    for (const evt of ["wheel", "touchstart", "keydown", "mousedown"]) {
+      scroller.removeEventListener(evt, stop);
+    }
+    if (cancelSectionScroll === stop) cancelSectionScroll = null;
+  };
+  const timer = window.setTimeout(stop, settleMs);
+  for (const evt of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    scroller.addEventListener(evt, stop, { passive: true });
+  }
+  cancelSectionScroll = stop;
+  align();
+}
+
 const STATUS_LABELS: Record<ScanStatus, string> = {
   queued: "Queued",
   running: "Running",
@@ -1080,22 +1124,8 @@ export function App() {
       setScansPage(1);
     }
     window.setTimeout(
-      () => {
-        const targetId =
-          focus === "report" ? "scan-findings-report" : "scan-activity-console";
-        const target = document.getElementById(targetId);
-        const scroller = document.querySelector(".content");
-        if (target && scroller instanceof HTMLElement) {
-          const top =
-            target.getBoundingClientRect().top -
-            scroller.getBoundingClientRect().top +
-            scroller.scrollTop -
-            12;
-          scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-        } else {
-          target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        }
-      },
+      () =>
+        scrollToSection(focus === "report" ? "scan-findings-report" : "scan-activity-console"),
       jumpToScans ? 120 : 0,
     );
   }
@@ -2671,20 +2701,7 @@ export function App() {
                   setConsoleScanId(null);
                   setConsoleScan(null);
                 }}
-                onViewReport={() => {
-                  const target = document.getElementById("scan-findings-report");
-                  const scroller = document.querySelector(".content");
-                  if (target && scroller instanceof HTMLElement) {
-                    const top =
-                      target.getBoundingClientRect().top -
-                      scroller.getBoundingClientRect().top +
-                      scroller.scrollTop -
-                      12;
-                    scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-                  } else {
-                    target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                  }
-                }}
+                onViewReport={() => scrollToSection("scan-findings-report")}
                 t={t}
               />
 

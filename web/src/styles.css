@@ -77,11 +77,12 @@ body,
   height: 100%;
   min-width: 0;
   overflow: hidden;
+  /* clip (unlike hidden) is not a scroll container, so Chrome cannot
+     programmatically scroll the shell while scrolling .layout__main. */
+  overflow: clip;
 }
 
 #root {
-  /* Chrome can still programmatically scroll an overflow:hidden document.
-     Pin the app viewport so outer scroll never shifts/clips the shell. */
   position: fixed;
   inset: 0;
 }
@@ -1059,11 +1060,15 @@ html.theme-high-contrast .module-tile__drawer {
 }
 
 .layout__main {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* Containing block for absolute descendants (e.g. .sr-only in the footer);
+     without it they escape to #root and make the shell scrollable. */
+  position: relative;
+  display: block;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidenav {
@@ -1110,11 +1115,7 @@ html.theme-high-contrast .module-tile__drawer {
   padding: var(--space-xl);
   padding-bottom: calc(var(--space-xl) + 3rem);
   min-width: 0;
-  min-height: 0;
   max-width: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .content--enter {
