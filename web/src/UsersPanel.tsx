@@ -13,19 +13,25 @@ export type ManagedUser = {
 const ROLES = ["admin", "operator", "analyst", "viewer"] as const;
 
 const ROLE_PERMISSIONS: Record<(typeof ROLES)[number], string[]> = {
+  // Keep in sync with the API permission classes (apps/scans/permissions.py) and docs/rbac.md.
   admin: [
     "Full access: targets, groups, scans, findings, export, allowlist.",
     "Manage users and roles.",
     "System settings and integrations.",
+    "View the audit log.",
   ],
   operator: [
     "Create and change targets, groups, and scans.",
-    "Export findings. Read allowlist (admin manages it).",
-    "Cannot manage users, allowlist, or system admin settings.",
+    "Export findings and manage allowlist.",
+    "Import targets and scan results.",
+    "Edit findings: tags, notes and overrides (kept across rescans).",
+    "Cannot manage users or system admin settings.",
   ],
   analyst: [
     "Read targets, groups, scans, and findings.",
     "Export findings (JSON / CSV / DefectDojo).",
+    "Edit findings: tags, notes and overrides (kept across rescans).",
+    "Import scan results (JSON / CSV).",
     "Cannot start scans or change inventory.",
   ],
   viewer: [

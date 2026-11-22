@@ -212,10 +212,22 @@ API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
 # Global scan deadline (seconds). Always applied when a client omits window_seconds
 # so unlimited scans cannot be started by accident. Override via env.
+# A domain in the allowlist authorizes that hostname. Set to 1 to also require
+# its resolved IP to fall inside the allowed IP/CIDR ranges (stricter).
+SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP = os.environ.get("SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP", "0") == "1"
 SCAN_DEFAULT_WINDOW_SECONDS = max(
     60,
     int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "3600") or "3600"),
 )
+
+# Hard safety ceilings for scan intensity (apps/scans/runner.py). A user can
+# never exceed these, whatever they enter in the UI. Defaults are conservative;
+# raise them only for a lab that tolerates heavier scanning.
+SCAN_MAX_RATE_CEILING = int(os.environ.get("SCAN_MAX_RATE_CEILING", "1000"))        # nmap packets/s
+SCAN_VERSION_INTENSITY_CEILING = int(os.environ.get("SCAN_VERSION_INTENSITY_CEILING", "7"))  # nmap -sV (0-9)
+SCAN_HTTPX_RATE_CEILING = int(os.environ.get("SCAN_HTTPX_RATE_CEILING", "150"))     # httpx requests/s
+SCAN_HTTPX_THREADS_CEILING = int(os.environ.get("SCAN_HTTPX_THREADS_CEILING", "50"))
+SCAN_ALLOW_AGGRESSIVE_TIMING = os.environ.get("SCAN_ALLOW_AGGRESSIVE_TIMING", "0") == "1"  # allow nmap -T4
 
 APP_NAME = os.environ.get("APP_NAME", "SurfaceX")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")

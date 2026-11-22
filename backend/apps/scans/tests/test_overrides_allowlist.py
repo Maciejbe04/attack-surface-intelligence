@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -103,8 +103,12 @@ class AllowlistTests(TestCase):
             "apps.scans.allowlist.resolve_ips",
             return_value=["198.51.100.9"],
         ):
-            with self.assertRaises(Exception) as ctx:
-                assert_resolvable_allowed(self.user, "onet.pl", "domain")
+            # Default: a domain entry authorizes the hostname regardless of its IP.
+            assert_resolvable_allowed(self.user, "onet.pl", "domain")
+            # Strict mode additionally requires the resolved IP to be in range.
+            with override_settings(SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP=True):
+                with self.assertRaises(Exception) as ctx:
+                    assert_resolvable_allowed(self.user, "onet.pl", "domain")
         self.assertIn("outside allowlist", str(ctx.exception))
 
 
@@ -114,7 +118,7 @@ class AllowlistRbacTests(TestCase):
         self.operator = make_user("allow-op", UserProfile.Role.OPERATOR)
         self.client = APIClient()
 
-    def test_operator_can_list_but_not_mutate(self) -> None:
+    def test_operator_manages_global_allowlist(self) -> None:
         self.client.force_login(self.operator)
         listed = self.client.get(reverse("allowlist-list"))
         self.assertEqual(listed.status_code, 200)
@@ -124,14 +128,17 @@ class AllowlistRbacTests(TestCase):
             {"value": "192.0.2.0/24", "type": "cidr"},
             format="json",
         )
-        self.assertEqual(created.status_code, 403)
+        # Operator sets the scan policy for all users (admin manages users).
+        self.assertEqual(created.status_code, 201)
 
         entry = AllowlistEntry.objects.create(
-            owner=self.operator, value="198.51.100.0/24", entry_type="cidr"
+            owner=self.admin if hasattr(self, "admin") else self.operator,
+            value="198.51.100.0/24",
+            entry_type="cidr",
         )
         deleted = self.client.delete(reverse("allowlist-detail", args=[entry.id]))
-        self.assertEqual(deleted.status_code, 403)
-        self.assertTrue(AllowlistEntry.objects.filter(pk=entry.pk).exists())
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(AllowlistEntry.objects.filter(pk=entry.pk).exists())
 
     def test_admin_can_create_and_delete(self) -> None:
         self.client.force_login(self.admin)

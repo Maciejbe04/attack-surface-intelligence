@@ -20,6 +20,7 @@ FAST_PORTS = (
     "9200,27017"
 )
 WEB_PORTS = "80,443,3000,5000,7001,8000,8080,8443,8888,9000,9443"
+IOT_PORTS = "23,80,102,443,502,554,1883,2222,8000,8554,8883,9100,20000,37777,44818,47808,49152"
 HTTP_PORTS = {80, 443, 3000, 5000, 7001, 8000, 8080, 8443, 8888, 9000, 9443}
 TLS_PORTS = {443, 8443, 9443}
 MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
@@ -124,6 +125,41 @@ def _module_map(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {module["id"]: module["filters"] for module in modules}
 
 
+def _ceiling(name: str, default: int) -> int:
+    from django.conf import settings
+
+    try:
+        return max(1, int(getattr(settings, name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _aggressive_timing_allowed() -> bool:
+    from django.conf import settings
+
+    return bool(getattr(settings, "SCAN_ALLOW_AGGRESSIVE_TIMING", False))
+
+
+def _clamp_nmap(max_rate: int, timing: str, intensity: int) -> tuple[int, str, int]:
+    """Hard safety ceilings so a user can never run an aggressive scan."""
+    max_rate = min(max(1, int(max_rate)), _ceiling("SCAN_MAX_RATE_CEILING", 1000))
+    if timing == "T4" and not _aggressive_timing_allowed():
+        timing = "T3"
+    intensity = min(max(0, int(intensity)), _ceiling("SCAN_VERSION_INTENSITY_CEILING", 7))
+    return max_rate, timing, intensity
+
+
+def _merge_ports(base: str, extra: str) -> str:
+    seen: list[int] = []
+    for part in f"{base},{extra}".split(","):
+        part = part.strip()
+        if part.isdigit():
+            value = int(part)
+            if value not in seen:
+                seen.append(value)
+    return ",".join(str(v) for v in seen[:1000])
+
+
 def _port_profile(name: str, custom: str | None = None) -> str | None:
     if name == "discovery-fast":
         return FAST_PORTS
@@ -185,13 +221,16 @@ def _nmap_arguments(
             ports = FAST_PORTS
             timing = "T3"
             max_rate = 200
+        if port and port.get("includeIoT"):
+            ports = _merge_ports(ports if ports is not None else FAST_PORTS, IOT_PORTS)
         if ports is None:
             arguments.extend(["--top-ports", "1000"])
         else:
             arguments.extend(["-p", ports])
+        intensity = selected.get("service-detect", {}).get("intensity", 5) if service_enabled else 5
+        max_rate, timing, intensity = _clamp_nmap(max_rate, timing, intensity)
         arguments.extend([f"-{timing}", "--max-rate", str(max_rate)])
         if service_enabled:
-            intensity = selected.get("service-detect", {}).get("intensity", 5)
             arguments.extend(["-sV", "--version-intensity", str(intensity)])
 
     arguments.extend(["--max-retries", "1", "-oX", "-", address])
@@ -318,7 +357,8 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
     http_filters = selected.get("http-fingerprint", {})
     full = selected.get("full-pipeline")
     timeout = http_filters.get("timeoutSec", 5)
-    rate_limit = http_filters.get("rateLimit", 50)
+    rate_limit = min(int(http_filters.get("rateLimit", 50)), _ceiling("SCAN_HTTPX_RATE_CEILING", 150))
+    threads = min(50, _ceiling("SCAN_HTTPX_THREADS_CEILING", 50), max(1, rate_limit))
     arguments = [
         "httpx",
         "-silent",
@@ -333,7 +373,14 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
         "-rate-limit",
         str(rate_limit),
         "-threads",
-        "50",
+        str(threads),
+        # Response headers (incl. Set-Cookie) for interesting-header/cookie signals
+        # and header/cookie signature rules. Redirects are still not followed.
+        "-include-response-header",
+        # Favicon mmh3 hash and response body so favicon / HTML-fragment /
+        # footer-version signature rules have data to match on (safe GET only).
+        "-favicon",
+        "-include-response",
     ]
     if http_filters.get("techDetect", full is not None):
         arguments.append("-tech-detect")
@@ -358,6 +405,19 @@ def _parse_httpx(output: bytes) -> list[dict[str, Any]]:
         if len(records) >= MAX_OBSERVATIONS:
             break
     return records
+
+
+_SLIM_DROP_FIELDS = ("body", "raw_header", "request", "response", "a", "knowledgebase", "chain")
+_MAX_STORED_BODY = 4000
+
+
+def _slim_http_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Drop heavy response fields before storing, keeping a short body excerpt."""
+    slim = {k: v for k, v in record.items() if k not in _SLIM_DROP_FIELDS}
+    body = record.get("body")
+    if isinstance(body, str) and body:
+        slim["body_excerpt"] = body[:_MAX_STORED_BODY]
+    return slim
 
 
 def _signature_results(http_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -555,6 +615,7 @@ def execute_scan(
             f"rdap={rdap_status}.",
         )
 
+    signature_results = _signature_results(http_records) if run_signatures else []
     result = {
         "target": {"address": target, "type": target_type},
         "metadata": {
@@ -566,8 +627,8 @@ def execute_scan(
             "redirects_followed": False,
         },
         "hosts": hosts,
-        "http": http_records,
-        "signatures": _signature_results(http_records) if run_signatures else [],
+        "http": [_slim_http_record(r) for r in http_records],
+        "signatures": signature_results,
         "endpoint_count": len(endpoints),
         "passive": passive_payload,
     }

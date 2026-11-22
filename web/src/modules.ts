@@ -139,6 +139,13 @@ export const PROBE_MODULES: ProbeModule[] = [
         min: 10,
         max: 5000,
       },
+      {
+        key: "includeIoT",
+        label: "Scan IoT / OT device ports",
+        type: "boolean",
+        default: false,
+        help: "Adds common IoT/OT ports (Modbus, RTSP, MQTT, S7, BACnet, printers, cameras).",
+      },
     ],
   },
   {

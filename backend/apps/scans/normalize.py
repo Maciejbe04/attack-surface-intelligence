@@ -113,6 +113,15 @@ def extract_observation_rows(
             "title": title,
             "server": server,
         }
+        try:
+            from .http_signals import extract_http_signals
+
+            http_attrs.update(
+                extract_http_signals(record, is_https=str(url).lower().startswith("https"))
+            )
+        except Exception:
+            # Enrichment must never break result normalization.
+            pass
         rows.append(
             {
                 "entity_type": Observation.EntityType.HTTP,
@@ -331,7 +340,6 @@ def previous_completed_run(run: ScanRun) -> ScanRun | None:
     wanted_modules = module_signature(run)
     qs = (
         ScanRun.objects.filter(
-            owner_id=run.owner_id,
             status=ScanRun.Status.COMPLETED,
             finished_at__isnull=False,
         )

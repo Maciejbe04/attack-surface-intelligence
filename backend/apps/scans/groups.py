@@ -40,7 +40,7 @@ def normalize_group_name(value: object) -> str:
 def get_or_create_group(owner: User, name: str) -> tuple[TargetGroup, bool]:
     """Case-insensitive lookup by name, so "DMZ" and "dmz" are the same group."""
     name = normalize_group_name(name)
-    existing = TargetGroup.objects.filter(owner=owner, name__iexact=name).first()
+    existing = TargetGroup.objects.filter(name__iexact=name).first()
     if existing is not None:
         return existing, False
     return TargetGroup.objects.get_or_create(owner=owner, name=name)
@@ -90,7 +90,7 @@ def _dispatch_one(schedule: GroupSchedule, now: datetime) -> str:
     if previous is not None and previous.status in ACTIVE_RUN_STATUSES:
         return f"Skipped: previous scan #{previous.pk} is still active."
 
-    targets = list(group.targets.filter(owner_id=group.owner_id).order_by("id"))
+    targets = list(group.targets.order_by("id"))
     if not targets:
         return "Skipped: the group has no targets."
     if len(targets) > MAX_GROUP_SCAN_TARGETS:
