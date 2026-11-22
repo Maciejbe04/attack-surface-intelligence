@@ -17,7 +17,8 @@ class AllowlistDenied(ValueError):
 
 
 def owner_allowlist_active(owner: User) -> bool:
-    return AllowlistEntry.objects.filter(owner=owner, enabled=True).exists()
+    # Global scan policy: entries apply to every user, whoever added them.
+    return AllowlistEntry.objects.filter(enabled=True).exists()
 
 
 def _domain_matches(candidate: str, allowed: str) -> bool:
@@ -29,7 +30,7 @@ def _domain_matches(candidate: str, allowed: str) -> bool:
 def is_value_allowed(owner: User, value: str, value_type: str | None = None) -> bool:
     """Return True if value is allowed. Empty allowlist ⇒ open (compat)."""
     entries = list(
-        AllowlistEntry.objects.filter(owner=owner, enabled=True).only(
+        AllowlistEntry.objects.filter(enabled=True).only(
             "value", "entry_type"
         )
     )
@@ -117,7 +118,7 @@ def resolve_ips(hostname: str) -> list[str]:
 
 def _allowlist_has_ip_or_cidr(owner: User) -> bool:
     return AllowlistEntry.objects.filter(
-        owner=owner, enabled=True, entry_type__in=("ip", "cidr")
+        enabled=True, entry_type__in=("ip", "cidr")
     ).exists()
 
 

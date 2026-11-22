@@ -78,13 +78,13 @@ from .services import publish_batch, queue_scan_for_targets
 
 
 def _targets_for(user):
-    queryset = Target.objects.all()
-    return queryset if is_admin(user) else queryset.filter(owner=user)
+    # One shared workspace for the whole team: every role sees every target;
+    # what a user may change is decided by the role (permission classes).
+    return Target.objects.all()
 
 
 def _runs_for(user):
-    queryset = ScanRun.objects.all()
-    return queryset if is_admin(user) else queryset.filter(owner=user)
+    return ScanRun.objects.all()
 
 
 class TargetListCreateView(APIView):
@@ -293,7 +293,7 @@ class TargetImportView(APIView):
         addresses = [item.address for item in parsed.targets]
         existing_by_address = {
             target.address: target
-            for target in Target.objects.filter(owner=owner, address__in=addresses)
+            for target in Target.objects.filter(address__in=addresses)
         }
         existing_addresses = set(existing_by_address)
 
@@ -332,7 +332,7 @@ class TargetImportView(APIView):
             Target.objects.bulk_create(to_create, ignore_conflicts=True)
 
         all_targets = list(
-            Target.objects.filter(owner=owner, address__in=addresses).order_by("id")
+            Target.objects.filter(address__in=addresses).order_by("id")
         )
 
         # Group assignment: one group for the whole file plus optional per-row groups.
@@ -941,7 +941,7 @@ class ManualOverrideDetailView(APIView):
 
     def delete(self, request: Request, override_id: int) -> Response:
         override = get_object_or_404(
-            ManualOverride.objects.filter(owner=request.user),
+            ManualOverride.objects.all(),
             pk=override_id,
         )
         key = override.entity_key
@@ -961,11 +961,12 @@ class AllowlistListCreateView(APIView):
 
     def get_permissions(self):
         if self.request.method == "POST":
-            return [IsAuthenticated(), IsAdmin()]
+            # Admin and operator manage the scan policy for all users.
+            return [IsAuthenticated(), IsAdminOrOperator()]
         return super().get_permissions()
 
     def get(self, request: Request) -> Response:
-        qs = AllowlistEntry.objects.filter(owner=request.user).order_by("value", "id")
+        qs = AllowlistEntry.objects.select_related("owner").order_by("value", "id")
         enforced = qs.filter(enabled=True).exists()
         return Response(
             {
@@ -994,11 +995,11 @@ class AllowlistListCreateView(APIView):
 
 
 class AllowlistDetailView(APIView):
-    permission_classes = (IsAuthenticated, IsAdmin)
+    permission_classes = (IsAuthenticated, IsAdminOrOperator)
 
     def patch(self, request: Request, entry_id: int) -> Response:
         entry = get_object_or_404(
-            AllowlistEntry.objects.filter(owner=request.user), pk=entry_id
+            AllowlistEntry.objects.all(), pk=entry_id
         )
         serializer = AllowlistEntrySerializer(
             entry, data=request.data, partial=True, context={"request": request}
@@ -1016,7 +1017,7 @@ class AllowlistDetailView(APIView):
 
     def delete(self, request: Request, entry_id: int) -> Response:
         entry = get_object_or_404(
-            AllowlistEntry.objects.filter(owner=request.user), pk=entry_id
+            AllowlistEntry.objects.all(), pk=entry_id
         )
         value = entry.value
         entry.delete()

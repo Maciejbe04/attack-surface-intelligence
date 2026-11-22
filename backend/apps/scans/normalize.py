@@ -331,7 +331,6 @@ def previous_completed_run(run: ScanRun) -> ScanRun | None:
     wanted_modules = module_signature(run)
     qs = (
         ScanRun.objects.filter(
-            owner_id=run.owner_id,
             status=ScanRun.Status.COMPLETED,
             finished_at__isnull=False,
         )

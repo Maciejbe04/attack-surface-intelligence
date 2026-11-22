@@ -27,7 +27,7 @@ def groups_for(user):
     queryset = TargetGroup.objects.select_related("owner", "schedule").annotate(
         target_count=Count("targets", distinct=True)
     )
-    return queryset if is_admin(user) else queryset.filter(owner=user)
+    return queryset  # shared workspace: every role sees every group
 
 
 def _get_group(request: Request, group_id: int) -> TargetGroup:
@@ -139,7 +139,7 @@ class GroupScanView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        targets = list(group.targets.filter(owner_id=group.owner_id).order_by("id"))
+        targets = list(group.targets.order_by("id"))
         if not targets:
             return Response(
                 {"detail": "The group has no targets."},

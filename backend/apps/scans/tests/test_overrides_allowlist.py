@@ -114,7 +114,7 @@ class AllowlistRbacTests(TestCase):
         self.operator = make_user("allow-op", UserProfile.Role.OPERATOR)
         self.client = APIClient()
 
-    def test_operator_can_list_but_not_mutate(self) -> None:
+    def test_operator_manages_global_allowlist(self) -> None:
         self.client.force_login(self.operator)
         listed = self.client.get(reverse("allowlist-list"))
         self.assertEqual(listed.status_code, 200)
@@ -124,14 +124,17 @@ class AllowlistRbacTests(TestCase):
             {"value": "192.0.2.0/24", "type": "cidr"},
             format="json",
         )
-        self.assertEqual(created.status_code, 403)
+        # Operator sets the scan policy for all users (admin manages users).
+        self.assertEqual(created.status_code, 201)
 
         entry = AllowlistEntry.objects.create(
-            owner=self.operator, value="198.51.100.0/24", entry_type="cidr"
+            owner=self.admin if hasattr(self, "admin") else self.operator,
+            value="198.51.100.0/24",
+            entry_type="cidr",
         )
         deleted = self.client.delete(reverse("allowlist-detail", args=[entry.id]))
-        self.assertEqual(deleted.status_code, 403)
-        self.assertTrue(AllowlistEntry.objects.filter(pk=entry.pk).exists())
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(AllowlistEntry.objects.filter(pk=entry.pk).exists())
 
     def test_admin_can_create_and_delete(self) -> None:
         self.client.force_login(self.admin)
