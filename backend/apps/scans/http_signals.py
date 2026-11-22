@@ -35,6 +35,22 @@ SECURITY_HEADERS = {
     "x_content_type_options": "X-Content-Type-Options",
 }
 
+# Ubiquitous, uninteresting headers every server sends — skipped as noise.
+BORING_HEADERS = {
+    "date", "content_type", "content_length", "content_encoding", "content_language",
+    "connection", "keep_alive", "transfer_encoding", "accept_ranges", "vary",
+    "cache_control", "expires", "pragma", "etag", "last_modified", "age", "upgrade",
+    "content_range", "set_cookie", "accept", "x_content_type_options",
+    "strict_transport_security", "content_security_policy", "x_frame_options",
+    "referrer_policy", "permissions_policy",
+}
+
+
+def _display_header(key: str) -> str:
+    return "-".join(part.upper() if part in {"id", "ip", "ua", "ssl", "xss", "ok"} else part.capitalize()
+                    for part in key.split("_"))
+
+
 # Cookie name (lowercased) -> technology it reveals.
 COOKIE_TECH = {
     "phpsessid": "PHP",
@@ -122,13 +138,15 @@ def extract_http_signals(record: dict[str, Any], *, is_https: bool = False) -> d
     if not headers and not record.get("cookies"):
         return signals
 
-    info_leak = {
-        label: headers[key][:MAX_HEADER_VALUE]
-        for key, label in INFO_LEAK_HEADERS.items()
-        if headers.get(key)
+    # Capture every non-standard header (name -> value); the boring ubiquitous
+    # ones and the security headers are handled separately.
+    interesting = {
+        _display_header(key): value[:MAX_HEADER_VALUE]
+        for key, value in headers.items()
+        if key not in BORING_HEADERS and value
     }
-    if info_leak:
-        signals["info_leak_headers"] = info_leak
+    if interesting:
+        signals["interesting_headers"] = interesting
 
     missing = [label for key, label in SECURITY_HEADERS.items() if not headers.get(key)]
     present = [label for key, label in SECURITY_HEADERS.items() if headers.get(key)]
@@ -161,9 +179,9 @@ def extract_http_signals(record: dict[str, Any], *, is_https: bool = False) -> d
             signals["insecure_cookies"] = insecure
 
     # Flat one-line summaries (safe to show in a table cell).
-    header_bits = [f"{k}: {v}" for k, v in (signals.get("info_leak_headers") or {}).items()]
+    header_bits = [f"{k}: {v}" for k, v in list((signals.get("interesting_headers") or {}).items())[:6]]
     if signals.get("security_headers_missing"):
-        header_bits.append("missing " + ", ".join(signals["security_headers_missing"][:4]))
+        header_bits.append("no " + ", ".join(signals["security_headers_missing"][:3]))
     if header_bits:
         signals["headers_summary"] = " · ".join(header_bits)[:300]
     if signals.get("cookies"):
@@ -178,4 +196,4 @@ def extract_http_signals(record: dict[str, Any], *, is_https: bool = False) -> d
 
 
 def interesting_header_count(attrs: dict[str, Any]) -> int:
-    return len(attrs.get("info_leak_headers") or {}) + len(attrs.get("security_headers_missing") or [])
+    return len(attrs.get("interesting_headers") or {}) + len(attrs.get("security_headers_missing") or [])
