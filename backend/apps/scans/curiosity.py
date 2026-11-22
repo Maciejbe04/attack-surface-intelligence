@@ -26,6 +26,10 @@ PORT_CURIOSITY_LEVEL: dict[int, CuriosityLevel] = {
     1433: "high",  # MSSQL
     1521: "high",  # Oracle
     2375: "high",  # Docker API
+    502: "high",  # Modbus — exposed industrial control
+    102: "high",  # Siemens S7 — exposed industrial control
+    20000: "high",  # DNP3 — exposed industrial control
+    47808: "high",  # BACnet — exposed building automation
     2376: "high",  # Docker TLS
     # medium — directory / mail / alternate HTTP
     25: "medium",  # SMTP

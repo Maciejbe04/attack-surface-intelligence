@@ -20,6 +20,7 @@ FAST_PORTS = (
     "9200,27017"
 )
 WEB_PORTS = "80,443,3000,5000,7001,8000,8080,8443,8888,9000,9443"
+IOT_PORTS = "23,80,102,443,502,554,1883,2222,8000,8554,8883,9100,20000,37777,44818,47808,49152"
 HTTP_PORTS = {80, 443, 3000, 5000, 7001, 8000, 8080, 8443, 8888, 9000, 9443}
 TLS_PORTS = {443, 8443, 9443}
 MAX_COMMAND_OUTPUT = 2 * 1024 * 1024
@@ -148,6 +149,17 @@ def _clamp_nmap(max_rate: int, timing: str, intensity: int) -> tuple[int, str, i
     return max_rate, timing, intensity
 
 
+def _merge_ports(base: str, extra: str) -> str:
+    seen: list[int] = []
+    for part in f"{base},{extra}".split(","):
+        part = part.strip()
+        if part.isdigit():
+            value = int(part)
+            if value not in seen:
+                seen.append(value)
+    return ",".join(str(v) for v in seen[:1000])
+
+
 def _port_profile(name: str, custom: str | None = None) -> str | None:
     if name == "discovery-fast":
         return FAST_PORTS
@@ -209,6 +221,8 @@ def _nmap_arguments(
             ports = FAST_PORTS
             timing = "T3"
             max_rate = 200
+        if port and port.get("includeIoT"):
+            ports = _merge_ports(ports if ports is not None else FAST_PORTS, IOT_PORTS)
         if ports is None:
             arguments.extend(["--top-ports", "1000"])
         else:
