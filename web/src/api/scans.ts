@@ -141,28 +141,6 @@ export type AuditEvent = {
   created_at: string;
 };
 
-export type PassiveRdapSummary = {
-  handle: string;
-  name: string;
-  country: string;
-  network: string;
-  asns: number[];
-  nameservers: string[];
-};
-
-export type PassiveDiscoveryResult = {
-  query: string;
-  type: "ip" | "domain";
-  subdomains: string[];
-  rdap: PassiveRdapSummary | null;
-  sources: {
-    crt_sh: "ok" | "error" | "pending" | "not_applicable";
-    rdap: "ok" | "error" | "pending";
-  };
-  warnings: string[];
-  cached: boolean;
-};
-
 export type ScanEventLevel = "info" | "warn" | "error";
 
 export type ScanEvent = {
@@ -432,17 +410,6 @@ export function createTarget(
   return request<Target>("/api/targets/", {
     method: "POST",
     body: JSON.stringify(target),
-    signal,
-  });
-}
-
-export function discoverPassive(
-  query: string,
-  signal?: AbortSignal,
-): Promise<PassiveDiscoveryResult> {
-  return request<PassiveDiscoveryResult>("/api/passive/discover/", {
-    method: "POST",
-    body: JSON.stringify({ query }),
     signal,
   });
 }

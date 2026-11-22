@@ -87,9 +87,25 @@ def perform_automatic_defectdojo_export(run_id: int) -> None:
         )
 
         try:
-            result = export_scan_to_defectdojo(
-                ScanRun.objects.prefetch_related("batches").get(pk=run_id)
-            )
+            from .defectdojo import build_generic_findings_report
+
+            prepared = ScanRun.objects.prefetch_related("batches").get(pk=run_id)
+            if not build_generic_findings_report(prepared)["findings"]:
+                _finish_export(
+                    run_id,
+                    status=ScanRun.DefectDojoExportStatus.SKIPPED,
+                    detail=(
+                        "No DefectDojo findings to send "
+                        "(passive discovery stays in SurfaceX)."
+                    ),
+                    level=ScanEvent.Level.INFO,
+                    message=(
+                        "DefectDojo export skipped: passive / empty findings "
+                        "remain in SurfaceX only."
+                    ),
+                )
+                return
+            result = export_scan_to_defectdojo(prepared)
         except DefectDojoNotConfigured as exc:
             _finish_export(
                 run_id,

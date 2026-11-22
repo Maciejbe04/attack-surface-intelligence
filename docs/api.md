@@ -53,7 +53,7 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 }
 ```
 
-Pola: `query` (znormalizowane), `type` (`domain`/`ip`), `subdomains` (puste dla IP), `rdap` (lub `null`), `sources` (`ok` / `error` / `not_applicable`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Endpoint niczego nie zapisuje — wybrane hosty idą osobno przez `POST /api/targets/`. Szczegóły: `docs/passive-discovery.md`.
+Pola: `query` (znormalizowane), `type` (`domain`/`ip`), `subdomains` (puste dla IP), `rdap` (lub `null`), `sources` (`ok` / `error` / `not_applicable`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Endpoint niczego nie zapisuje (UI go nie eksponuje — główna ścieżka to moduł skanu `passive-discovery`). Szczegóły: `docs/passive-discovery.md`.
 
 ## Skany i wyniki
 

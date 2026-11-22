@@ -56,8 +56,6 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useDarkMode } from "./useDarkMode";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
-import { PassiveDiscoveryPanel } from "./PassiveDiscoveryPanel";
-
 function formatEta(seconds: number | null | undefined): string {
   if (seconds == null || seconds <= 0) return "";
   if (seconds < 60) return `~${seconds}s`;
@@ -2092,21 +2090,6 @@ export function App() {
 
               {canMutate ? (
                 <>
-                <PassiveDiscoveryPanel
-                  targets={targets}
-                  onTargetsAdded={(added) => {
-                    setTargets((previous) => {
-                      const byId = new Map(previous.map((target) => [target.id, target]));
-                      for (const target of added) byId.set(target.id, target);
-                      return Array.from(byId.values()).sort((a, b) =>
-                        a.address.localeCompare(b.address),
-                      );
-                    });
-                  }}
-                  pushToast={pushToast}
-                  t={t}
-                />
-
                 <section className="panel">
                   <div className="panel__header">
                     <h2>{t("Import hosts file")}</h2>

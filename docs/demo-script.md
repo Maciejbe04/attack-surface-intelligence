@@ -17,9 +17,9 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
 
 ## Opcjonalnie: Passive discovery
 
-1. Na **Targets** wpisz domenę labową (albo znaną domenę z allowlistą) → **Discover**.
-2. Pokaż skrót RDAP i listę poddomen z crt.sh; zaznacz kilka → **Add selected targets**.
-3. Podkreśl: brak auto-skanu — dopiero osobny Run / skan grupy obejmuje nowe hosty.
+1. Na Dashboardzie włącz moduł **Passive discovery** (sam albo z port-scan/httpx; nie z full-pipeline).
+2. Uruchom skan znanego celu domenowego / IP z allowlistą.
+3. W Findings wskaż obserwację `passive:…` (RDAP + nazwy CT) — bez auto-dodawania hostów.
 
 ## Przebieg 1
 

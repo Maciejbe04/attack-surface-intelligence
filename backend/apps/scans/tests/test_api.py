@@ -335,6 +335,43 @@ class PublicScanAPITests(TestCase):
             3,
         )
 
+    def test_defectdojo_report_ignores_passive_discovery_payload(self) -> None:
+        run = ScanRun.objects.create(
+            owner=self.operator,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "passive-discovery", "filters": {}}],
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+            finished_at=timezone.now(),
+        )
+        ScanBatch.objects.create(
+            run=run,
+            target_address="example.com",
+            target_type=Target.Type.DOMAIN,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={
+                "hosts": [],
+                "http": [],
+                "signatures": [],
+                "passive": {
+                    "query": "example.com",
+                    "type": "domain",
+                    "subdomains": ["www.example.com"],
+                    "rdap": {"name": "Example Org", "country": "US"},
+                    "sources": {"crt_sh": "ok", "rdap": "ok"},
+                    "warnings": [],
+                },
+            },
+            finished_at=timezone.now(),
+        )
+
+        report = build_generic_findings_report(
+            ScanRun.objects.prefetch_related("batches").get(pk=run.pk)
+        )
+        self.assertEqual(report["findings"], [])
+
 
 @override_settings(WORKER_TOKEN="worker-test-token")
 class InternalWorkerAPITests(TestCase):

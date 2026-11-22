@@ -70,7 +70,7 @@ Aplikacja React/TypeScript udostępniająca:
 
 - dashboard;
 - zarządzanie celami i konfiguracją skanów;
-- pasywne rozpoznanie (crt.sh + RDAP) na stronie Targets;
+- moduł Passive discovery (crt.sh + RDAP) w przebiegu skanu;
 - import oraz eksport;
 - podgląd historii i różnic;
 - edycję wyników;

@@ -21,7 +21,7 @@ Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
 | Zarządzanie allowlistą | tak | nie | nie | nie |
 | Podgląd allowlisty | tak | tak | tak | tak |
 | CRUD celów | tak | tak | nie | nie |
-| Pasywne rozpoznanie (crt.sh / RDAP) | tak | tak | nie | nie |
+| Moduł passive-discovery (crt.sh / RDAP) | tak | tak | nie | nie |
 | CRUD profili i harmonogramów | tak | tak | nie | nie |
 | Start / stop / wznowienie skanu | tak | tak | nie | nie |
 | Konfiguracja okna skanu | tak | nie (stałe 1 h) | nie | nie |
