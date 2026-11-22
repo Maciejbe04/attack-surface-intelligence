@@ -34,7 +34,26 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 |---|---|---|---|
 | POST | `/api/passive/discover/` | admin/operator | `{"query":"example.com"}` albo IP → poddomeny (crt.sh) + skrót RDAP; cache Redis 15 min; bez auto-skanu |
 
-Odpowiedź: `query`, `type` (`domain`/`ip`), `subdomains`, `rdap` (lub `null`), `sources` (`ok`/`error`/`skipped`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Wybrane hosty zapisuje się osobno przez `POST /api/targets/`.
+```json
+{
+  "query": "example.com",
+  "type": "domain",
+  "subdomains": ["api.example.com", "example.com", "www.example.com"],
+  "rdap": {
+    "handle": "D1234567-EXAMPLE",
+    "name": "Example Org",
+    "country": "US",
+    "network": "",
+    "asns": [],
+    "nameservers": ["ns1.example.com"]
+  },
+  "sources": { "crt_sh": "ok", "rdap": "ok" },
+  "warnings": [],
+  "cached": false
+}
+```
+
+Pola: `query` (znormalizowane), `type` (`domain`/`ip`), `subdomains` (puste dla IP), `rdap` (lub `null`), `sources` (`ok` / `error` / `not_applicable`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Endpoint niczego nie zapisuje — wybrane hosty idą osobno przez `POST /api/targets/`. Szczegóły: `docs/passive-discovery.md`.
 
 ## Skany i wyniki
 
@@ -82,4 +101,4 @@ Wymagany nagłówek `X-Worker-Token`. Bez sesji użytkownika.
 |---|---|---|
 | GET | `/api/health/` | liveness API |
 
-Szczegóły schematów plików: `docs/import-export.md`. Macierz ról: `docs/rbac.md`.
+Szczegóły schematów plików: `docs/import-export.md`. Pasywne rozpoznanie: `docs/passive-discovery.md`. Macierz ról: `docs/rbac.md`.

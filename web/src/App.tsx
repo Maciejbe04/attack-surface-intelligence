@@ -1958,12 +1958,16 @@ export function App() {
                             ))}
                           </select>
                           <p className="field-help">
-                            {t("Required deadline for every scan; unfinished batches pause and can be resumed.")}
+                            {t(
+                              "Required deadline for every scan; unfinished batches pause and can be resumed. The window selector is admin-only — other roles always run with a 1h maximum.",
+                            )}
                           </p>
                         </>
                       ) : (
                         <p className="field-help" id="scan-window-info" style={{ marginTop: 6 }}>
-                          {t("1h default · visible only for admin")}
+                          {t(
+                            "Fixed 1h deadline for your role. Only admins can change the window length; unfinished batches pause and can be resumed.",
+                          )}
                         </p>
                       )}
                     </div>

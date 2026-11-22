@@ -726,10 +726,14 @@ const PL: Record<string, string> = {
   "Off (no deadline)": "Wyłączone (bez deadline)",
   "Optional deadline; unfinished batches pause and can be resumed.":
     "Opcjonalny deadline; niedokończone batche przechodzą w pause i można je wznowić.",
+  "Required deadline for every scan; unfinished batches pause and can be resumed. The window selector is admin-only — other roles always run with a 1h maximum.":
+    "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić. Selektor widoczny tylko dla admina — pozostałe role mają stałe maksimum 1 h.",
   "Required deadline for every scan; unfinished batches pause and can be resumed.":
     "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić.",
   "Windows longer than 1h require admin.":
     "Okna dłuższe niż 1h wymagają roli admin.",
+  "Fixed 1h deadline for your role. Only admins can change the window length; unfinished batches pause and can be resumed.":
+    "Stały deadline 1 h dla Twojej roli. Długość okna ustawia tylko admin; niedokończone batche przechodzą w pause i można je wznowić.",
   "1h default · visible only for admin":
     "Domyślnie 1h · widoczne tylko dla admina",
   "Changes over time": "Zmiany w czasie",

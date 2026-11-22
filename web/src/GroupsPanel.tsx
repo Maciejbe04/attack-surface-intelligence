@@ -370,6 +370,9 @@ export function GroupsPanel({
                 value={String(effectiveWindowSeconds)}
                 onChange={(event) => setScanWindowSeconds(Number(event.target.value) || 3600)}
                 aria-label={t("Scan window")}
+                title={t(
+                  "Required deadline for every scan; unfinished batches pause and can be resumed. The window selector is admin-only — other roles always run with a 1h maximum.",
+                )}
               >
                 {windowOptions.map((seconds) => (
                   <option key={seconds} value={String(seconds)}>
@@ -381,7 +384,9 @@ export function GroupsPanel({
           )}
           {canMutate && !isAdmin && (
             <span className="table-toolbar__window field-help">
-              {t("1h default · visible only for admin")}
+              {t(
+                "Fixed 1h deadline for your role. Only admins can change the window length; unfinished batches pause and can be resumed.",
+              )}
             </span>
           )}
         </div>

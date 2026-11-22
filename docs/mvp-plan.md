@@ -355,6 +355,7 @@ Dostępne:
 - `docs/scanning-policy.md`: porty, limity, nmap i httpx;
 - `docs/signatures.md`: format własnych sygnatur;
 - `docs/import-export.md`: wersjonowane formaty CSV/JSON;
+- `docs/passive-discovery.md`: crt.sh + RDAP na Targets;
 - `docs/rbac.md`: macierz uprawnień;
 - `docs/encryption.md`: pola, klucze i rotacja;
 - `docs/demo-script.md`: demonstracja dwóch skanów;

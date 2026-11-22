@@ -15,6 +15,12 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
 4. Import celów z [`demo/targets.json`](../demo/targets.json) albo użyj grupy `lab-lxc`.
 5. Zaloguj się jako `operator` (albo `admin`).
 
+## Opcjonalnie: Passive discovery
+
+1. Na **Targets** wpisz domenę labową (albo znaną domenę z allowlistą) → **Discover**.
+2. Pokaż skrót RDAP i listę poddomen z crt.sh; zaznacz kilka → **Add selected targets**.
+3. Podkreśl: brak auto-skanu — dopiero osobny Run / skan grupy obejmuje nowe hosty.
+
 ## Przebieg 1
 
 1. Uruchom skan grupy `lab-lxc` (moduł full-pipeline). Jako `admin` opcjonalnie ustaw 30-minutowe okno, żeby pokazać pause/kill; pozostałe role mają stałe 1 h.
