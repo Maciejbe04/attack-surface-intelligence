@@ -1,157 +1,137 @@
-# Attack Surface Intelligence
+# SurfaceX — Attack Surface Intelligence
 
-## SurfaceX
+Narzędzie do cyklicznego, bezpiecznego discovery dużych sieci: wykrywa aktywne hosty i usługi, rozpoznaje technologie webowe, zbiera nagłówki, ciasteczka i certyfikaty TLS oraz pokazuje, co zmieniło się między kolejnymi skanami.
 
-Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprintingu usług oraz analizy zmian powierzchni ataku w czasie.
+Rozwiązanie zadania **„Attack Surface Intelligence”** Centrum Bezpieczeństwa Informacji AGH (HackNation 2026). Zespół: **Molekuły**.
 
-## Status
+## Co potrafi
 
-MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp, anulowanie oraz eksport ukończonych obserwacji do opcjonalnego DefectDojo.
-
-Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Moduł skanu **Passive discovery** (`passive-discovery`) dociąga crt.sh / RDAP w przebiegu i zapisuje obserwacje (bez auto-expand inventory) — szczegóły: [Pasywne rozpoznanie](docs/passive-discovery.md). Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Koniec okna skanu pauzuje niedokończone batche, zabija procesy workera i pozwala wznowić je przez Resume.
-
-Hosty można łączyć w grupy (host może należeć do wielu grup): ręcznie na stronie **Targets** (filtr, zaznaczenie, „Add selected to group”), przy imporcie TXT/CSV/JSON albo na stronie **Groups**. Grupę można przeskanować od razu albo zaplanować: co N godzin, codziennie lub co tydzień o wybranej godzinie UTC. Wyniki zaplanowanych skanów trafiają automatycznie do DefectDojo jak każdy zakończony skan. Pojedynczy host do skanu na pulpicie wybiera się wyszukiwarką, która przeszukuje zapisane cele (adres i komentarz) po stronie API. Szczegóły: [Grupy i harmonogramy](docs/groups-schedules.md).
-
-Dashboard pokazuje konsolę aktywności uruchomionego z niego skanu bez przełączania do zakładki **Scans**, podsumowanie lifecycle oraz wykres zmian w wybranym zakresie czasu. Zakładka **Scans** pozostaje pełną historią przebiegów z logiem i Findings / Compare. Słupki wykresu są informacyjne i nie zmieniają widoku.
-
-Każdy skan ma obowiązkowe okno wykonania. Dla użytkowników innych niż `admin` jest ono stałe i wynosi 1 godzinę. Tylko `admin` widzi kontrolkę i może wybrać 30 min, 1 h albo 2 h. Ograniczenie jest egzekwowane również w API.
+- **Cele:** IP, zakresy CIDR i domeny — z formularza albo z pliku TXT/CSV/JSON (do 10 000 celów), z grupami i komentarzami.
+- **Discovery:** `nmap` (hosty, porty, usługi i wersje) oraz ProjectDiscovery `httpx` (tytuł, kod, nagłówki, ciasteczka, certyfikat TLS, technologie), uruchamiane równolegle przez workery Celery.
+- **Fingerprinting:** wykrywanie CMS-ów, frameworków i serwerów, własne deklaratywne sygnatury YAML, wskazówki paneli administracyjnych i środowisk staging, porty IoT/OT.
+- **Zmiany w czasie:** każda obserwacja dostaje stan `NEW`, `CHANGED`, `MISSING`, `FLAKY` albo `GONE` względem poprzedniego skanu; niestabilny host nie jest zgłaszany jako nieaktywny po jednym braku odpowiedzi.
+- **Bezpieczne skanowanie:** allowlista, twarde limity tempa, obowiązkowe okno czasowe z pauzą i wznowieniem, brak logowania, brute force i eksploatacji.
+- **Praca zespołu:** cztery role (`admin`, `operator`, `analyst`, `viewer`), trwałe ręczne korekty wyników (tagi, notatki), dziennik audytu.
+- **Integracje:** eksport JSON/CSV, import wyników, automatyczna wysyłka do DefectDojo, harmonogramy skanów grup, pasywne źródła crt.sh i RDAP.
+- **Ochrona danych:** szyfrowanie dowodów skanów i notatek AES-256-GCM, hasła Argon2id, szyfrowany backup.
 
 ## Szybki start
 
-Wymagania: Git oraz Docker Engine/Desktop z Compose (Linux, macOS albo Windows + WSL2).
+Wymagania: Git i Docker z Compose (Linux, macOS albo Windows + WSL2), ok. 8 GB RAM, wolne porty `8080`, `8081` i `18088`.
 
 ```bash
-git clone git@github.com:Maciejbe04/attack-surface-intelligence.git
+git clone https://github.com/Maciejbe04/attack-surface-intelligence.git
 cd attack-surface-intelligence
 cp .env.example .env
-chmod +x scripts/*.sh deploy/docker/*.sh
-./scripts/preflight.sh
-./scripts/init-secrets.sh
+./scripts/preflight.sh        # kontrola środowiska
+./scripts/init-secrets.sh     # sekrety w secrets/ (poza Gitem)
 docker compose up --build -d
-./scripts/smoke-test.sh
+./scripts/smoke-test.sh       # oczekiwany wynik: smoke PASSED
 ```
 
-Backup / restore check:
+Pierwszy build trwa kilka minut. Po starcie:
 
-```bash
-./scripts/backup.sh
-./scripts/restore-test.sh
+| Co | Adres | Konto lokalne |
+|---|---|---|
+| SurfaceX | http://localhost:8080 | `admin` / `changeme` |
+| DefectDojo | http://localhost:8081 | `admin` / `changeme` |
+| Cel demonstracyjny | http://localhost:18088 | — |
+
+Konto `admin` / `changeme` jest przeznaczone wyłącznie do uruchomienia lokalnego — przed udostępnieniem instancji ustaw `BOOTSTRAP_ADMIN_PASSWORD` w `.env`.
+
+Najczęstsze warianty:
+
+- port `8080` zajęty → `GATEWAY_HTTP_PORT=18080` w `.env`;
+- bez DefectDojo (mniej RAM) → usuń `COMPOSE_PROFILES=defectdojo` z `.env`;
+- DefectDojo nie wstaje → `./scripts/doctor-defectdojo.sh`, potem `./scripts/start-defectdojo.sh`;
+- zatrzymanie z zachowaniem danych → `docker compose down`.
+
+## Pierwszy skan w 2 minuty
+
+Stos startuje z wbudowanym celem `lab-target` oraz gotową grupą `lab-local`.
+
+1. Zaloguj się na http://localhost:8080 jako `admin`.
+2. Na **Dashboardzie** zaznacz moduł `full-pipeline` — skan grupy używa modułów wybranych na Dashboardzie.
+3. W zakładce **Groups** kliknij **Scan now** przy grupie `lab-local`.
+4. W zakładce **Scans** obserwuj postęp i konsolę aktywności, a po zakończeniu otwórz **Findings**, dodaj notatkę do wyniku (**Add override**) i pobierz **Export JSON** / **Export CSV**.
+5. Wróć na **Dashboard**: sekcja **Curiosity** pokazuje najważniejsze znaleziska, a **Changes over time** zmiany między skanami.
+
+Pełny scenariusz dwóch skanów ze zmianą środowiska (laboratorium 7 kontenerów): [docs/demo-script.md](docs/demo-script.md). Obsługa interfejsu krok po kroku: [docs/instrukcja-uzytkownika.md](docs/instrukcja-uzytkownika.md).
+
+## Architektura w skrócie
+
+```text
+Przeglądarka → gateway (nginx :8080) → web (React)
+                                     → api (Django REST) → PostgreSQL
+                                                         → Redis → worker (Celery: nmap, httpx, sygnatury)
+                                                                     │ wyniki przez /api/internal/ (token)
+                                       api ◀─────────────────────────┘
+                                       api ⇢ DefectDojo (opcjonalny profil)
 ```
 
-`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Lokalnie Compose domyślnie ustawia też `SEED_DEMO_CHART=1` — tydzień przykładowych skanów z lifecycle pod wykres **Changes over time** (wyłącz w `.env`: `SEED_DEMO_CHART=0`; odtwórz: `docker compose exec api python manage.py seed_demo_chart --force`). Hostowo: `http://127.0.0.1:18088`.
-
-`.env.example` ustawia `COMPOSE_PROFILES=defectdojo`, więc DefectDojo startuje razem ze stosem.
-
-Jeśli kolega ma stare `.env` bez tej linii, DefectDojo **nie wstanie** mimo działającego Compose — wtedy:
-
-```bash
-./scripts/doctor-defectdojo.sh
-./scripts/start-defectdojo.sh
-```
-
-UI: [http://localhost:8080](http://localhost:8080) (albo port z `GATEWAY_HTTP_PORT` w `.env`)  
-API health: `/api/health/` na tym samym porcie  
-
-Domyślne konto wyłącznie dla lokalnego developmentu: `admin` / `changeme`. Przed uruchomieniem współdzielonego środowiska ustaw własne `BOOTSTRAP_ADMIN_PASSWORD` w `.env`.
-
-Jeśli hostowy port `8080` jest zajęty, ustaw np. `GATEWAY_HTTP_PORT=18080`.
-
-### DefectDojo
-
-DefectDojo 3.5.202 jest profilem Compose. Nowe instalacje (`cp .env.example .env`) mają `COMPOSE_PROFILES=defectdojo` i startują DD razem z SurfaceX.
-
-Jeśli Compose działa, a DD nie:
-
-```bash
-./scripts/doctor-defectdojo.sh   # pokaże dlaczego
-./scripts/start-defectdojo.sh    # sekrety + profil + pull + up
-```
-
-- UI DefectDojo: [http://localhost:8081](http://localhost:8081)
-- Domyślne konto lokalne: `admin` / `changeme` (to samo zapisuje `./scripts/init-secrets.sh` w `secrets/defectdojo_admin_password`)
-- Inne hasło: `DEFECTDOJO_ADMIN_PASSWORD=... ./scripts/init-secrets.sh`, potem świeży volume DefectDojo (`docker volume rm surfacex_defectdojo_postgres`)
-
-Checklist:
-
-1. **Profil** — w `.env` musi być `COMPOSE_PROFILES=defectdojo` albo każde `up` z `--profile defectdojo`.
-2. **Sekrety** — `./scripts/init-secrets.sh` (pliki `secrets/defectdojo_*`).
-3. **Pull** — dostęp do `registry.defectdojo.com`.
-4. **Port** — domyślnie `8081` (`DEFECTDOJO_HTTP_PORT`).
-5. **Initializer** — `docker compose --profile defectdojo logs defectdojo-initializer`; po padnięciu: usuń volume `surfacex_defectdojo_postgres` i odpal `./scripts/start-defectdojo.sh`.
-6. **RAM** — ok. 3–4 GB ponad SurfaceX.
-
-Po zakończeniu skanu SurfaceX automatycznie wysyła aktywne hosty, otwarte usługi i wykryte technologie do DefectDojo jako informacyjne findings (`reimport-scan`). Status wysyłki widać w konsoli aktywności i na liście skanów. Produkt, engagement i test są tworzone automatycznie.
-
-Zatrzymanie bez usuwania wolumenów:
-
-```bash
-docker compose down
-```
-
-## Build
-
-| Cel | Komenda |
+| Usługa | Rola |
 |---|---|
-| Cały stos lokalnie | `docker compose up --build` |
-| Tylko build obrazów | `docker compose build` |
-| Multi-arch Bake | `docker buildx bake` |
+| `gateway` | jedyny port SurfaceX wystawiony na hoście |
+| `web` | interfejs React/TypeScript |
+| `api` | REST API, RBAC, normalizacja wyników, porównania, eksport |
+| `scheduler` | Celery Beat: harmonogramy i odtwarzanie kolejki |
+| `worker` | wykonanie skanów; jedyna usługa z ruchem do skanowanych sieci, bez dostępu do bazy |
+| `postgres`, `redis` | dane trwałe; kolejka i cache |
+| `backup` | cykliczny, zaszyfrowany zrzut bazy |
+| `lab-target` | wbudowany cel demonstracyjny |
+| `defectdojo*` | opcjonalny DefectDojo 3.5.202 |
 
-Obrazy:
-
-- `surfacex-gateway` — jedyny publikowany port (`GATEWAY_HTTP_PORT`, domyślnie `8080`)
-- `surfacex-web` — statyczny bundle React z multi-stage build (Vite `dist/` **nie** trafia do Gita)
-- `surfacex-api` — Django/Gunicorn + Celery beat + backup
-- `surfacex-worker` — Celery worker z `nmap` i przypiętym ProjectDiscovery httpx
-- `defectdojo-*` — opcjonalny, przypięty stos DefectDojo uruchamiany profilem
-
-## Artefakty, których nie commitować
-
-`.gitignore` i `.dockerignore` blokują m.in.:
-
-- `web/node_modules/`, `web/dist/`, `web/build/`
-- `.env`, `secrets/*` (poza README/`.gitkeep`)
-- `__pycache__/`, `.venv/`
-- lokalne backupy
-
-Frontend jest budowany wyłącznie w obrazie (`Dockerfile.web`). Nie wrzucaj gotowego bundla do repozytorium.
-
-## Sieci
-
-| Sieć | Usługi |
-|---|---|
-| `edge` | gateway, web |
-| `backend` (internal) | api, scheduler, postgres, redis, backup (+ gateway do API) |
-| `scanner` | worker (egress do celów) |
-| `defectdojo` (internal) | uWSGI, Celery, PostgreSQL i Valkey DefectDojo |
-
-Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła PostgreSQL — wyniki mają iść przez API. Opcjonalny nginx DefectDojo publikuje osobny port `DEFECTDOJO_HTTP_PORT` (domyślnie `8081`).
+Sieci: `edge` (wejście), `backend` (wewnętrzna, bez wyjścia na zewnątrz), `scanner` (ruch do celów), `defectdojo` (wewnętrzna). Szczegóły: [docs/architecture.md](docs/architecture.md).
 
 ## Dokumentacja
 
-- [Plan MVP](docs/mvp-plan.md)
-- [Architektura](docs/architecture.md)
-- [API](docs/api.md)
-- [Model danych](docs/data-model.md)
-- [Polityka skanowania](docs/scanning-policy.md)
-- [Sygnatury](docs/signatures.md)
-- [Import i eksport](docs/import-export.md)
-- [Pasywne rozpoznanie](docs/passive-discovery.md)
-- [RBAC](docs/rbac.md)
-- [Szyfrowanie](docs/encryption.md)
-- [Bezpieczeństwo](docs/security.md)
-- [Operacje](docs/operations.md)
-- [Backup i odtworzenie](docs/backup-restore.md)
-- [Scenariusz demo](docs/demo-script.md)
-- [Lab demo](demo/README.md)
-- [Platformy lokalne](docs/local-platforms.md)
-- Skrypty: `scripts/preflight.sh`, `smoke-test.sh`, `backup.sh`, `restore-test.sh`
-- [Logowanie i MFA](docs/auth-mfa.md)
-- [ADR-001: wybór silnika HTTP fingerprintingu](docs/adr-001-http-fingerprinting.md)
+Zacznij od **[dokumentacji technicznej](docs/dokumentacja-techniczna.md)** — opisuje całość, zawiera mapę wymagań zadania i listę znanych ograniczeń.
 
-## Poza zakresem MVP
+| Temat | Dokument |
+|---|---|
+| Całość rozwiązania, mapa wymagań | [docs/dokumentacja-techniczna.md](docs/dokumentacja-techniczna.md) |
+| Obsługa interfejsu | [docs/instrukcja-uzytkownika.md](docs/instrukcja-uzytkownika.md) |
+| Scenariusz demonstracji, laboratoria | [docs/demo-script.md](docs/demo-script.md), [demo/README.md](demo/README.md) |
+| Architektura, sieci, granice zaufania | [docs/architecture.md](docs/architecture.md) |
+| API REST | [docs/api.md](docs/api.md) |
+| Model danych i cykl życia obserwacji | [docs/data-model.md](docs/data-model.md) |
+| Zasady i limity skanowania | [docs/scanning-policy.md](docs/scanning-policy.md) |
+| Własne sygnatury | [docs/signatures.md](docs/signatures.md) |
+| Import, eksport, DefectDojo | [docs/import-export.md](docs/import-export.md) |
+| Grupy i harmonogramy | [docs/groups-schedules.md](docs/groups-schedules.md) |
+| Pasywne rozpoznanie (crt.sh, RDAP) | [docs/passive-discovery.md](docs/passive-discovery.md) |
+| Role i uprawnienia, logowanie, MFA | [docs/rbac.md](docs/rbac.md), [docs/auth-mfa.md](docs/auth-mfa.md) |
+| Szyfrowanie, model zagrożeń | [docs/encryption.md](docs/encryption.md), [docs/security.md](docs/security.md) |
+| Eksploatacja, backup i odtworzenie | [docs/operations.md](docs/operations.md), [docs/backup-restore.md](docs/backup-restore.md) |
+| Platformy (Linux, macOS, Windows; amd64, arm64) | [docs/local-platforms.md](docs/local-platforms.md) |
+| Licencje, wykorzystanie AI, zgodność z regulaminem | [docs/ai-and-dependencies.md](docs/ai-and-dependencies.md) |
+| Decyzja architektoniczna: httpx | [docs/adr-001-http-fingerprinting.md](docs/adr-001-http-fingerprinting.md) |
 
-- Terraform, Ansible i Kubernetes;
-- eksploatacja podatności, brute force i logowanie do celów;
-- WhatWeb i Nuclei jako obowiązkowe narzędzia;
-- Windows Containers;
-- wysokodostępny klaster produkcyjny.
+## Testy
+
+```bash
+docker compose exec -T api python manage.py test apps --settings=config.settings_test   # 97 testów
+./scripts/smoke-test.sh                                                                  # test dymny instancji
+./scripts/backup.sh && ./scripts/restore-test.sh                                         # backup i odtworzenie
+```
+
+## Struktura repozytorium
+
+| Katalog | Zawartość |
+|---|---|
+| `backend/` | API Django, logika skanów, zadania Celery, testy |
+| `web/` | frontend React/TypeScript (bundle powstaje wyłącznie w obrazie) |
+| `signatures/` | sygnatury detekcyjne YAML |
+| `schemas/` | schemat JSON formatu eksportu |
+| `deploy/` | Dockerfile, konfiguracja nginx, cel demonstracyjny, ustawienia DefectDojo |
+| `scripts/` | preflight, sekrety, test dymny, backup, diagnostyka DefectDojo |
+| `demo/` | laboratorium demonstracyjne, nagranie i prezentacja |
+| `docs/` | dokumentacja |
+
+Sekretów, pliku `.env`, katalogów `node_modules/` i `dist/` ani lokalnych backupów nie commitujemy — pilnują tego `.gitignore` i `.dockerignore`.
+
+## Zakres i ograniczenia
+
+SurfaceX wykonuje wyłącznie rozpoznanie: nie loguje się do usług, nie zgaduje haseł, nie eksploatuje podatności i nie śledzi przekierowań. Skanuj tylko sieci, do których masz uprawnienia — zakres wymusza allowlista.
+
+Prototyp powstał w 24 godziny i działa jako lokalny stos Docker Compose (bez wysokiej dostępności, bez Kubernetes). Konfiguracja domyślna jest przeznaczona do pracy lokalnej i w laboratorium. Pełna lista świadomych ograniczeń: [rozdział 16 dokumentacji technicznej](docs/dokumentacja-techniczna.md#16-znane-ograniczenia).

@@ -54,21 +54,24 @@ spec:
 
 | Typ | Pola | Opis |
 |---|---|---|
-| `header` | `name`, `equals` / `contains` / `regex` | nagłówek odpowiedzi |
+| `header` | `name`, `equals` / `contains` / `regex` (bez nich: sama obecność) | nagłówek odpowiedzi |
 | `cookie` | `name` | wyłącznie nazwa cookie, bez wartości |
-| `html` | `contains` / `regex` | ograniczony fragment body |
-| `favicon` | `hash` | hash favicon z httpx |
-| `path` | `path`, `status` | ścieżka względna, np. `/login` |
-| `versionRegex` | `source`, `pattern` | wyciągnięcie wersji |
+| `html` | `contains` / `regex` | fragment treści strony |
+| `favicon` | `hash` | hash favicony (mmh3) zwracany przez httpx |
+| `path` | `path`, `status` | badany adres zawiera podaną ścieżkę i (opcjonalnie) ma jeden z podanych kodów |
+| `status` | `status` | kod odpowiedzi HTTP |
+| `versionRegex` | `source` (`html` albo nazwa nagłówka), `pattern` | wyciągnięcie wersji; pierwsza grupa wzorca trafia do pola `version` |
+
+Każda reguła może mieć `weight` (domyślnie 10). Porównania tekstu nie rozróżniają wielkości liter.
 
 ## Ograniczenia bezpieczeństwa
 
-- `path` musi być względna i zaczynać się od `/`;
-- zabronione są schematy `http://`, `https://` oraz hosty w ścieżce;
-- regex ma limit długości wzorca, czasu wykonania i długości wejścia;
-- body do analizy wynosi maksymalnie 64 KiB;
-- wartości cookies nie są porównywane ani zapisywane w jawnej postaci;
-- `matchAny: false` wymaga sumy wag zgodnych reguł; `true` kończy przy pierwszej trafionej regule z wagą.
+- `path` musi być względna i zaczynać się od `/`; schematy `http://`, `https://` oraz hosty w ścieżce są odrzucane;
+- wzorzec regex może mieć najwyżej 200 znaków i jest stosowany do pierwszych 32 KiB wejścia; błędny wzorzec jest pomijany;
+- treść strony do analizy to najwyżej 64 KiB;
+- wartości cookies nie są porównywane ani zapisywane;
+- sygnatura nie wykonuje żadnych dodatkowych żądań — działa wyłącznie na odpowiedziach już zebranych przez httpx;
+- `matchAny: false` sumuje wagi wszystkich trafionych reguł; `true` kończy na pierwszej trafionej regule.
 
 ## Confidence score
 
@@ -101,8 +104,24 @@ spec:
       weight: 40
 ```
 
-## Przechowywanie
+## Dodanie własnej sygnatury
 
-- wbudowane sygnatury: katalog `signatures/`;
-- sygnatury użytkownika: baza PostgreSQL z wersjonowaniem;
-- każda detekcja zapisuje `signature_id`, wersję, evidence i score.
+1. Zapisz plik `signatures/<nazwa>.yaml` (jeden dokument `kind: Signature` na plik).
+2. Przebuduj i uruchom ponownie obrazy, które zawierają katalog sygnatur:
+
+   ```bash
+   docker compose up --build -d api worker
+   ```
+
+3. Uruchom skan z modułem `signatures` albo `full-pipeline`.
+4. Sprawdź wynik w **Findings**: obserwacje typu `signature` z polami `signature_id`, `technology`, `confidence`, `level`, `version` i `evidence` (lista trafionych reguł).
+
+Sygnatury są wczytywane przy starcie procesu workera, dlatego zmiana pliku wymaga przebudowania obrazu. Plik z błędem składni YAML albo bez `kind: Signature` jest pomijany.
+
+Wbudowany zestaw: `wordpress-core`, `nginx-server`, `apache-httpd`.
+
+## Ograniczenia prototypu
+
+- Sygnatury są plikami w repozytorium; nie ma edytora w UI ani wersjonowania w bazie.
+- httpx odpytuje adres główny każdego endpointu (`scheme://host:port`), więc reguła `path` trafia tylko wtedy, gdy ścieżka jest częścią badanego adresu. Filtr `pathsExtra` modułu `signatures` jest walidowany, ale nie powoduje jeszcze dodatkowych żądań.
+- Filtry `pack` i `minConfidence` modułu `signatures` nie zawężają jeszcze zestawu — dopasowywane są wszystkie wczytane sygnatury.
