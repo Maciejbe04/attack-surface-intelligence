@@ -302,7 +302,7 @@ function ScanTable({
   }
 
   return (
-    <table className="hosts">
+    <table className="hosts scans-table">
       <caption className="sr-only">{t("Discovery scan runs")}</caption>
       <thead>
         <tr>
@@ -326,7 +326,17 @@ function ScanTable({
           return (
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
-              <td className="scan-targets">
+              <td
+                className="scan-targets"
+                title={
+                  [
+                    scan.group_name ? `${t("Group")}: ${scan.group_name}` : "",
+                    scan.targets.length > 0 ? scan.targets.join(", ") : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
+              >
                 {scan.group_name && (
                   <span className="scan-origin">
                     <span className="group-chip">{scan.group_name}</span>
@@ -375,7 +385,16 @@ function ScanTable({
                   </span>
                 )}
               </td>
-              <td>{new Date(scan.created_at).toLocaleString()}</td>
+              <td
+                title={new Date(scan.created_at).toLocaleString()}
+              >
+                {new Date(scan.created_at).toLocaleString(undefined, {
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </td>
               <td className="scan-actions">
                 <button
                   type="button"
@@ -383,7 +402,7 @@ function ScanTable({
                   onClick={() => onOpenConsole(scan)}
                   aria-pressed={focused}
                 >
-                  {focused ? t("Viewing report") : t("View report")}
+                  {focused ? t("Open") : t("Report")}
                 </button>
                 {scan.resume_available && canMutate && (
                   <button
@@ -2642,23 +2661,25 @@ export function App() {
                 t={t}
               />
 
-              <FindingsPanel
-                scan={consoleScan}
-                scans={scans}
-                canMutate={canMutate}
-                canExport={canExport}
-                onScanUpdated={(updated) => {
-                  setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                  setConsoleScan({
-                    ...updated,
-                    events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
-                    batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
-                  });
-                  setScanRefreshKey((value) => value + 1);
-                }}
-                pushToast={pushToast}
-                t={t}
-              />
+              {consoleScanId !== null && (
+                <FindingsPanel
+                  scan={consoleScan}
+                  scans={scans}
+                  canMutate={canMutate}
+                  canExport={canExport}
+                  onScanUpdated={(updated) => {
+                    setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                    setConsoleScan({
+                      ...updated,
+                      events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
+                      batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
+                    });
+                    setScanRefreshKey((value) => value + 1);
+                  }}
+                  pushToast={pushToast}
+                  t={t}
+                />
+              )}
             </>
           )}
 

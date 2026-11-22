@@ -319,6 +319,8 @@ const PL: Record<string, string> = {
   Hide: "Ukryj",
   "View report": "Zobacz raport",
   "Viewing report": "Podgląd raportu",
+  Report: "Raport",
+  Open: "Podgląd",
   "Scan activity log": "Dziennik aktywności skanu",
   "Waiting for the next scan run.": "Oczekiwanie na kolejny przebieg skanu.",
   "No activity events yet for this scan.": "Brak zdarzeń aktywności dla tego skanu.",

@@ -209,17 +209,28 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: var(--space-m) var(--space-xl);
+  gap: var(--space-m) var(--space-l);
   padding: var(--space-m) var(--space-l);
   border-bottom: 1px solid var(--aws-border-light);
   background: var(--aws-table-header);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .target-filters__field {
   display: flex;
+  flex: 1 1 10rem;
   flex-direction: column;
   gap: var(--space-xs);
-  min-width: 200px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.target-filters__field .input,
+.target-filters__field .input--select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .target-filters__field > label {
