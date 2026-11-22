@@ -55,7 +55,7 @@ function attrsPreview(attrs: Record<string, unknown>): string {
     return parts.slice(0, 5).join(" · ") || "Passive discovery";
   }
   const parts: string[] = [];
-  for (const key of ["issuer", "subject", "not_after", "technology", "level", "confidence", "port", "status_code", "title", "server", "state", "version", "product"]) {
+  for (const key of ["issuer", "subject", "not_after", "headers_summary", "cookies_summary", "cookie_tech", "technology", "level", "confidence", "port", "status_code", "title", "server", "state", "version", "product"]) {
     if (attrs[key] != null && attrs[key] !== "") {
       parts.push(`${key}=${String(attrs[key])}`);
     }

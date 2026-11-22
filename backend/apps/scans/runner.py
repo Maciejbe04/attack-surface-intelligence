@@ -334,6 +334,9 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
         str(rate_limit),
         "-threads",
         "50",
+        # Response headers (incl. Set-Cookie) for interesting-header/cookie signals
+        # and header/cookie signature rules. Redirects are still not followed.
+        "-include-response-header",
     ]
     if http_filters.get("techDetect", full is not None):
         arguments.append("-tech-detect")
