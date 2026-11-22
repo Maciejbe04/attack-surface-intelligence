@@ -6,6 +6,7 @@ import ipaddress
 import socket
 from typing import Iterable
 
+from django.conf import settings
 from django.contrib.auth.models import User
 
 from .models import AllowlistEntry, Target
@@ -143,6 +144,13 @@ def assert_resolvable_allowed(owner: User, address: str, target_type: str) -> li
         return []
 
     if not _allowlist_has_ip_or_cidr(owner):
+        return resolved
+
+    # A domain explicitly added to the allowlist authorizes that hostname.
+    # The resolved-IP intersection is an extra guard, off by default; turn it on
+    # with SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP=1 to also require the resolved
+    # address to fall inside the allowed IP/CIDR ranges.
+    if not getattr(settings, "SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP", False):
         return resolved
 
     denied = [ip for ip in resolved if not is_value_allowed(owner, ip, "ip")]

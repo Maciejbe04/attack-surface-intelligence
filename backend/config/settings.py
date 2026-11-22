@@ -212,6 +212,9 @@ API_INTERNAL_URL = os.environ.get("API_INTERNAL_URL", "http://api:8000")
 ROLE = os.environ.get("ROLE", "api")
 # Global scan deadline (seconds). Always applied when a client omits window_seconds
 # so unlimited scans cannot be started by accident. Override via env.
+# A domain in the allowlist authorizes that hostname. Set to 1 to also require
+# its resolved IP to fall inside the allowed IP/CIDR ranges (stricter).
+SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP = os.environ.get("SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP", "0") == "1"
 SCAN_DEFAULT_WINDOW_SECONDS = max(
     60,
     int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "3600") or "3600"),

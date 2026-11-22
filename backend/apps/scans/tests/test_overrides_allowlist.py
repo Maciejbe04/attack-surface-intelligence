@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -103,8 +103,12 @@ class AllowlistTests(TestCase):
             "apps.scans.allowlist.resolve_ips",
             return_value=["198.51.100.9"],
         ):
-            with self.assertRaises(Exception) as ctx:
-                assert_resolvable_allowed(self.user, "onet.pl", "domain")
+            # Default: a domain entry authorizes the hostname regardless of its IP.
+            assert_resolvable_allowed(self.user, "onet.pl", "domain")
+            # Strict mode additionally requires the resolved IP to be in range.
+            with override_settings(SCAN_ALLOWLIST_ENFORCE_RESOLVED_IP=True):
+                with self.assertRaises(Exception) as ctx:
+                    assert_resolvable_allowed(self.user, "onet.pl", "domain")
         self.assertIn("outside allowlist", str(ctx.exception))
 
 
