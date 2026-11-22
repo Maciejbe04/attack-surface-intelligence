@@ -29,7 +29,7 @@ Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
 | Konfiguracja okna skanu | tak | nie (stałe 1 h) | nie | nie |
 | CRUD sygnatur | tak | tak | nie | nie |
 | Podgląd dashboardu i historii | tak | tak | tak | tak |
-| Eksport CSV/JSON | tak | tak | tak | tak |
+| Eksport CSV/JSON | tak | tak | tak | nie |
 | Import celów | tak | tak | nie | nie |
 | Import wyników | tak | tak | tak | nie |
 | Manual override / tagi / notatki | tak | tak | tak | nie |

@@ -89,6 +89,11 @@ const PL: Record<string, string> = {
     "Tylko odczyt: cele, grupy, skany i findings.",
   "Cannot export, scan, or change any data.":
     "Bez eksportu, skanowania i zmiany danych.",
+  "View the audit log.": "Podgląd dziennika audytu.",
+  "Import targets and scan results.": "Import celów i wyników skanów.",
+  "Edit findings: tags, notes and overrides (kept across rescans).":
+    "Edycja findings: tagi, notatki i nadpisania (zostają po kolejnych skanach).",
+  "Import scan results (JSON / CSV).": "Import wyników skanów (JSON / CSV).",
   Accounts: "Konta",
   users: "użytkowników",
   Disabled: "Wyłączony",
