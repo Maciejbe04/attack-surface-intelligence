@@ -38,6 +38,22 @@ function formatEta(seconds: number | null | undefined): string {
 }
 
 function attrsPreview(attrs: Record<string, unknown>): string {
+  if (attrs.passive === true) {
+    const parts: string[] = [];
+    const owner = attrs.rdap_name || attrs.rdap_handle;
+    if (owner != null && String(owner).trim()) parts.push(String(owner).trim());
+    if (attrs.country != null && String(attrs.country).trim()) {
+      parts.push(String(attrs.country).trim());
+    }
+    if (attrs.network != null && String(attrs.network).trim()) {
+      parts.push(String(attrs.network).trim());
+    }
+    const asnList = Array.isArray(attrs.asns) ? attrs.asns : [];
+    if (asnList.length > 0) parts.push(`AS${asnList.slice(0, 3).join(",")}`);
+    const count = Number(attrs.subdomain_count);
+    if (Number.isFinite(count) && count > 0) parts.push(`${count} CT`);
+    return parts.slice(0, 5).join(" · ") || "Passive discovery";
+  }
   const parts: string[] = [];
   for (const key of ["technology", "level", "confidence", "port", "status_code", "title", "server", "state"]) {
     if (attrs[key] != null && attrs[key] !== "") {
@@ -634,7 +650,7 @@ export function FindingsPanel({
               <p className="field-help">{t("No observations for this filter.")}</p>
             ) : (
               <div className="table-wrap">
-                <table className="hosts">
+                <table className="hosts findings-table">
                   <caption className="sr-only">{t("Observations")}</caption>
                   <thead>
                     <tr>
@@ -655,14 +671,16 @@ export function FindingsPanel({
                           </span>
                         </td>
                         <td className="mono">{row.entity_type}</td>
-                        <td className="mono">{row.entity_key}</td>
+                        <td className="mono" title={row.entity_key}>
+                          {row.entity_key}
+                        </td>
                         <td>
                           <CuriosityBadge
                             value={curiosityFromAttrs(row.effective_attrs || row.attrs)}
                             t={t}
                           />
                         </td>
-                        <td>
+                        <td className="findings-table__details">
                           {attrsPreview(row.effective_attrs || row.attrs)}
                           {(row.tags?.length || row.notes) && (
                             <div className="field-help">

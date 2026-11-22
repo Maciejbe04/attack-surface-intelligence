@@ -1083,10 +1083,18 @@ export function App() {
       () => {
         const targetId =
           focus === "report" ? "scan-findings-report" : "scan-activity-console";
-        document.getElementById(targetId)?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
+        const target = document.getElementById(targetId);
+        const scroller = document.querySelector(".layout__main");
+        if (target && scroller instanceof HTMLElement) {
+          const top =
+            target.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top +
+            scroller.scrollTop -
+            12;
+          scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        } else {
+          target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
       },
       jumpToScans ? 120 : 0,
     );
@@ -2664,10 +2672,18 @@ export function App() {
                   setConsoleScan(null);
                 }}
                 onViewReport={() => {
-                  document.getElementById("scan-findings-report")?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
+                  const target = document.getElementById("scan-findings-report");
+                  const scroller = document.querySelector(".layout__main");
+                  if (target && scroller instanceof HTMLElement) {
+                    const top =
+                      target.getBoundingClientRect().top -
+                      scroller.getBoundingClientRect().top +
+                      scroller.scrollTop -
+                      12;
+                    scroller.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+                  } else {
+                    target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                  }
                 }}
                 t={t}
               />

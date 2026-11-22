@@ -202,6 +202,15 @@ class PassiveDiscoveryTests(TestCase):
         self.assertEqual(len(passive_rows), 1)
         self.assertEqual(passive_rows[0]["entity_type"], Observation.EntityType.HOST)
         self.assertEqual(passive_rows[0]["attrs"]["subdomain_count"], 2)
+        self.assertEqual(
+            passive_rows[0]["attrs"]["subdomains_preview"],
+            ["api.example.com", "www.example.com"],
+        )
+        self.assertNotIn("subdomains", passive_rows[0]["attrs"])
         self.assertEqual(passive_rows[0]["attrs"]["rdap_name"], "Example Org")
         self.assertEqual(passive_rows[0]["attrs"]["asns"], [64500])
         self.assertEqual(passive_rows[0]["evidence"][0]["kind"], "passive")
+        self.assertEqual(
+            passive_rows[0]["evidence"][0]["payload"]["subdomains"],
+            ["api.example.com", "www.example.com"],
+        )

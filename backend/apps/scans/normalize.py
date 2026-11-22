@@ -245,9 +245,11 @@ def extract_observation_rows(
             asns = rdap.get("asns") if isinstance(rdap, dict) else []
             if not isinstance(asns, list):
                 asns = []
-            asns = [int(value) for value in asns if str(value).isdigit() or isinstance(value, int)][
-                :20
-            ]
+            asns = [
+                int(value)
+                for value in asns
+                if isinstance(value, int) or str(value).isdigit()
+            ][:20]
             summary_bits = []
             if rdap_name or rdap_handle:
                 summary_bits.append(rdap_name or rdap_handle)
@@ -256,6 +258,7 @@ def extract_observation_rows(
             if subdomains:
                 summary_bits.append(f"{len(subdomains)} CT name(s)")
             summary = "; ".join(summary_bits) or "Passive discovery"
+            # Keep attrs compact for Findings table; full CT list lives in evidence only.
             rows.append(
                 {
                     "entity_type": Observation.EntityType.HOST,
@@ -271,9 +274,12 @@ def extract_observation_rows(
                         "network": network,
                         "asns": asns,
                         "subdomain_count": len(subdomains),
-                        "subdomains": subdomains,
-                        "sources": sources,
-                        "warnings": warnings,
+                        "subdomains_preview": subdomains[:8],
+                        "sources": {
+                            "crt_sh": sources.get("crt_sh"),
+                            "rdap": sources.get("rdap"),
+                        },
+                        "warning_count": len(warnings),
                     },
                     "evidence": [
                         {

@@ -1823,6 +1823,55 @@ table.hosts {
   border-collapse: collapse;
 }
 
+table.findings-table {
+  table-layout: fixed;
+}
+
+table.findings-table th,
+table.findings-table td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+table.findings-table th:nth-child(1),
+table.findings-table td:nth-child(1) {
+  width: 6.5rem;
+}
+
+table.findings-table th:nth-child(2),
+table.findings-table td:nth-child(2) {
+  width: 5.5rem;
+}
+
+table.findings-table th:nth-child(3),
+table.findings-table td:nth-child(3) {
+  width: 18%;
+}
+
+table.findings-table th:nth-child(4),
+table.findings-table td:nth-child(4) {
+  width: 6.5rem;
+}
+
+table.findings-table th:nth-child(6),
+table.findings-table td:nth-child(6) {
+  width: 8.5rem;
+}
+
+table.findings-table .findings-table__details {
+  min-width: 0;
+}
+
+#scan-findings-report {
+  overflow: visible;
+}
+
+#scan-findings-report .panel__body {
+  min-width: 0;
+  overflow-x: auto;
+}
+
 table.scans-table {
   table-layout: fixed;
 }
