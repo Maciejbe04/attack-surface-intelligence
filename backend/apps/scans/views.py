@@ -61,6 +61,7 @@ from .normalize import (
     same_scan_scope,
 )
 from .overrides import overrides_for_keys
+from .passive import PassiveDiscoveryInputError, discover_passive
 from .permissions import CanExportFindings, IsAdmin, IsAdminOrOperator
 from .serializers import (
     AllowlistEntrySerializer,
@@ -164,6 +165,30 @@ class TargetDetailView(APIView):
             summary=f"Deleted target {address}",
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PassiveDiscoveryView(APIView):
+    permission_classes = (IsAuthenticated, IsAdminOrOperator)
+
+    def post(self, request: Request) -> Response:
+        try:
+            result = discover_passive(request.data.get("query"))
+        except PassiveDiscoveryInputError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        record_audit(
+            actor=request.user,
+            action="passive.discover",
+            object_type="passive_query",
+            object_id=result["query"],
+            summary=(
+                f"Passive discovery for {result['query']}: "
+                f"{len(result['subdomains'])} certificate name(s)"
+            ),
+        )
+        return Response(result)
 
 
 class TargetImportView(APIView):

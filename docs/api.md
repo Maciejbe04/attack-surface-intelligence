@@ -28,6 +28,14 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 | POST | `/api/groups/{id}/scan/` | admin/operator | skan całej grupy (`modules`, `client_request_id`, opcjonalnie `window_seconds`) |
 | PUT/DELETE | `/api/groups/{id}/schedule/` | admin/operator | harmonogram |
 
+## Pasywne rozpoznanie
+
+| Metoda | Ścieżka | Role | Opis |
+|---|---|---|---|
+| POST | `/api/passive/discover/` | admin/operator | `{"query":"example.com"}` albo IP → poddomeny (crt.sh) + skrót RDAP; cache Redis 15 min; bez auto-skanu |
+
+Odpowiedź: `query`, `type` (`domain`/`ip`), `subdomains`, `rdap` (lub `null`), `sources` (`ok`/`error`/`skipped`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Wybrane hosty zapisuje się osobno przez `POST /api/targets/`.
+
 ## Skany i wyniki
 
 | Metoda | Ścieżka | Role | Opis |

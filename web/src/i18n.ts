@@ -39,6 +39,27 @@ const PL: Record<string, string> = {
   "Switch to dark mode": "Przełącz na tryb ciemny",
   "Switch to light mode": "Przełącz na tryb jasny",
   "Add target": "Dodaj cel",
+  "Passive discovery": "Pasywne rozpoznanie",
+  "Domain or IP": "Domena lub IP",
+  Discover: "Odkryj",
+  "Discovering…": "Wyszukiwanie…",
+  "Passive discovery failed.": "Pasywne rozpoznanie nie powiodło się.",
+  "Certificate Transparency subdomains and RDAP ownership data. No scan is started.":
+    "Subdomeny z Certificate Transparency i dane właściciela z RDAP. Skan nie jest uruchamiany.",
+  Cached: "Z cache",
+  "Owner / handle": "Właściciel / identyfikator",
+  Network: "Sieć",
+  Country: "Kraj",
+  "Provider warning": "Ostrzeżenie dostawcy",
+  "Passive targets": "Cele pasywne",
+  "already saved": "już zapisany",
+  found: "znaleziono",
+  "Add selected targets": "Dodaj wybrane cele",
+  "Passive targets added": "Dodano cele pasywne",
+  "targets added": "dodanych celów",
+  "Some targets were not added": "Niektórych celów nie dodano",
+  "No certificate names found. RDAP data may still be available above.":
+    "Nie znaleziono nazw z certyfikatów. Dane RDAP mogą być dostępne powyżej.",
   "Not on the target list. Press Enter to add.":
     "Brak na liście celów. Enter dodaje od razu.",
   "No saved host matches. Type a valid IP, CIDR, or hostname.":

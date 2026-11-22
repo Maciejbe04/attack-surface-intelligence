@@ -14,6 +14,11 @@ urlpatterns = [
         views.TargetDetailView.as_view(),
         name="target-detail",
     ),
+    path(
+        "passive/discover/",
+        views.PassiveDiscoveryView.as_view(),
+        name="passive-discover",
+    ),
     path("groups/", group_views.GroupListCreateView.as_view(), name="group-list"),
     path(
         "groups/<int:group_id>/",
