@@ -370,6 +370,87 @@ def _signature_results(http_records: list[dict[str, Any]]) -> list[dict[str, Any
     return findings[:MAX_OBSERVATIONS]
 
 
+def _passive_lookup(
+    target: str,
+    target_type: str,
+    filters: dict[str, Any],
+) -> dict[str, Any]:
+    """Run crt.sh/RDAP for one scan target. Never expands inventory."""
+    include_crt = bool(filters.get("includeCrt", True))
+    include_rdap = bool(filters.get("includeRdap", True))
+    empty = {
+        "query": target,
+        "type": target_type,
+        "subdomains": [],
+        "rdap": None,
+        "sources": {
+            "crt_sh": "not_applicable",
+            "rdap": "not_applicable",
+        },
+        "warnings": [],
+        "cached": False,
+    }
+    if target_type not in {"domain", "ip"}:
+        empty["warnings"] = ["passive-discovery skips CIDR and non host targets"]
+        return empty
+    if not include_crt and not include_rdap:
+        empty["warnings"] = ["passive-discovery filters disabled crt.sh and RDAP"]
+        return empty
+
+    from .passive import (
+        PassiveDiscoveryInputError,
+        PassiveProviderError,
+        normalize_passive_query,
+        query_crt_sh,
+        query_rdap,
+    )
+
+    try:
+        kind, query = normalize_passive_query(target)
+    except PassiveDiscoveryInputError as exc:
+        empty["warnings"] = [str(exc)]
+        return empty
+
+    result = {
+        "query": query,
+        "type": kind,
+        "subdomains": [],
+        "rdap": None,
+        "sources": {
+            "crt_sh": "not_applicable",
+            "rdap": "not_applicable",
+        },
+        "warnings": [],
+        "cached": False,
+    }
+
+    if include_crt and kind == "domain":
+        try:
+            result["subdomains"] = query_crt_sh(query)
+            result["sources"]["crt_sh"] = "ok"
+        except PassiveProviderError as exc:
+            result["sources"]["crt_sh"] = "error"
+            result["warnings"].append(f"crt_sh: {exc}")
+        except Exception:
+            result["sources"]["crt_sh"] = "error"
+            result["warnings"].append("crt_sh: provider unavailable")
+    elif include_crt:
+        result["sources"]["crt_sh"] = "not_applicable"
+
+    if include_rdap:
+        try:
+            result["rdap"] = query_rdap(kind, query)
+            result["sources"]["rdap"] = "ok"
+        except PassiveProviderError as exc:
+            result["sources"]["rdap"] = "error"
+            result["warnings"].append(f"rdap: {exc}")
+        except Exception:
+            result["sources"]["rdap"] = "error"
+            result["warnings"].append("rdap: provider unavailable")
+
+    return result
+
+
 def execute_scan(
     job: dict[str, Any],
     *,
@@ -415,10 +496,12 @@ def execute_scan(
             f"nmap finished for {target}: {len(hosts)} host(s), {open_ports} open port(s).",
         )
     else:
-        report_progress(
-            55,
-            f"nmap skipped for {target} (HTTP/TLS/signature modules only).",
+        skipped_reason = (
+            "passive/HTTP/TLS/signature modules only"
+            if "passive-discovery" in selected
+            else "HTTP/TLS/signature modules only"
         )
+        report_progress(55, f"nmap skipped for {target} ({skipped_reason}).")
 
     needs_http = bool(
         {"http-fingerprint", "tls-cert", "signatures", "full-pipeline"} & set(selected)
@@ -440,19 +523,38 @@ def execute_scan(
             )
             http_records = _parse_httpx(httpx_output)
             report_progress(
-                90,
+                85,
                 f"httpx finished for {target}: {len(http_records)} HTTP observation(s).",
             )
         else:
-            report_progress(90, f"No HTTP endpoints to probe for {target}.")
+            report_progress(85, f"No HTTP endpoints to probe for {target}.")
     else:
-        report_progress(90, f"HTTP fingerprinting skipped for {target}.")
+        report_progress(85, f"HTTP fingerprinting skipped for {target}.")
 
     run_signatures = "signatures" in selected or bool(
         selected.get("full-pipeline", {}).get("includeSignatures")
     )
     if run_signatures:
-        report_progress(95, f"Matching signatures against observations for {target}.")
+        report_progress(90, f"Matching signatures against observations for {target}.")
+
+    passive_payload: dict[str, Any] | None = None
+    if "passive-discovery" in selected:
+        if should_cancel():
+            raise ScanCancelled("Scan cancellation requested.")
+        report_progress(92, f"Starting passive discovery (crt.sh/RDAP) for {target}.")
+        passive_payload = _passive_lookup(
+            target,
+            str(target_type or ""),
+            selected["passive-discovery"],
+        )
+        subdomain_count = len(passive_payload.get("subdomains") or [])
+        rdap_status = (passive_payload.get("sources") or {}).get("rdap", "n/a")
+        report_progress(
+            96,
+            f"Passive discovery for {target}: {subdomain_count} CT name(s), "
+            f"rdap={rdap_status}.",
+        )
+
     result = {
         "target": {"address": target, "type": target_type},
         "metadata": {
@@ -467,6 +569,7 @@ def execute_scan(
         "http": http_records,
         "signatures": _signature_results(http_records) if run_signatures else [],
         "endpoint_count": len(endpoints),
+        "passive": passive_payload,
     }
     if len(json.dumps(result, separators=(",", ":")).encode("utf-8")) > MAX_RESULT_BYTES:
         raise ScanRunnerError("Normalized result exceeded the 1.8 MiB limit.")

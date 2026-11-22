@@ -1,8 +1,20 @@
 # Pasywne rozpoznanie (crt.sh + RDAP)
 
-Minimalna, bezkluczowa integracja na stronie **Targets**: jedno zapytanie domeny albo IP zwraca poddomeny z Certificate Transparency (crt.sh) oraz skrót RDAP. Wybrane hosty zapisuje się jako zwykłe cele — **bez auto-skanu** i bez nowych tabel.
+Bezkluczowe źródła Certificate Transparency i RDAP działają na dwa sposoby — **panel Targets** (ad-hoc) oraz **moduł skanu** `passive-discovery`. Żaden z nich nie dodaje automatycznie hostów do inventory ani nie omija allowlisty.
 
-## Przepływ UI
+## Moduł skanu `passive-discovery`
+
+Na Dashboardzie / w liście modułów zaznacz **Passive discovery** (samodzielnie albo razem z nmap/httpx — nie z `full-pipeline`).
+
+W przebiegu worker dla każdego celu `domain`/`ip`:
+
+1. odpytuje crt.sh (gdy `includeCrt` i domena) oraz RDAP (gdy `includeRdap`);
+2. zapisuje wynik w payloadzie batcha `passive`;
+3. normalizacja tworzy obserwację hosta `passive:{query}` z evidence `kind=passive` (RDAP + lista nazw CT).
+
+CIDR jest pomijany z ostrzeżeniem. Awaria providera nie zabija batcha — trafia do `warnings` / `sources.*.error`. Moduł **nie** wchodzi automatycznie w `full-pipeline`.
+
+## Panel Targets (ad-hoc)
 
 1. `admin` / `operator` wpisuje domenę albo IP i klika **Discover**.
 2. Panel pokazuje skrót RDAP oraz listę kandydatów (dla domeny: poddomeny z crt.sh; dla IP: sam adres zapytania).
@@ -36,9 +48,10 @@ Zapis hostów: jak CRUD celów — nadal obowiązuje allowlista przy późniejsz
 
 ## Poza zakresem
 
-- brak auto-skanu po discover;
+- brak auto-dodawania odkrytych subdomen do skanu / allowlisty;
 - brak Shodan / SecurityTrails / innych płatnych API;
-- brak osobnej historii odkryć ani tabel `passive_*`;
-- brak bulk discover wielu domen naraz.
+- brak osobnych tabel `passive_*`;
+- brak bulk discover wielu domen naraz;
+- brak włączenia pasywnego wewnątrz `full-pipeline`.
 
 Kontrakt API: `docs/api.md`. Role: `docs/rbac.md`.

@@ -9,7 +9,8 @@ System wykonuje wyłącznie discovery. Dozwolone są:
 - identyfikacja usług przez nmap;
 - bezpieczne `HEAD` i `GET` HTTP/HTTPS;
 - odczyt certyfikatu TLS;
-- deklaratywne sprawdzenia sygnatur na dozwolonych ścieżkach.
+- deklaratywne sprawdzenia sygnatur na dozwolonych ścieżkach;
+- pasywne rozpoznanie (crt.sh / RDAP) jako moduł `passive-discovery` — bez auto-expand inventory; szczegóły: `docs/passive-discovery.md`.
 
 Zabronione są logowanie, brute force, fuzzing agresywny, eksploatacja podatności oraz śledzenie przekierowań poza allowlistę.
 

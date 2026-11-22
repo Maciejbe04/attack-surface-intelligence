@@ -299,6 +299,29 @@ export const PROBE_MODULES: ProbeModule[] = [
     ],
   },
   {
+    id: "passive-discovery",
+    name: "Passive discovery",
+    summary: "Certificate Transparency (crt.sh) and RDAP lookup for the target. Does not add hosts or scan them.",
+    tool: "crt.sh / RDAP",
+    category: "discovery",
+    filters: [
+      {
+        key: "includeCrt",
+        label: "Certificate Transparency (crt.sh)",
+        type: "boolean",
+        default: true,
+        help: "Domain targets only. Lists names in scope; does not auto-add targets.",
+      },
+      {
+        key: "includeRdap",
+        label: "RDAP summary",
+        type: "boolean",
+        default: true,
+        help: "Owner / network / ASN / nameservers when available.",
+      },
+    ],
+  },
+  {
     id: "full-pipeline",
     name: "Full discovery pipeline",
     summary: "nmap → httpx → signatures → confidence score.",

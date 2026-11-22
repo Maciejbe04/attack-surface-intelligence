@@ -9,6 +9,9 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from apps.accounts.models import UserProfile
+from apps.scans.models import Observation, ScanBatch, ScanRun, Target
+from apps.scans.modules import validate_modules
+from apps.scans.normalize import extract_observation_rows
 from apps.scans.passive import (
     PassiveDiscoveryInputError,
     PassiveProviderError,
@@ -144,3 +147,61 @@ class PassiveDiscoveryTests(TestCase):
             response = self.client.post(url, {"query": "example.com"}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["subdomains"], ["www.example.com"])
+
+    def test_passive_discovery_module_validation(self) -> None:
+        modules = validate_modules(
+            [{"id": "passive-discovery", "filters": {"includeCrt": False}}]
+        )
+        self.assertEqual(modules[0]["id"], "passive-discovery")
+        self.assertFalse(modules[0]["filters"]["includeCrt"])
+        self.assertTrue(modules[0]["filters"]["includeRdap"])
+
+    def test_normalize_maps_passive_payload_to_host_observation(self) -> None:
+        owner = self.operator
+        target = Target.objects.create(
+            owner=owner,
+            address="example.com",
+            target_type=Target.Type.DOMAIN,
+        )
+        run = ScanRun.objects.create(
+            owner=owner,
+            status=ScanRun.Status.RUNNING,
+            modules_snapshot=[{"id": "passive-discovery", "filters": {}}],
+        )
+        batch = ScanBatch.objects.create(
+            run=run,
+            target=target,
+            target_address="example.com",
+            status=ScanBatch.Status.COMPLETED,
+            result={},
+        )
+        rows = extract_observation_rows(
+            batch,
+            {
+                "hosts": [],
+                "http": [],
+                "signatures": [],
+                "passive": {
+                    "query": "example.com",
+                    "type": "domain",
+                    "subdomains": ["api.example.com", "www.example.com"],
+                    "rdap": {
+                        "handle": "D1",
+                        "name": "Example Org",
+                        "country": "US",
+                        "network": "",
+                        "asns": [64500],
+                        "nameservers": ["ns1.example.com"],
+                    },
+                    "sources": {"crt_sh": "ok", "rdap": "ok"},
+                    "warnings": [],
+                },
+            },
+        )
+        passive_rows = [row for row in rows if row["entity_key"] == "passive:example.com"]
+        self.assertEqual(len(passive_rows), 1)
+        self.assertEqual(passive_rows[0]["entity_type"], Observation.EntityType.HOST)
+        self.assertEqual(passive_rows[0]["attrs"]["subdomain_count"], 2)
+        self.assertEqual(passive_rows[0]["attrs"]["rdap_name"], "Example Org")
+        self.assertEqual(passive_rows[0]["attrs"]["asns"], [64500])
+        self.assertEqual(passive_rows[0]["evidence"][0]["kind"], "passive")

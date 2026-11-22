@@ -302,6 +302,14 @@ const PL: Record<string, string> = {
   "Grab certificate CN, issuer, and expiry.": "Pobieranie CN, wystawcy i daty wygaśnięcia certyfikatu.",
   "Custom signatures": "Własne sygnatury",
   "Run declarative SurfaceX signature rules.": "Uruchamianie deklaratywnych reguł sygnatur SurfaceX.",
+  "Certificate Transparency (crt.sh) and RDAP lookup for the target. Does not add hosts or scan them.":
+    "Certificate Transparency (crt.sh) i RDAP dla celu. Nie dodaje hostów ani ich nie skanuje.",
+  "Certificate Transparency (crt.sh)": "Certificate Transparency (crt.sh)",
+  "Domain targets only. Lists names in scope; does not auto-add targets.":
+    "Tylko domeny. Wypisuje nazwy w zakresie; nie dodaje celów automatycznie.",
+  "RDAP summary": "Skrót RDAP",
+  "Owner / network / ASN / nameservers when available.":
+    "Właściciel / sieć / ASN / nameservery, gdy dostępne.",
   "Full discovery pipeline": "Pełny proces rozpoznania",
   "nmap → httpx → signatures → confidence score.":
     "nmap → httpx → sygnatury → ocena pewności.",

@@ -61,6 +61,10 @@ MODULES: dict[str, dict[str, Field]] = {
         ),
         "pathsExtra": Field("paths", ""),
     },
+    "passive-discovery": {
+        "includeCrt": Field("boolean", True),
+        "includeRdap": Field("boolean", True),
+    },
     "full-pipeline": {
         "portProfile": Field(
             "choice",
