@@ -337,6 +337,10 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
         # Response headers (incl. Set-Cookie) for interesting-header/cookie signals
         # and header/cookie signature rules. Redirects are still not followed.
         "-include-response-header",
+        # Favicon mmh3 hash and response body so favicon / HTML-fragment /
+        # footer-version signature rules have data to match on (safe GET only).
+        "-favicon",
+        "-include-response",
     ]
     if http_filters.get("techDetect", full is not None):
         arguments.append("-tech-detect")
@@ -361,6 +365,19 @@ def _parse_httpx(output: bytes) -> list[dict[str, Any]]:
         if len(records) >= MAX_OBSERVATIONS:
             break
     return records
+
+
+_SLIM_DROP_FIELDS = ("body", "raw_header", "request", "response", "a", "knowledgebase", "chain")
+_MAX_STORED_BODY = 4000
+
+
+def _slim_http_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Drop heavy response fields before storing, keeping a short body excerpt."""
+    slim = {k: v for k, v in record.items() if k not in _SLIM_DROP_FIELDS}
+    body = record.get("body")
+    if isinstance(body, str) and body:
+        slim["body_excerpt"] = body[:_MAX_STORED_BODY]
+    return slim
 
 
 def _signature_results(http_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -558,6 +575,7 @@ def execute_scan(
             f"rdap={rdap_status}.",
         )
 
+    signature_results = _signature_results(http_records) if run_signatures else []
     result = {
         "target": {"address": target, "type": target_type},
         "metadata": {
@@ -569,8 +587,8 @@ def execute_scan(
             "redirects_followed": False,
         },
         "hosts": hosts,
-        "http": http_records,
-        "signatures": _signature_results(http_records) if run_signatures else [],
+        "http": [_slim_http_record(r) for r in http_records],
+        "signatures": signature_results,
         "endpoint_count": len(endpoints),
         "passive": passive_payload,
     }
