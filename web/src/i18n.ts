@@ -316,6 +316,7 @@ const PL: Record<string, string> = {
   Live: "Na żywo",
   "Refreshing…": "Odświeżanie…",
   "Clear console": "Wyczyść konsolę",
+  Hide: "Ukryj",
   "Scan activity log": "Dziennik aktywności skanu",
   "Waiting for the next scan run.": "Oczekiwanie na kolejny przebieg skanu.",
   "No activity events yet for this scan.": "Brak zdarzeń aktywności dla tego skanu.",
@@ -711,8 +712,13 @@ const PL: Record<string, string> = {
     "Potrzeba co najmniej dwóch ukończonych skanów z danymi lifecycle, żeby narysować zmiany.",
   "Lifecycle counts across recent finished scans.":
     "Liczniki lifecycle z ostatnich ukończonych skanów.",
-  "Click a bar to open that scan log.": "Kliknij słupek, żeby otworzyć log skanu.",
+  "Drag across chart to zoom. Dates mark scan completion time.":
+    "Zaznacz zakres myszką, aby przybliżyć. Daty oznaczają zakończenie skanu.",
   "Time range": "Zakres czasu",
+  "Chart size": "Rozmiar wykresu",
+  "Decrease chart height": "Zmniejsz wysokość wykresu",
+  "Increase chart height": "Zwiększ wysokość wykresu",
+  "Reset zoom": "Resetuj przybliżenie",
   "Last 24 hours": "Ostatnie 24 godziny",
   "Last 7 days": "Ostatnie 7 dni",
   "Last 30 days": "Ostatnie 30 dni",

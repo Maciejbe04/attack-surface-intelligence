@@ -1945,6 +1945,19 @@ export function App() {
                 </div>
               </section>
 
+              {consoleScanId !== null && (
+                <ScanConsole
+                  scan={consoleScan}
+                  loading={consoleLoading}
+                  clearLabel="Hide"
+                  onClear={() => {
+                    setConsoleScanId(null);
+                    setConsoleScan(null);
+                  }}
+                  t={t}
+                />
+              )}
+
               <ModulePanel
                 state={moduleState}
                 onToggleEnabled={toggleModuleEnabled}
@@ -2011,16 +2024,6 @@ export function App() {
                   />
                 </div>
               </section>
-
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
             </>
           )}
 
@@ -2614,6 +2617,7 @@ export function App() {
               <ScanConsole
                 scan={consoleScan}
                 loading={consoleLoading}
+                clearLabel="Hide"
                 onClear={() => {
                   setConsoleScanId(null);
                   setConsoleScan(null);

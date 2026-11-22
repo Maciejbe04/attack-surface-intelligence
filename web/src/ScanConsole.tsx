@@ -24,6 +24,7 @@ type Props = {
   loading: boolean;
   t: Translate;
   onClear?: () => void;
+  clearLabel?: string;
 };
 
 type ConsoleLine = {
@@ -183,7 +184,7 @@ function EventLine({ line }: { line: ConsoleLine }) {
   );
 }
 
-export function ScanConsole({ scan, loading, t, onClear }: Props) {
+export function ScanConsole({ scan, loading, t, onClear, clearLabel }: Props) {
   const sectionRef = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const active = scan ? ACTIVE_SCAN_STATUSES.has(scan.status) : false;
@@ -224,9 +225,9 @@ export function ScanConsole({ scan, loading, t, onClear }: Props) {
         <div className="scan-console__actions">
           {active && <span className="scan-console__live">{t("Live")}</span>}
           {loading && <span className="field-help">{t("Refreshing…")}</span>}
-          {scan && onClear && (
+          {onClear && (
             <button type="button" className="btn btn--normal" onClick={onClear}>
-              {t("Clear console")}
+              {t(clearLabel || "Hide")}
             </button>
           )}
         </div>
