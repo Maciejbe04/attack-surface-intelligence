@@ -1059,19 +1059,11 @@ html.theme-high-contrast .module-tile__drawer {
 }
 
 .layout__main {
-  /* Block scrollport — Chrome clips the bottom when this is a column flex + overflow. */
-  display: block;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.layout__main::after {
-  content: "";
-  display: block;
-  height: 2.5rem;
+  overflow: hidden;
 }
 
 .sidenav {
@@ -1118,7 +1110,11 @@ html.theme-high-contrast .module-tile__drawer {
   padding: var(--space-xl);
   padding-bottom: calc(var(--space-xl) + 3rem);
   min-width: 0;
+  min-height: 0;
   max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .content--enter {

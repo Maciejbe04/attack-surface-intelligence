@@ -1084,7 +1084,7 @@ export function App() {
         const targetId =
           focus === "report" ? "scan-findings-report" : "scan-activity-console";
         const target = document.getElementById(targetId);
-        const scroller = document.querySelector(".layout__main");
+        const scroller = document.querySelector(".content");
         if (target && scroller instanceof HTMLElement) {
           const top =
             target.getBoundingClientRect().top -
@@ -2673,7 +2673,7 @@ export function App() {
                 }}
                 onViewReport={() => {
                   const target = document.getElementById("scan-findings-report");
-                  const scroller = document.querySelector(".layout__main");
+                  const scroller = document.querySelector(".content");
                   if (target && scroller instanceof HTMLElement) {
                     const top =
                       target.getBoundingClientRect().top -
