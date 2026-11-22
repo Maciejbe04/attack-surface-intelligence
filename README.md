@@ -38,7 +38,7 @@ Backup / restore check:
 ./scripts/restore-test.sh
 ```
 
-`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Hostowo: `http://127.0.0.1:18088`.
+`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Lokalnie Compose domyślnie ustawia też `SEED_DEMO_CHART=1` — tydzień przykładowych skanów z lifecycle pod wykres **Changes over time** (wyłącz w `.env`: `SEED_DEMO_CHART=0`; odtwórz: `docker compose exec api python manage.py seed_demo_chart --force`). Hostowo: `http://127.0.0.1:18088`.
 
 `.env.example` ustawia `COMPOSE_PROFILES=defectdojo`, więc DefectDojo startuje razem ze stosem.
 

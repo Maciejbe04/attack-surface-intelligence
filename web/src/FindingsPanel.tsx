@@ -405,7 +405,7 @@ export function FindingsPanel({
           t={t}
         />
       )}
-    <section className="panel">
+    <section className="panel" id="scan-findings-report">
       <div className="panel__header">
         <h2>{t("Findings / Changes")}</h2>
         <div className="panel__actions">

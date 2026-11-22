@@ -9,10 +9,16 @@ type ZoomRange = { start: number; end: number };
 
 type Point = {
   id: number;
-  label: string;
   finishedAt: string;
   values: Record<ObservationLifecycle, number>;
   total: number;
+};
+
+type AxisTick = {
+  key: string;
+  left: string;
+  date: string;
+  time: string;
 };
 
 const RANGE_MS: Record<Exclude<RangeKey, "all">, number> = {
@@ -48,6 +54,18 @@ function formatAxisDate(iso: string): { date: string; time: string } {
   }
 }
 
+function pickAxisIndexes(length: number): number[] {
+  if (length <= 0) return [];
+  if (length === 1) return [0];
+  const maxTicks = length <= 8 ? length : 5;
+  const indexes = new Set<number>([0, length - 1]);
+  if (maxTicks <= 2) return [...indexes].sort((a, b) => a - b);
+  for (let step = 1; step < maxTicks - 1; step += 1) {
+    indexes.add(Math.round((step / (maxTicks - 1)) * (length - 1)));
+  }
+  return [...indexes].sort((a, b) => a - b);
+}
+
 function rangeLabel(key: RangeKey, t: Translate): string {
   if (key === "24h") return t("Last 24 hours");
   if (key === "7d") return t("Last 7 days");
@@ -61,6 +79,7 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
   const [zoom, setZoom] = useState<ZoomRange | null>(null);
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const allPoints = useMemo(() => {
     const rows: Point[] = [];
@@ -80,7 +99,6 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
       if (total <= 0) continue;
       rows.push({
         id: scan.id,
-        label: `#${scan.id}`,
         finishedAt: scan.finished_at || scan.created_at,
         values,
         total,
@@ -105,7 +123,7 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
 
   const maxTotal = Math.max(1, ...points.map((point) => point.total));
   const barMaxPx = chartSize === "small" ? 80 : chartSize === "large" ? 220 : 140;
-  const tickEvery = Math.max(1, Math.ceil(points.length / 6));
+  const dense = points.length > 10;
   const selectedStart =
     dragStart === null || dragCurrent === null ? null : Math.min(dragStart, dragCurrent);
   const selectedEnd =
@@ -113,6 +131,21 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
   const chartKey = `${range}-${zoom?.start ?? "full"}-${zoom?.end ?? "full"}-${chartSize}-${points
     .map((point) => point.id)
     .join(",")}`;
+
+  const axisTicks = useMemo(() => {
+    const indexes = pickAxisIndexes(points.length);
+    return indexes.map((index): AxisTick => {
+      const point = points[index];
+      const axis = formatAxisDate(point.finishedAt);
+      const center = ((index + 0.5) / points.length) * 100;
+      return {
+        key: `tick-${point.id}`,
+        left: `${center}%`,
+        date: axis.date,
+        time: axis.time,
+      };
+    });
+  }, [points]);
 
   function pointIndex(event: ReactPointerEvent<HTMLDivElement>): number {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -129,8 +162,12 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
   }
 
   function updateSelection(event: ReactPointerEvent<HTMLDivElement>) {
-    if (dragStart === null) return;
-    setDragCurrent(pointIndex(event));
+    const index = pointIndex(event);
+    if (dragStart === null) {
+      setHoverIndex(index);
+      return;
+    }
+    setDragCurrent(index);
   }
 
   function finishSelection(event: ReactPointerEvent<HTMLDivElement>) {
@@ -147,6 +184,7 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
     }
     setDragStart(null);
     setDragCurrent(null);
+    setHoverIndex(pointerEnd);
   }
 
   function cancelSelection() {
@@ -239,13 +277,18 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
         ) : (
           <div
             key={chartKey}
-            className={`changes-over-time__chart changes-over-time__chart--${chartSize}`}
+            className={`changes-over-time__chart changes-over-time__chart--${chartSize}${
+              dense ? " changes-over-time__chart--dense" : ""
+            }`}
             role="application"
             aria-label={t("Drag across chart to zoom. Dates mark scan completion time.")}
             onPointerDown={beginSelection}
             onPointerMove={updateSelection}
             onPointerUp={finishSelection}
             onPointerCancel={cancelSelection}
+            onPointerLeave={() => {
+              if (dragStart === null) setHoverIndex(null);
+            }}
           >
             {selectedStart !== null && selectedEnd !== null && (
               <div
@@ -256,17 +299,37 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
                 }}
               />
             )}
+            {hoverIndex !== null &&
+              dragStart === null &&
+              points[hoverIndex] && (
+                <div
+                  className="changes-over-time__tooltip"
+                  style={{ left: `${((hoverIndex + 0.5) / points.length) * 100}%` }}
+                >
+                  <strong>
+                    {t("Scan")} #{points[hoverIndex].id}
+                  </strong>
+                  <span>{formatTick(points[hoverIndex].finishedAt)}</span>
+                  <span>
+                    {SERIES.filter((key) => points[hoverIndex].values[key] > 0)
+                      .map((key) => `${key} ${points[hoverIndex].values[key]}`)
+                      .join(" · ")}
+                  </span>
+                </div>
+              )}
             <div className="changes-over-time__bars">
               {points.map((point, index) => {
                 const barHeight = Math.max(8, Math.round((point.total / maxTotal) * barMaxPx));
+                const hovered = hoverIndex === index && dragStart === null;
                 return (
                   <div
                     key={point.id}
-                    className="changes-over-time__col"
-                    style={{ animationDelay: `${Math.min(index, 18) * 18}ms` }}
-                    title={`${point.label} · ${formatTick(point.finishedAt)} · ${SERIES.map(
-                      (key) => `${key} ${point.values[key]}`,
-                    ).join(", ")}`}
+                    className={`changes-over-time__col${hovered ? " is-hovered" : ""}`}
+                    style={
+                      dense
+                        ? undefined
+                        : { animationDelay: `${Math.min(index, 18) * 18}ms` }
+                    }
                   >
                     <div className="changes-over-time__plot">
                       <div className="changes-over-time__stack" style={{ height: `${barHeight}px` }}>
@@ -283,31 +346,21 @@ export function ChangesOverTime({ scans, t }: { scans: Scan[]; t: Translate }) {
                         })}
                       </div>
                     </div>
-                    <span className="changes-over-time__label mono">{point.label}</span>
                   </div>
                 );
               })}
             </div>
             <div className="changes-over-time__axis" aria-hidden="true">
-              {points.map((point, index) => {
-                const showTick = index % tickEvery === 0 || index === points.length - 1;
-                const axis = formatAxisDate(point.finishedAt);
-                return (
-                  <div
-                    key={`axis-${point.id}`}
-                    className={`changes-over-time__tick ${
-                      showTick ? "changes-over-time__tick--visible" : ""
-                    }`}
-                  >
-                    {showTick ? (
-                      <>
-                        <span className="changes-over-time__tick-date">{axis.date}</span>
-                        <span className="changes-over-time__tick-time">{axis.time}</span>
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
+              {axisTicks.map((tick) => (
+                <div
+                  key={tick.key}
+                  className="changes-over-time__tick changes-over-time__tick--visible"
+                  style={{ left: tick.left }}
+                >
+                  <span className="changes-over-time__tick-date">{tick.date}</span>
+                  <span className="changes-over-time__tick-time">{tick.time}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

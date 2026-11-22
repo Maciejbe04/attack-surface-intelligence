@@ -383,7 +383,7 @@ function ScanTable({
                   onClick={() => onOpenConsole(scan)}
                   aria-pressed={focused}
                 >
-                  {focused ? t("Viewing log") : t("View log")}
+                  {focused ? t("Viewing report") : t("View report")}
                 </button>
                 {scan.resume_available && canMutate && (
                   <button
@@ -1037,7 +1037,10 @@ export function App() {
     };
   }, [user?.id, language, consoleScanId, scanRefreshKey, consoleReloadKey]);
 
-  function openScanConsole(scan: number | Scan | ScanDetail, opts: { goToScans?: boolean } = {}) {
+  function openScanConsole(
+    scan: number | Scan | ScanDetail,
+    opts: { goToScans?: boolean; focus?: "console" | "report" } = {},
+  ) {
     const scanId = typeof scan === "number" ? scan : scan.id;
     if (typeof scan !== "number") {
       setConsoleScan((prev) => {
@@ -1053,18 +1056,21 @@ export function App() {
     setConsoleScanId(scanId);
     setConsoleReloadKey((value) => value + 1);
     const jumpToScans = Boolean(opts.goToScans);
+    const focus = opts.focus ?? "console";
     if (jumpToScans) {
       setNav("scans");
       setScansPage(1);
     }
     window.setTimeout(
       () => {
-        document.getElementById("scan-activity-console")?.scrollIntoView({
+        const targetId =
+          focus === "report" ? "scan-findings-report" : "scan-activity-console";
+        document.getElementById(targetId)?.scrollIntoView({
           behavior: "smooth",
           block: "start",
         });
       },
-      jumpToScans ? 80 : 0,
+      jumpToScans ? 120 : 0,
     );
   }
 
@@ -1954,6 +1960,9 @@ export function App() {
                     setConsoleScanId(null);
                     setConsoleScan(null);
                   }}
+                  onViewReport={() =>
+                    openScanConsole(consoleScanId, { goToScans: true, focus: "report" })
+                  }
                   t={t}
                 />
               )}
@@ -2019,7 +2028,9 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan)}
+                    onOpenConsole={(scan) =>
+                      openScanConsole(scan, { goToScans: true, focus: "report" })
+                    }
                     t={t}
                   />
                 </div>
@@ -2600,7 +2611,7 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan)}
+                    onOpenConsole={(scan) => openScanConsole(scan, { focus: "report" })}
                     t={t}
                   />
                 </div>
@@ -2621,6 +2632,12 @@ export function App() {
                 onClear={() => {
                   setConsoleScanId(null);
                   setConsoleScan(null);
+                }}
+                onViewReport={() => {
+                  document.getElementById("scan-findings-report")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
                 }}
                 t={t}
               />

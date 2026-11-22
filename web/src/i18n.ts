@@ -317,6 +317,8 @@ const PL: Record<string, string> = {
   "Refreshing…": "Odświeżanie…",
   "Clear console": "Wyczyść konsolę",
   Hide: "Ukryj",
+  "View report": "Zobacz raport",
+  "Viewing report": "Podgląd raportu",
   "Scan activity log": "Dziennik aktywności skanu",
   "Waiting for the next scan run.": "Oczekiwanie na kolejny przebieg skanu.",
   "No activity events yet for this scan.": "Brak zdarzeń aktywności dla tego skanu.",
