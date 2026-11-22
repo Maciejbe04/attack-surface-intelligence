@@ -28,7 +28,7 @@ class PublicScanAPITests(TestCase):
         self.other_operator = create_user("other", UserProfile.Role.OPERATOR)
         self.client = APIClient()
 
-    def test_target_rbac_and_owner_scope(self) -> None:
+    def test_target_rbac_shared_workspace(self) -> None:
         other_target = Target.objects.create(
             owner=self.other_operator,
             address="other.example.test",
@@ -43,8 +43,11 @@ class PublicScanAPITests(TestCase):
 
         response = self.client.get(reverse("target-list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([item["id"] for item in response.json()], [own_target.id])
-        self.assertNotContains(response, other_target.address)
+        # Shared team workspace: a read-only user sees every target.
+        self.assertEqual(
+            sorted(item["id"] for item in response.json()),
+            sorted([own_target.id, other_target.id]),
+        )
 
         response = self.client.post(
             reverse("target-list"),
@@ -131,7 +134,7 @@ class PublicScanAPITests(TestCase):
         self.assertEqual(run.failed_batches, 1)
         self.assertIn("Queue publish failed", run.batches.get().error)
 
-    def test_scan_rejects_unsafe_modules_and_inaccessible_targets(self) -> None:
+    def test_scan_rejects_unsafe_modules_but_allows_team_targets(self) -> None:
         target = Target.objects.create(
             owner=self.other_operator,
             address="192.0.2.20",
@@ -170,7 +173,8 @@ class PublicScanAPITests(TestCase):
             },
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
+        # A target saved by a teammate can be scanned by any operator.
+        self.assertEqual(response.status_code, 201)
 
     def test_cancel_marks_unclaimed_batches_cancelled(self) -> None:
         run = ScanRun.objects.create(
@@ -191,7 +195,7 @@ class PublicScanAPITests(TestCase):
         self.assertEqual(run.status, ScanRun.Status.CANCELLED)
         self.assertEqual(run.batches.get().status, ScanBatch.Status.CANCELLED)
 
-    def test_scan_reads_are_owner_scoped_and_viewer_cannot_cancel(self) -> None:
+    def test_scans_are_shared_and_viewer_cannot_cancel(self) -> None:
         own_run = ScanRun.objects.create(
             owner=self.viewer,
             modules_snapshot=[],
@@ -204,9 +208,12 @@ class PublicScanAPITests(TestCase):
 
         response = self.client.get(reverse("scan-list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([item["id"] for item in response.json()], [own_run.id])
+        self.assertEqual(
+            sorted(item["id"] for item in response.json()),
+            sorted([own_run.id, other_run.id]),
+        )
         response = self.client.get(reverse("scan-detail", args=(other_run.id,)))
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
         response = self.client.post(reverse("scan-cancel", args=(own_run.id,)))
         self.assertEqual(response.status_code, 403)
 
@@ -334,6 +341,43 @@ class PublicScanAPITests(TestCase):
             ),
             3,
         )
+
+    def test_defectdojo_report_ignores_passive_discovery_payload(self) -> None:
+        run = ScanRun.objects.create(
+            owner=self.operator,
+            status=ScanRun.Status.COMPLETED,
+            modules_snapshot=[{"id": "passive-discovery", "filters": {}}],
+            total_batches=1,
+            completed_batches=1,
+            progress=100,
+            finished_at=timezone.now(),
+        )
+        ScanBatch.objects.create(
+            run=run,
+            target_address="example.com",
+            target_type=Target.Type.DOMAIN,
+            status=ScanBatch.Status.COMPLETED,
+            progress=100,
+            result={
+                "hosts": [],
+                "http": [],
+                "signatures": [],
+                "passive": {
+                    "query": "example.com",
+                    "type": "domain",
+                    "subdomains": ["www.example.com"],
+                    "rdap": {"name": "Example Org", "country": "US"},
+                    "sources": {"crt_sh": "ok", "rdap": "ok"},
+                    "warnings": [],
+                },
+            },
+            finished_at=timezone.now(),
+        )
+
+        report = build_generic_findings_report(
+            ScanRun.objects.prefetch_related("batches").get(pk=run.pk)
+        )
+        self.assertEqual(report["findings"], [])
 
 
 @override_settings(WORKER_TOKEN="worker-test-token")

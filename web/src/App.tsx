@@ -56,7 +56,6 @@ import { ThemeToggle } from "./ThemeToggle";
 import { useDarkMode } from "./useDarkMode";
 import { useHighContrast } from "./useHighContrast";
 import { APP_NAME, APP_VERSION } from "./version";
-
 function formatEta(seconds: number | null | undefined): string {
   if (seconds == null || seconds <= 0) return "";
   if (seconds < 60) return `~${seconds}s`;
@@ -117,6 +116,50 @@ function isValidTarget(value: string): boolean {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+let cancelSectionScroll: (() => void) | null = null;
+
+/**
+ * Scroll `.layout__main` so the section sits at the top, re-aligning while
+ * lazy content (console events, findings) keeps growing — otherwise Chrome
+ * clamps the first scroll to the pre-load height and the section lands mid-page.
+ */
+function scrollToSection(id: string, settleMs = 2500) {
+  cancelSectionScroll?.();
+  const scroller = document.querySelector(".layout__main");
+  const target = document.getElementById(id);
+  if (!(scroller instanceof HTMLElement) || !target) {
+    target?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  const align = () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const top =
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12;
+    const clamped = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight));
+    if (Math.abs(clamped - scroller.scrollTop) > 2) {
+      scroller.scrollTo({ top: clamped, behavior: "smooth" });
+    }
+  };
+  const content = scroller.firstElementChild ?? scroller;
+  const observer = new ResizeObserver(align);
+  observer.observe(content);
+  const stop = () => {
+    observer.disconnect();
+    window.clearTimeout(timer);
+    for (const evt of ["wheel", "touchstart", "keydown", "mousedown"]) {
+      scroller.removeEventListener(evt, stop);
+    }
+    if (cancelSectionScroll === stop) cancelSectionScroll = null;
+  };
+  const timer = window.setTimeout(stop, settleMs);
+  for (const evt of ["wheel", "touchstart", "keydown", "mousedown"]) {
+    scroller.addEventListener(evt, stop, { passive: true });
+  }
+  cancelSectionScroll = stop;
+  align();
 }
 
 const STATUS_LABELS: Record<ScanStatus, string> = {
@@ -302,7 +345,7 @@ function ScanTable({
   }
 
   return (
-    <table className="hosts">
+    <table className="hosts scans-table">
       <caption className="sr-only">{t("Discovery scan runs")}</caption>
       <thead>
         <tr>
@@ -326,7 +369,17 @@ function ScanTable({
           return (
             <tr key={scan.id} className={focused ? "is-selected" : undefined}>
               <td className="mono">#{scan.id}</td>
-              <td className="scan-targets">
+              <td
+                className="scan-targets"
+                title={
+                  [
+                    scan.group_name ? `${t("Group")}: ${scan.group_name}` : "",
+                    scan.targets.length > 0 ? scan.targets.join(", ") : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined
+                }
+              >
                 {scan.group_name && (
                   <span className="scan-origin">
                     <span className="group-chip">{scan.group_name}</span>
@@ -375,7 +428,16 @@ function ScanTable({
                   </span>
                 )}
               </td>
-              <td>{new Date(scan.created_at).toLocaleString()}</td>
+              <td
+                title={new Date(scan.created_at).toLocaleString()}
+              >
+                {new Date(scan.created_at).toLocaleString(undefined, {
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </td>
               <td className="scan-actions">
                 <button
                   type="button"
@@ -383,7 +445,7 @@ function ScanTable({
                   onClick={() => onOpenConsole(scan)}
                   aria-pressed={focused}
                 >
-                  {focused ? t("Viewing log") : t("View log")}
+                  {focused ? t("Open") : t("Report")}
                 </button>
                 {scan.resume_available && canMutate && (
                   <button
@@ -1037,7 +1099,10 @@ export function App() {
     };
   }, [user?.id, language, consoleScanId, scanRefreshKey, consoleReloadKey]);
 
-  function openScanConsole(scan: number | Scan | ScanDetail, opts: { goToScans?: boolean } = {}) {
+  function openScanConsole(
+    scan: number | Scan | ScanDetail,
+    opts: { goToScans?: boolean; focus?: "console" | "report" } = {},
+  ) {
     const scanId = typeof scan === "number" ? scan : scan.id;
     if (typeof scan !== "number") {
       setConsoleScan((prev) => {
@@ -1053,18 +1118,15 @@ export function App() {
     setConsoleScanId(scanId);
     setConsoleReloadKey((value) => value + 1);
     const jumpToScans = Boolean(opts.goToScans);
+    const focus = opts.focus ?? "console";
     if (jumpToScans) {
       setNav("scans");
       setScansPage(1);
     }
     window.setTimeout(
-      () => {
-        document.getElementById("scan-activity-console")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      },
-      jumpToScans ? 80 : 0,
+      () =>
+        scrollToSection(focus === "report" ? "scan-findings-report" : "scan-activity-console"),
+      jumpToScans ? 120 : 0,
     );
   }
 
@@ -1932,31 +1994,59 @@ export function App() {
                             ))}
                           </select>
                           <p className="field-help">
-                            {t("Required deadline for every scan; unfinished batches pause and can be resumed.")}
+                            {t(
+                              "Required deadline for every scan; unfinished batches pause and can be resumed. The window selector is admin-only — other roles always run with a 1h maximum.",
+                            )}
                           </p>
                         </>
                       ) : (
                         <p className="field-help" id="scan-window-info" style={{ marginTop: 6 }}>
-                          {t("1h default · visible only for admin")}
+                          {t(
+                            "Fixed 1h deadline for your role. Only admins can change the window length; unfinished batches pause and can be resumed.",
+                          )}
                         </p>
                       )}
                     </div>
                   </div>
                 </div>
+                <div className="panel__footer dashboard-probe-actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => void runProbe()}
+                    disabled={
+                      !canMutate ||
+                      scanPending !== null ||
+                      (probeMode === "group" ? !probeGroupId : !probeTarget)
+                    }
+                    aria-busy={scanPending === "dashboard"}
+                  >
+                    {scanPending === "dashboard" ? t("Queueing…") : t("Run selected")}
+                  </button>
+                </div>
               </section>
+
+              {consoleScanId !== null && (
+                <ScanConsole
+                  scan={consoleScan}
+                  loading={consoleLoading}
+                  clearLabel="Hide"
+                  onClear={() => {
+                    setConsoleScanId(null);
+                    setConsoleScan(null);
+                  }}
+                  onViewReport={() =>
+                    openScanConsole(consoleScanId, { goToScans: true, focus: "report" })
+                  }
+                  t={t}
+                />
+              )}
 
               <ModulePanel
                 state={moduleState}
                 onToggleEnabled={toggleModuleEnabled}
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
-                onRun={() => void runProbe()}
-                canRun={
-                  canMutate &&
-                  scanPending === null &&
-                  (probeMode === "group" ? Boolean(probeGroupId) : Boolean(probeTarget))
-                }
-                runPending={scanPending === "dashboard"}
                 t={t}
               />
 
@@ -2006,21 +2096,13 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan)}
+                    onOpenConsole={(scan) =>
+                      openScanConsole(scan, { goToScans: true, focus: "report" })
+                    }
                     t={t}
                   />
                 </div>
               </section>
-
-              <ScanConsole
-                scan={consoleScan}
-                loading={consoleLoading}
-                onClear={() => {
-                  setConsoleScanId(null);
-                  setConsoleScan(null);
-                }}
-                t={t}
-              />
             </>
           )}
 
@@ -2597,7 +2679,7 @@ export function App() {
                     resumingIds={resumingIds}
                     onCancel={onCancelScan}
                     onResume={onResumeScan}
-                    onOpenConsole={(scan) => openScanConsole(scan)}
+                    onOpenConsole={(scan) => openScanConsole(scan, { focus: "report" })}
                     t={t}
                   />
                 </div>
@@ -2614,30 +2696,34 @@ export function App() {
               <ScanConsole
                 scan={consoleScan}
                 loading={consoleLoading}
+                clearLabel="Hide"
                 onClear={() => {
                   setConsoleScanId(null);
                   setConsoleScan(null);
                 }}
+                onViewReport={() => scrollToSection("scan-findings-report")}
                 t={t}
               />
 
-              <FindingsPanel
-                scan={consoleScan}
-                scans={scans}
-                canMutate={canMutate}
-                canExport={canExport}
-                onScanUpdated={(updated) => {
-                  setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-                  setConsoleScan({
-                    ...updated,
-                    events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
-                    batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
-                  });
-                  setScanRefreshKey((value) => value + 1);
-                }}
-                pushToast={pushToast}
-                t={t}
-              />
+              {consoleScanId !== null && (
+                <FindingsPanel
+                  scan={consoleScan}
+                  scans={scans}
+                  canMutate={canMutate}
+                  canExport={canExport}
+                  onScanUpdated={(updated) => {
+                    setScans((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                    setConsoleScan({
+                      ...updated,
+                      events: (updated as ScanDetail).events ?? consoleScan?.events ?? [],
+                      batches: (updated as ScanDetail).batches ?? consoleScan?.batches ?? [],
+                    });
+                    setScanRefreshKey((value) => value + 1);
+                  }}
+                  pushToast={pushToast}
+                  t={t}
+                />
+              )}
             </>
           )}
 

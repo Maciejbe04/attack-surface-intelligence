@@ -36,5 +36,6 @@ def effective_attrs(base: dict, override: ManualOverride | None) -> dict:
 def overrides_for_keys(owner: User, entity_keys: list[str]) -> dict[str, ManualOverride]:
     if not entity_keys:
         return {}
-    rows = ManualOverride.objects.filter(owner=owner, entity_key__in=entity_keys)
+    # Shared workspace: overrides are team-wide; the latest edit of a key wins.
+    rows = ManualOverride.objects.filter(entity_key__in=entity_keys).order_by("updated_at", "id")
     return {row.entity_key: row for row in rows}

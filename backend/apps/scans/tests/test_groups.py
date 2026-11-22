@@ -61,20 +61,22 @@ class GroupAPITests(GroupTestCase):
         response = self.client.post(reverse("group-list"), {"name": "dmz WEB"}, format="json")
         self.assertEqual(response.status_code, 400)
 
-        # Another owner may use the same name.
+        # Group names are unique across the shared workspace.
         self.client.force_login(self.other)
         response = self.client.post(reverse("group-list"), {"name": "DMZ web"}, format="json")
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 400)
 
-    def test_groups_are_owner_scoped_and_viewer_is_read_only(self) -> None:
+    def test_groups_are_shared_and_viewer_is_read_only(self) -> None:
         self.group("theirs", owner=self.other)
         mine = self.group("mine")
         response = self.client.get(reverse("group-list"))
-        self.assertEqual([item["id"] for item in response.json()], [mine.id])
         other_group = TargetGroup.objects.get(name="theirs")
         self.assertEqual(
+            sorted(item["id"] for item in response.json()), sorted([mine.id, other_group.id])
+        )
+        self.assertEqual(
             self.client.get(reverse("group-detail", args=[other_group.id])).status_code,
-            404,
+            200,
         )
 
         self.client.force_login(self.viewer)
@@ -105,7 +107,7 @@ class GroupAPITests(GroupTestCase):
         self.assertEqual(response.json()["target_count"], 1)
         self.assertTrue(Target.objects.filter(pk=first.pk).exists())
 
-    def test_members_must_belong_to_group_owner(self) -> None:
+    def test_members_can_be_any_team_target(self) -> None:
         foreign = self.target("192.0.2.9", owner=self.other)
         group = self.group("lab")
         response = self.client.post(
@@ -113,8 +115,8 @@ class GroupAPITests(GroupTestCase):
             {"action": "add", "target_ids": [foreign.id]},
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(group.targets.count(), 0)
+        self.assertIn(response.status_code, (200, 201))
+        self.assertEqual(group.targets.count(), 1)
 
     def test_deleting_group_keeps_targets(self) -> None:
         member = self.target("192.0.2.3")
@@ -186,6 +188,35 @@ class GroupScanTests(GroupTestCase):
 
         listed = self.client.get(reverse("scan-list")).json()[0]
         self.assertEqual(listed["group_name"], "lab")
+
+    def test_operator_group_scan_uses_request_context_for_window_limit(self) -> None:
+        group = self.group("lab", self.target("192.0.2.1"))
+        url = reverse("group-scan", args=[group.id])
+
+        with patch(PUBLISH), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                url,
+                {
+                    "modules": MODULES,
+                    "client_request_id": "group-window-1h",
+                    "window_seconds": 3600,
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["window_seconds"], 3600)
+
+        response = self.client.post(
+            url,
+            {
+                "modules": MODULES,
+                "client_request_id": "group-window-2h",
+                "window_seconds": 7200,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("window_seconds", response.json())
 
     def test_empty_group_cannot_be_scanned(self) -> None:
         group = self.group("empty")

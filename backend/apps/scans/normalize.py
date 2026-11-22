@@ -113,6 +113,15 @@ def extract_observation_rows(
             "title": title,
             "server": server,
         }
+        try:
+            from .http_signals import extract_http_signals
+
+            http_attrs.update(
+                extract_http_signals(record, is_https=str(url).lower().startswith("https"))
+            )
+        except Exception:
+            # Enrichment must never break result normalization.
+            pass
         rows.append(
             {
                 "entity_type": Observation.EntityType.HTTP,
@@ -222,6 +231,82 @@ def extract_observation_rows(
             }
         )
 
+    passive = result.get("passive")
+    if isinstance(passive, dict):
+        query = str(passive.get("query") or address)[:255]
+        subdomains = [
+            str(name)[:255]
+            for name in (passive.get("subdomains") or [])
+            if isinstance(name, str) and name.strip()
+        ][:100]
+        rdap = passive.get("rdap") if isinstance(passive.get("rdap"), dict) else None
+        sources = passive.get("sources") if isinstance(passive.get("sources"), dict) else {}
+        warnings = [
+            str(item)[:300]
+            for item in (passive.get("warnings") or [])
+            if item
+        ][:20]
+        if rdap or subdomains or warnings or sources:
+            rdap_name = str((rdap or {}).get("name") or "")[:300]
+            rdap_handle = str((rdap or {}).get("handle") or "")[:300]
+            country = str((rdap or {}).get("country") or "")[:2]
+            network = str((rdap or {}).get("network") or "")[:300]
+            asns = rdap.get("asns") if isinstance(rdap, dict) else []
+            if not isinstance(asns, list):
+                asns = []
+            asns = [
+                int(value)
+                for value in asns
+                if isinstance(value, int) or str(value).isdigit()
+            ][:20]
+            summary_bits = []
+            if rdap_name or rdap_handle:
+                summary_bits.append(rdap_name or rdap_handle)
+            if country:
+                summary_bits.append(country)
+            if subdomains:
+                summary_bits.append(f"{len(subdomains)} CT name(s)")
+            summary = "; ".join(summary_bits) or "Passive discovery"
+            # Keep attrs compact for Findings table; full CT list lives in evidence only.
+            rows.append(
+                {
+                    "entity_type": Observation.EntityType.HOST,
+                    "entity_key": f"passive:{query}",
+                    "target_address": address,
+                    "target": target,
+                    "attrs": {
+                        "address": query,
+                        "passive": True,
+                        "rdap_name": rdap_name,
+                        "rdap_handle": rdap_handle,
+                        "country": country,
+                        "network": network,
+                        "asns": asns,
+                        "subdomain_count": len(subdomains),
+                        "subdomains_preview": subdomains[:8],
+                        "sources": {
+                            "crt_sh": sources.get("crt_sh"),
+                            "rdap": sources.get("rdap"),
+                        },
+                        "warning_count": len(warnings),
+                    },
+                    "evidence": [
+                        {
+                            "kind": "passive",
+                            "summary": summary[:300],
+                            "payload": {
+                                "query": query,
+                                "type": passive.get("type"),
+                                "rdap": rdap,
+                                "subdomains": subdomains,
+                                "sources": sources,
+                                "warnings": warnings,
+                            },
+                        }
+                    ],
+                }
+            )
+
     return rows
 
 
@@ -255,7 +340,6 @@ def previous_completed_run(run: ScanRun) -> ScanRun | None:
     wanted_modules = module_signature(run)
     qs = (
         ScanRun.objects.filter(
-            owner_id=run.owner_id,
             status=ScanRun.Status.COMPLETED,
             finished_at__isnull=False,
         )

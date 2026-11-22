@@ -8,9 +8,13 @@ Narzędzie do cyklicznego i bezpiecznego discovery dużych sieci, fingerprinting
 
 MVP kolejki skanów działa end-to-end: zapisane targety i przebiegi są trwałe w PostgreSQL, API publikuje batche przez Redis do Celery, a izolowany worker wykonuje `nmap` i ProjectDiscovery `httpx`. UI obsługuje kolejkę, postęp, anulowanie oraz eksport ukończonych obserwacji do opcjonalnego DefectDojo.
 
-Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Koniec okna skanu pauzuje niedokończone batche, zabija procesy workera i pozwala wznowić je przez Resume.
+Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą `admin` albo `operator`. Moduł skanu **Passive discovery** (`passive-discovery`) dociąga crt.sh / RDAP w przebiegu i zapisuje obserwacje (bez auto-expand inventory) — szczegóły: [Pasywne rozpoznanie](docs/passive-discovery.md). Reconciler okresowo odtwarza z PostgreSQL osierocone zadania po utracie kolejki Redis. Koniec okna skanu pauzuje niedokończone batche, zabija procesy workera i pozwala wznowić je przez Resume.
 
 Hosty można łączyć w grupy (host może należeć do wielu grup): ręcznie na stronie **Targets** (filtr, zaznaczenie, „Add selected to group”), przy imporcie TXT/CSV/JSON albo na stronie **Groups**. Grupę można przeskanować od razu albo zaplanować: co N godzin, codziennie lub co tydzień o wybranej godzinie UTC. Wyniki zaplanowanych skanów trafiają automatycznie do DefectDojo jak każdy zakończony skan. Pojedynczy host do skanu na pulpicie wybiera się wyszukiwarką, która przeszukuje zapisane cele (adres i komentarz) po stronie API. Szczegóły: [Grupy i harmonogramy](docs/groups-schedules.md).
+
+Dashboard pokazuje konsolę aktywności uruchomionego z niego skanu bez przełączania do zakładki **Scans**, podsumowanie lifecycle oraz wykres zmian w wybranym zakresie czasu. Zakładka **Scans** pozostaje pełną historią przebiegów z logiem i Findings / Compare. Słupki wykresu są informacyjne i nie zmieniają widoku.
+
+Każdy skan ma obowiązkowe okno wykonania. Dla użytkowników innych niż `admin` jest ono stałe i wynosi 1 godzinę. Tylko `admin` widzi kontrolkę i może wybrać 30 min, 1 h albo 2 h. Ograniczenie jest egzekwowane również w API.
 
 ## Szybki start
 
@@ -34,7 +38,7 @@ Backup / restore check:
 ./scripts/restore-test.sh
 ```
 
-`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Hostowo: `http://127.0.0.1:18088`.
+`docker compose up` zawsze startuje **lab-target** (HTTP/TLS fixture w `compose.yml`). Przy starcie API seeduje inventory demo: cel `lab-target.surfacex.local` + IP `172.30.0.10`, allowlista i grupa **`lab-local`** (wyłącz seed: `SEED_LAB_TARGET=0`). Lokalnie Compose domyślnie ustawia też `SEED_DEMO_CHART=1` — tydzień przykładowych skanów z lifecycle pod wykres **Changes over time** (wyłącz w `.env`: `SEED_DEMO_CHART=0`; odtwórz: `docker compose exec api python manage.py seed_demo_chart --force`). Hostowo: `http://127.0.0.1:18088`.
 
 `.env.example` ustawia `COMPOSE_PROFILES=defectdojo`, więc DefectDojo startuje razem ze stosem.
 
@@ -131,6 +135,7 @@ Worker ma `NET_RAW` (SYN gdy możliwe; inaczej TCP connect). Nie dostaje hasła 
 - [Polityka skanowania](docs/scanning-policy.md)
 - [Sygnatury](docs/signatures.md)
 - [Import i eksport](docs/import-export.md)
+- [Pasywne rozpoznanie](docs/passive-discovery.md)
 - [RBAC](docs/rbac.md)
 - [Szyfrowanie](docs/encryption.md)
 - [Bezpieczeństwo](docs/security.md)

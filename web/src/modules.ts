@@ -139,6 +139,13 @@ export const PROBE_MODULES: ProbeModule[] = [
         min: 10,
         max: 5000,
       },
+      {
+        key: "includeIoT",
+        label: "Scan IoT / OT device ports",
+        type: "boolean",
+        default: false,
+        help: "Adds common IoT/OT ports (Modbus, RTSP, MQTT, S7, BACnet, printers, cameras).",
+      },
     ],
   },
   {
@@ -295,6 +302,29 @@ export const PROBE_MODULES: ProbeModule[] = [
         default: "",
         placeholder: "/login,/admin,/version",
         help: "Relative paths only.",
+      },
+    ],
+  },
+  {
+    id: "passive-discovery",
+    name: "Passive discovery",
+    summary: "Certificate Transparency (crt.sh) and RDAP lookup for the target. Does not add hosts or scan them.",
+    tool: "crt.sh / RDAP",
+    category: "discovery",
+    filters: [
+      {
+        key: "includeCrt",
+        label: "Certificate Transparency (crt.sh)",
+        type: "boolean",
+        default: true,
+        help: "Domain targets only. Lists names in scope; does not auto-add targets.",
+      },
+      {
+        key: "includeRdap",
+        label: "RDAP summary",
+        type: "boolean",
+        default: true,
+        help: "Owner / network / ASN / nameservers when available.",
       },
     ],
   },

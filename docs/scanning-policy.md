@@ -9,7 +9,8 @@ System wykonuje wyłącznie discovery. Dozwolone są:
 - identyfikacja usług przez nmap;
 - bezpieczne `HEAD` i `GET` HTTP/HTTPS;
 - odczyt certyfikatu TLS;
-- deklaratywne sprawdzenia sygnatur na dozwolonych ścieżkach.
+- deklaratywne sprawdzenia sygnatur na dozwolonych ścieżkach;
+- pasywne rozpoznanie (crt.sh / RDAP) jako moduł `passive-discovery` — bez auto-expand inventory; szczegóły: `docs/passive-discovery.md`.
 
 Zabronione są logowanie, brute force, fuzzing agresywny, eksploatacja podatności oraz śledzenie przekierowań poza allowlistę.
 
@@ -122,7 +123,13 @@ Ograniczenia:
 
 ## Okna czasowe
 
-Każdy `scan_run` ma `window_start` i `deadline`. Po deadline:
+Każdy `scan_run` ma obowiązkowe `window_seconds` i `deadline_at`. Brak wartości w żądaniu stosuje `SCAN_DEFAULT_WINDOW_SECONDS` (domyślnie 3600 s).
+
+- role inne niż `admin`: stałe 1 h w UI, maksymalnie 3600 s w API;
+- `admin`: wybór 30 min, 1 h albo 2 h w UI; API dopuszcza do 86 400 s;
+- te same ograniczenia obowiązują skan hostów, skan grupy oraz Resume.
+
+Po deadline:
 
 1. scheduler wysyła sygnał łagodnego zakończenia do nmap i httpx;
 2. po grace period kończy procesy bezwarunkowo;

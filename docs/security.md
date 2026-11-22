@@ -22,6 +22,7 @@ SurfaceX działa jako lokalny stos Compose. Zakładamy zaufanego operatora hosta
 | Wyciek evidence | AES-256-GCM envelope na wrażliwych polach (`docs/encryption.md`) |
 | Podsłuch sesji | `HttpOnly` cookie; `Secure` przy HTTPS |
 | ReDoS / SSRF w sygnaturach | Ścieżki względne, limity regex i body |
+| Nadmierne / niekontrolowane zapytania pasywne | Tylko stałe hosty crt.sh i rdap.org; timeout 8 s; limit 2 MiB; cache 15 min; RBAC admin/operator |
 
 ## Granice skanera
 
@@ -43,4 +44,8 @@ Po `deadline_at` unfinished batche → `PAUSED`. Cancel-check i progress stosuj�
 
 ## Audyt
 
-Mutacje celów, skanów, allowlisty, użytkowników i overrides trafiają do `audit_log` (podgląd: admin).
+Mutacje celów, skanów, allowlisty, użytkowników i overrides trafiają do `audit_log` (podgląd: admin). Pasywne rozpoznanie loguje `passive.discover` (bez zapisu hostów — zapis celów ma osobny audyt CRUD).
+
+## Pasywne rozpoznanie
+
+CRT/RDAP to odczyt publicznych źródeł, nie skan aktywny. Wynik discover **nie** omija allowlisty: skan nadal wymaga zapisanych celów w zakresie allowlisty. Szczegóły: `docs/passive-discovery.md`.

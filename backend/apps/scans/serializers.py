@@ -77,6 +77,11 @@ class TargetSerializer(serializers.ModelSerializer):
                 assert_target_allowed(request.user, attrs["address"], target_type)
             except AllowlistDenied as exc:
                 raise serializers.ValidationError({"address": str(exc)}) from exc
+        duplicate = Target.objects.filter(address=attrs["address"])
+        if self.instance is not None:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError({"address": "This target is already saved."})
         return attrs
 
     def create(self, validated_data: dict) -> Target:
@@ -299,8 +304,6 @@ class ScanCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Target IDs must be unique.")
         user = self.context["request"].user
         queryset = Target.objects.filter(pk__in=value)
-        if not is_admin(user):
-            queryset = queryset.filter(owner=user)
         targets = list(queryset.order_by("id"))
         if len(targets) != len(value):
             raise serializers.ValidationError(
@@ -373,7 +376,7 @@ class TargetGroupSerializer(serializers.ModelSerializer):
         except ValueError as exc:
             raise serializers.ValidationError(str(exc)) from exc
         owner = self.instance.owner if self.instance else self.context["request"].user
-        clash = TargetGroup.objects.filter(owner=owner, name__iexact=name)
+        clash = TargetGroup.objects.filter(name__iexact=name)
         if self.instance is not None:
             clash = clash.exclude(pk=self.instance.pk)
         if clash.exists():
@@ -407,7 +410,7 @@ class GroupMembershipSerializer(serializers.Serializer):
         group: TargetGroup = self.context["group"]
         ids = sorted(set(value))
         # Members must belong to the group owner, also when an admin edits the group.
-        targets = list(Target.objects.filter(pk__in=ids, owner_id=group.owner_id))
+        targets = list(Target.objects.filter(pk__in=ids))
         if len(targets) != len(ids):
             raise serializers.ValidationError(
                 "Every target must be a saved target of the group owner."
@@ -457,14 +460,17 @@ class ManualOverrideSerializer(serializers.Serializer):
     def create(self, validated_data: dict) -> ManualOverride:
         owner = self.context["request"].user
         entity_key = validated_data["entity_key"].strip()
-        override, _ = ManualOverride.objects.get_or_create(
-            owner=owner,
-            entity_key=entity_key,
-            defaults={
-                "target_address": validated_data.get("target_address", ""),
-                "updated_by": owner,
-            },
+        # One shared override per finding for the whole team (latest edit wins).
+        override = (
+            ManualOverride.objects.filter(entity_key=entity_key).order_by("-updated_at", "-id").first()
         )
+        if override is None:
+            override = ManualOverride.objects.create(
+                owner=owner,
+                entity_key=entity_key,
+                target_address=validated_data.get("target_address", ""),
+                updated_by=owner,
+            )
         if "tags" in validated_data:
             override.tags = validated_data["tags"]
         if "attrs_patch" in validated_data:
@@ -520,6 +526,10 @@ class AllowlistEntrySerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> AllowlistEntry:
+        if AllowlistEntry.objects.filter(
+            value=validated_data["value"], entry_type=validated_data["entry_type"]
+        ).exists():
+            raise serializers.ValidationError({"value": "This allowlist entry already exists."})
         validated_data["owner"] = self.context["request"].user
         try:
             return super().create(validated_data)

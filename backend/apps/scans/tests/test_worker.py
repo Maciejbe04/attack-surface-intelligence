@@ -121,6 +121,41 @@ class RunnerTests(SimpleTestCase):
         self.assertEqual(result["hosts"], [])
         self.assertEqual(result["http"][0]["tls"]["subject_cn"], "192.0.2.50")
 
+    def test_passive_discovery_module_skips_nmap_and_attaches_payload(self) -> None:
+        modules = validate_modules(
+            [{"id": "passive-discovery", "filters": {"includeCrt": True, "includeRdap": True}}]
+        )
+        with (
+            patch("apps.scans.runner._run_command") as run_command,
+            patch(
+                "apps.scans.runner._passive_lookup",
+                return_value={
+                    "query": "example.com",
+                    "type": "domain",
+                    "subdomains": ["www.example.com"],
+                    "rdap": {"name": "Example Org", "country": "US"},
+                    "sources": {"crt_sh": "ok", "rdap": "ok"},
+                    "warnings": [],
+                    "cached": False,
+                },
+            ) as lookup,
+        ):
+            result = execute_scan(
+                {
+                    "target": {"address": "example.com", "type": "domain"},
+                    "modules": modules,
+                },
+                should_cancel=lambda: False,
+                report_progress=lambda progress, message="": None,
+            )
+
+        run_command.assert_not_called()
+        lookup.assert_called_once()
+        self.assertEqual(result["metadata"]["scan_mode"], "skipped")
+        self.assertEqual(result["hosts"], [])
+        self.assertEqual(result["passive"]["subdomains"], ["www.example.com"])
+        self.assertEqual(result["passive"]["rdap"]["name"], "Example Org")
+
     def test_subprocess_is_started_without_a_shell(self) -> None:
         process = Mock()
         process.poll.return_value = 0

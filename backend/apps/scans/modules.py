@@ -35,6 +35,7 @@ MODULES: dict[str, dict[str, Field]] = {
         "customPorts": Field("ports", "22,80,443,8080,8443"),
         "timing": Field("choice", "T3", choices=("T2", "T3", "T4")),
         "maxRate": Field("integer", 200, 10, 5000),
+        "includeIoT": Field("boolean", False),
     },
     "service-detect": {
         "intensity": Field("integer", 5, 0, 9),
@@ -60,6 +61,10 @@ MODULES: dict[str, dict[str, Field]] = {
             "choice", "medium", choices=("low", "medium", "high")
         ),
         "pathsExtra": Field("paths", ""),
+    },
+    "passive-discovery": {
+        "includeCrt": Field("boolean", True),
+        "includeRdap": Field("boolean", True),
     },
     "full-pipeline": {
         "portProfile": Field(

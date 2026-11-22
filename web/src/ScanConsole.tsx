@@ -19,11 +19,15 @@ const STATUS_LABELS: Record<ScanStatus, string> = {
   cancelled: "Cancelled",
 };
 
+const REPORT_READY = new Set<ScanStatus>(["completed", "partial"]);
+
 type Props = {
   scan: ScanDetail | null;
   loading: boolean;
   t: Translate;
   onClear?: () => void;
+  clearLabel?: string;
+  onViewReport?: () => void;
 };
 
 type ConsoleLine = {
@@ -183,10 +187,11 @@ function EventLine({ line }: { line: ConsoleLine }) {
   );
 }
 
-export function ScanConsole({ scan, loading, t, onClear }: Props) {
+export function ScanConsole({ scan, loading, t, onClear, clearLabel, onViewReport }: Props) {
   const sectionRef = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const active = scan ? ACTIVE_SCAN_STATUSES.has(scan.status) : false;
+  const reportReady = Boolean(scan && REPORT_READY.has(scan.status) && onViewReport);
   const lines = useMemo(() => {
     if (!scan) return [];
     const events = scan.events ?? [];
@@ -224,9 +229,9 @@ export function ScanConsole({ scan, loading, t, onClear }: Props) {
         <div className="scan-console__actions">
           {active && <span className="scan-console__live">{t("Live")}</span>}
           {loading && <span className="field-help">{t("Refreshing…")}</span>}
-          {scan && onClear && (
+          {onClear && (
             <button type="button" className="btn btn--normal" onClick={onClear}>
-              {t("Clear console")}
+              {t(clearLabel || "Hide")}
             </button>
           )}
         </div>
@@ -246,6 +251,13 @@ export function ScanConsole({ scan, loading, t, onClear }: Props) {
           <EventLine key={line.key} line={line} />
         ))}
       </div>
+      {reportReady && (
+        <div className="scan-console__footer">
+          <button type="button" className="btn btn--primary" onClick={onViewReport}>
+            {t("View report")}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

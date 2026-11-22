@@ -70,6 +70,7 @@ Aplikacja React/TypeScript udostępniająca:
 
 - dashboard;
 - zarządzanie celami i konfiguracją skanów;
+- moduł Passive discovery (crt.sh + RDAP) w przebiegu skanu;
 - import oraz eksport;
 - podgląd historii i różnic;
 - edycję wyników;
@@ -83,6 +84,7 @@ Aplikacja Django / Django REST Framework odpowiadająca za:
 - uwierzytelnianie i RBAC;
 - walidację danych wejściowych;
 - zarządzanie celami, profilami i harmonogramami;
+- pasywne rozpoznanie przez publiczne CRT/RDAP (cache Redis, bez auto-skanu);
 - trwałe ręczne nadpisania;
 - przyjmowanie wyników workerów;
 - porównywanie obserwacji;
@@ -90,7 +92,7 @@ Aplikacja Django / Django REST Framework odpowiadająca za:
 - audyt zmian;
 - migracje ORM i admin panel wyłącznie dla `admin`.
 
-API jest jedynym komponentem zapisującym wyniki workerów do PostgreSQL.
+API jest jedynym komponentem zapisującym wyniki workerów do PostgreSQL. Zapytania CRT/RDAP wychodzą z kontenera API (nie z workera skanującego).
 
 ### Scheduler
 

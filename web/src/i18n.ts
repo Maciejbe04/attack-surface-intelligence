@@ -39,6 +39,7 @@ const PL: Record<string, string> = {
   "Switch to dark mode": "Przełącz na tryb ciemny",
   "Switch to light mode": "Przełącz na tryb jasny",
   "Add target": "Dodaj cel",
+  "Passive discovery": "Pasywne rozpoznanie",
   "Not on the target list. Press Enter to add.":
     "Brak na liście celów. Enter dodaje od razu.",
   "No saved host matches. Type a valid IP, CIDR, or hostname.":
@@ -88,6 +89,11 @@ const PL: Record<string, string> = {
     "Tylko odczyt: cele, grupy, skany i findings.",
   "Cannot export, scan, or change any data.":
     "Bez eksportu, skanowania i zmiany danych.",
+  "View the audit log.": "Podgląd dziennika audytu.",
+  "Import targets and scan results.": "Import celów i wyników skanów.",
+  "Edit findings: tags, notes and overrides (kept across rescans).":
+    "Edycja findings: tagi, notatki i nadpisania (zostają po kolejnych skanach).",
+  "Import scan results (JSON / CSV).": "Import wyników skanów (JSON / CSV).",
   Accounts: "Konta",
   users: "użytkowników",
   Disabled: "Wyłączony",
@@ -281,6 +287,14 @@ const PL: Record<string, string> = {
   "Grab certificate CN, issuer, and expiry.": "Pobieranie CN, wystawcy i daty wygaśnięcia certyfikatu.",
   "Custom signatures": "Własne sygnatury",
   "Run declarative SurfaceX signature rules.": "Uruchamianie deklaratywnych reguł sygnatur SurfaceX.",
+  "Certificate Transparency (crt.sh) and RDAP lookup for the target. Does not add hosts or scan them.":
+    "Certificate Transparency (crt.sh) i RDAP dla celu. Nie dodaje hostów ani ich nie skanuje.",
+  "Certificate Transparency (crt.sh)": "Certificate Transparency (crt.sh)",
+  "Domain targets only. Lists names in scope; does not auto-add targets.":
+    "Tylko domeny. Wypisuje nazwy w zakresie; nie dodaje celów automatycznie.",
+  "RDAP summary": "Skrót RDAP",
+  "Owner / network / ASN / nameservers when available.":
+    "Właściciel / sieć / ASN / nameservery, gdy dostępne.",
   "Full discovery pipeline": "Pełny proces rozpoznania",
   "nmap → httpx → signatures → confidence score.":
     "nmap → httpx → sygnatury → ocena pewności.",
@@ -316,6 +330,11 @@ const PL: Record<string, string> = {
   Live: "Na żywo",
   "Refreshing…": "Odświeżanie…",
   "Clear console": "Wyczyść konsolę",
+  Hide: "Ukryj",
+  "View report": "Zobacz raport",
+  "Viewing report": "Podgląd raportu",
+  Report: "Raport",
+  Open: "Podgląd",
   "Scan activity log": "Dziennik aktywności skanu",
   "Waiting for the next scan run.": "Oczekiwanie na kolejny przebieg skanu.",
   "No activity events yet for this scan.": "Brak zdarzeń aktywności dla tego skanu.",
@@ -700,10 +719,14 @@ const PL: Record<string, string> = {
   "Off (no deadline)": "Wyłączone (bez deadline)",
   "Optional deadline; unfinished batches pause and can be resumed.":
     "Opcjonalny deadline; niedokończone batche przechodzą w pause i można je wznowić.",
+  "Required deadline for every scan; unfinished batches pause and can be resumed. The window selector is admin-only — other roles always run with a 1h maximum.":
+    "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić. Selektor widoczny tylko dla admina — pozostałe role mają stałe maksimum 1 h.",
   "Required deadline for every scan; unfinished batches pause and can be resumed.":
     "Obowiązkowy deadline dla każdego skanu; niedokończone batche przechodzą w pause i można je wznowić.",
   "Windows longer than 1h require admin.":
     "Okna dłuższe niż 1h wymagają roli admin.",
+  "Fixed 1h deadline for your role. Only admins can change the window length; unfinished batches pause and can be resumed.":
+    "Stały deadline 1 h dla Twojej roli. Długość okna ustawia tylko admin; niedokończone batche przechodzą w pause i można je wznowić.",
   "1h default · visible only for admin":
     "Domyślnie 1h · widoczne tylko dla admina",
   "Changes over time": "Zmiany w czasie",
@@ -711,8 +734,13 @@ const PL: Record<string, string> = {
     "Potrzeba co najmniej dwóch ukończonych skanów z danymi lifecycle, żeby narysować zmiany.",
   "Lifecycle counts across recent finished scans.":
     "Liczniki lifecycle z ostatnich ukończonych skanów.",
-  "Click a bar to open that scan log.": "Kliknij słupek, żeby otworzyć log skanu.",
+  "Drag across chart to zoom. Dates mark scan completion time.":
+    "Zaznacz zakres myszką, aby przybliżyć. Daty oznaczają zakończenie skanu.",
   "Time range": "Zakres czasu",
+  "Chart size": "Rozmiar wykresu",
+  "Decrease chart height": "Zmniejsz wysokość wykresu",
+  "Increase chart height": "Zwiększ wysokość wykresu",
+  "Reset zoom": "Resetuj przybliżenie",
   "Last 24 hours": "Ostatnie 24 godziny",
   "Last 7 days": "Ostatnie 7 dni",
   "Last 30 days": "Ostatnie 30 dni",

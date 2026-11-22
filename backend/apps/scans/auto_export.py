@@ -87,9 +87,33 @@ def perform_automatic_defectdojo_export(run_id: int) -> None:
         )
 
         try:
-            result = export_scan_to_defectdojo(
-                ScanRun.objects.prefetch_related("batches").get(pk=run_id)
-            )
+            from .defectdojo import build_generic_findings_report
+
+            prepared = ScanRun.objects.prefetch_related("batches").get(pk=run_id)
+            try:
+                report_findings = build_generic_findings_report(prepared)["findings"]
+            except (DefectDojoError, DefectDojoNotConfigured):
+                raise
+            except Exception as build_exc:  # malformed scan data must not crash opaquely
+                raise DefectDojoError(
+                    f"Could not build the DefectDojo report: {type(build_exc).__name__}: {build_exc}"
+                ) from build_exc
+            if not report_findings:
+                _finish_export(
+                    run_id,
+                    status=ScanRun.DefectDojoExportStatus.SKIPPED,
+                    detail=(
+                        "No DefectDojo findings to send "
+                        "(passive discovery stays in SurfaceX)."
+                    ),
+                    level=ScanEvent.Level.INFO,
+                    message=(
+                        "DefectDojo export skipped: passive / empty findings "
+                        "remain in SurfaceX only."
+                    ),
+                )
+                return
+            result = export_scan_to_defectdojo(prepared)
         except DefectDojoNotConfigured as exc:
             _finish_export(
                 run_id,
@@ -122,15 +146,16 @@ def perform_automatic_defectdojo_export(run_id: int) -> None:
             level=ScanEvent.Level.INFO,
             message=f"DefectDojo export finished: {detail}",
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("Automatic DefectDojo export crashed for scan %s", run_id)
+        reason = f"{type(exc).__name__}: {exc}".strip()[:300] or "unknown error"
         try:
             _finish_export(
                 run_id,
                 status=ScanRun.DefectDojoExportStatus.FAILED,
-                detail="Unexpected DefectDojo export error.",
+                detail=f"Unexpected DefectDojo export error: {reason}"[:500],
                 level=ScanEvent.Level.ERROR,
-                message="DefectDojo export failed unexpectedly.",
+                message=f"DefectDojo export failed unexpectedly: {reason}",
             )
         except Exception:
             logger.exception(

@@ -25,8 +25,35 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 | GET/POST | `/api/groups/` | odczyt: wszystkie; zapis: admin/operator | grupy |
 | GET/PATCH/DELETE | `/api/groups/{id}/` | j.w. | szczegóły grupy |
 | POST | `/api/groups/{id}/targets/` | admin/operator | dodaj/usuń cele |
-| POST | `/api/groups/{id}/scan/` | admin/operator | skan całej grupy |
+| POST | `/api/groups/{id}/scan/` | admin/operator | skan całej grupy (`modules`, `client_request_id`, opcjonalnie `window_seconds`) |
 | PUT/DELETE | `/api/groups/{id}/schedule/` | admin/operator | harmonogram |
+
+## Pasywne rozpoznanie
+
+| Metoda | Ścieżka | Role | Opis |
+|---|---|---|---|
+| POST | `/api/passive/discover/` | admin/operator | `{"query":"example.com"}` albo IP → poddomeny (crt.sh) + skrót RDAP; cache Redis 15 min; bez auto-skanu |
+
+```json
+{
+  "query": "example.com",
+  "type": "domain",
+  "subdomains": ["api.example.com", "example.com", "www.example.com"],
+  "rdap": {
+    "handle": "D1234567-EXAMPLE",
+    "name": "Example Org",
+    "country": "US",
+    "network": "",
+    "asns": [],
+    "nameservers": ["ns1.example.com"]
+  },
+  "sources": { "crt_sh": "ok", "rdap": "ok" },
+  "warnings": [],
+  "cached": false
+}
+```
+
+Pola: `query` (znormalizowane), `type` (`domain`/`ip`), `subdomains` (puste dla IP), `rdap` (lub `null`), `sources` (`ok` / `error` / `not_applicable`), `warnings`, `cached`. Częściowa awaria źródła nie blokuje drugiej. Endpoint niczego nie zapisuje (UI go nie eksponuje — główna ścieżka to moduł skanu `passive-discovery`). Szczegóły: `docs/passive-discovery.md`.
 
 ## Skany i wyniki
 
@@ -35,12 +62,14 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 | GET/POST | `/api/scans/` | odczyt: wszystkie; start: admin/operator | lista / start (`target_ids`, `modules`, opcjonalnie `window_seconds`) |
 | GET | `/api/scans/{id}/` | właściciel | szczegóły, eventy, batche, ETA |
 | POST | `/api/scans/{id}/cancel/` | admin/operator | anulowanie |
-| POST | `/api/scans/{id}/resume/` | admin/operator | wznowienie batchy `PAUSED` |
+| POST | `/api/scans/{id}/resume/` | admin/operator | wznowienie batchy `PAUSED`; opcjonalne `window_seconds` |
 | GET | `/api/scans/{id}/observations/` | właściciel | obserwacje (+ filtry) |
 | GET | `/api/scans/{id}/diff/` | właściciel | porównanie z poprzednim completed run w tym samym scope |
 | GET | `/api/scans/{id}/export/?format=csv\|json` | admin/operator/analyst | eksport |
 | POST | `/api/scans/{id}/export/defectdojo/` | admin/operator/analyst | ręczny eksport do DefectDojo |
 | POST | `/api/observations/import/` | admin/operator/analyst | import wyników CSV/JSON |
+
+Deadline skanu jest obowiązkowy nawet wtedy, gdy klient nie wysyła `window_seconds`: API stosuje wtedy globalne 3600 s. Role inne niż `admin` mogą podać maksymalnie 3600 s; `admin` maksymalnie 86 400 s. UI oferuje administratorowi 30 min / 1 h / 2 h, a pozostałym rolom stosuje stałe 1 h bez selektora.
 
 ## Allowlista, overrides, audit
 
@@ -72,4 +101,4 @@ Wymagany nagłówek `X-Worker-Token`. Bez sesji użytkownika.
 |---|---|---|
 | GET | `/api/health/` | liveness API |
 
-Szczegóły schematów plików: `docs/import-export.md`. Macierz ról: `docs/rbac.md`.
+Szczegóły schematów plików: `docs/import-export.md`. Pasywne rozpoznanie: `docs/passive-discovery.md`. Macierz ról: `docs/rbac.md`.

@@ -75,12 +75,18 @@ def _finding(
 
 
 def build_generic_findings_report(run: ScanRun) -> dict[str, Any]:
+    """Build DefectDojo generic findings from active discovery results.
+
+    Passive crt.sh/RDAP payloads (`result["passive"]`) are intentionally omitted —
+    they stay as SurfaceX observations / Findings only.
+    """
     findings_by_id: dict[str, dict[str, Any]] = {}
 
     for batch in run.batches.all():
         if batch.status != ScanBatch.Status.COMPLETED:
             continue
         result = batch.result if isinstance(batch.result, dict) else {}
+        # Do not read result["passive"] — SurfaceX-only report.
         hosts = result.get("hosts", [])
         if not isinstance(hosts, list):
             hosts = []
