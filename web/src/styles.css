@@ -79,6 +79,13 @@ body,
   overflow: hidden;
 }
 
+#root {
+  /* Chrome can still programmatically scroll an overflow:hidden document.
+     Pin the app viewport so outer scroll never shifts/clips the shell. */
+  position: fixed;
+  inset: 0;
+}
+
 body {
   font-family: var(--font);
   font-size: 14px;
