@@ -184,6 +184,13 @@ def query_rdap(kind: str, query: str) -> dict[str, Any]:
     return summarize_rdap(payload, kind)
 
 
+def _is_public_ip(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value).is_global
+    except ValueError:
+        return False
+
+
 def discover_passive(raw_query: object) -> dict[str, Any]:
     kind, query = normalize_passive_query(raw_query)
     cache_key = f"passive-discovery:v1:{kind}:{query}"
@@ -196,12 +203,20 @@ def discover_passive(raw_query: object) -> dict[str, Any]:
     warnings: list[str] = []
     sources = {"crt_sh": "not_applicable", "rdap": "pending"}
 
-    jobs = {"rdap": (query_rdap, (kind, query))}
+    jobs: dict[str, Any] = {}
+    # RDAP on a private / reserved / loopback IP only returns the IANA block
+    # ("PRIVATE-ADDRESS-BBLK-RFC1918..."), which is noise — skip it.
+    if kind == "ip" and not _is_public_ip(query):
+        sources["rdap"] = "not_applicable"
+        warnings.append("rdap: private or reserved address, skipped")
+    else:
+        jobs["rdap"] = (query_rdap, (kind, query))
     if kind == "domain":
         jobs["crt_sh"] = (query_crt_sh, (query,))
         sources["crt_sh"] = "pending"
 
-    with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
+    if jobs:
+      with ThreadPoolExecutor(max_workers=len(jobs)) as executor:
         futures = {
             name: executor.submit(function, *args)
             for name, (function, args) in jobs.items()
