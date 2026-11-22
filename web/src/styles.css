@@ -1052,12 +1052,19 @@ html.theme-high-contrast .module-tile__drawer {
 }
 
 .layout__main {
+  /* Block scrollport — Chrome clips the bottom when this is a column flex + overflow. */
+  display: block;
   min-width: 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  -webkit-overflow-scrolling: touch;
+}
+
+.layout__main::after {
+  content: "";
+  display: block;
+  height: 2.5rem;
 }
 
 .sidenav {
@@ -1100,11 +1107,10 @@ html.theme-high-contrast .module-tile__drawer {
 }
 
 .content {
-  flex: 1 0 auto;
+  display: block;
   padding: var(--space-xl);
-  padding-bottom: calc(var(--space-xl) + 2.5rem);
+  padding-bottom: calc(var(--space-xl) + 3rem);
   min-width: 0;
-  min-height: 0;
   max-width: 100%;
 }
 
@@ -1866,21 +1872,18 @@ table.findings-table .findings-table__details {
 
 #scan-findings-report {
   overflow: visible;
-  margin-bottom: calc(var(--space-l) + 1rem);
+  margin-bottom: calc(var(--space-l) + 1.5rem);
 }
 
 #scan-findings-report .panel__body {
   min-width: 0;
-  /* Keep overflow on .table-wrap only — overflow-x here would force overflow-y
-     and clip the bottom of Findings (override form / last rows). */
   overflow: visible;
 }
 
 #scan-findings-report .table-wrap {
   max-width: 100%;
   overflow-x: auto;
-  overflow-y: visible;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
 }
 
 table.scans-table {
