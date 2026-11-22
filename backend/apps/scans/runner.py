@@ -124,6 +124,30 @@ def _module_map(modules: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {module["id"]: module["filters"] for module in modules}
 
 
+def _ceiling(name: str, default: int) -> int:
+    from django.conf import settings
+
+    try:
+        return max(1, int(getattr(settings, name, default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _aggressive_timing_allowed() -> bool:
+    from django.conf import settings
+
+    return bool(getattr(settings, "SCAN_ALLOW_AGGRESSIVE_TIMING", False))
+
+
+def _clamp_nmap(max_rate: int, timing: str, intensity: int) -> tuple[int, str, int]:
+    """Hard safety ceilings so a user can never run an aggressive scan."""
+    max_rate = min(max(1, int(max_rate)), _ceiling("SCAN_MAX_RATE_CEILING", 1000))
+    if timing == "T4" and not _aggressive_timing_allowed():
+        timing = "T3"
+    intensity = min(max(0, int(intensity)), _ceiling("SCAN_VERSION_INTENSITY_CEILING", 7))
+    return max_rate, timing, intensity
+
+
 def _port_profile(name: str, custom: str | None = None) -> str | None:
     if name == "discovery-fast":
         return FAST_PORTS
@@ -189,9 +213,10 @@ def _nmap_arguments(
             arguments.extend(["--top-ports", "1000"])
         else:
             arguments.extend(["-p", ports])
+        intensity = selected.get("service-detect", {}).get("intensity", 5) if service_enabled else 5
+        max_rate, timing, intensity = _clamp_nmap(max_rate, timing, intensity)
         arguments.extend([f"-{timing}", "--max-rate", str(max_rate)])
         if service_enabled:
-            intensity = selected.get("service-detect", {}).get("intensity", 5)
             arguments.extend(["-sV", "--version-intensity", str(intensity)])
 
     arguments.extend(["--max-retries", "1", "-oX", "-", address])
@@ -318,7 +343,8 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
     http_filters = selected.get("http-fingerprint", {})
     full = selected.get("full-pipeline")
     timeout = http_filters.get("timeoutSec", 5)
-    rate_limit = http_filters.get("rateLimit", 50)
+    rate_limit = min(int(http_filters.get("rateLimit", 50)), _ceiling("SCAN_HTTPX_RATE_CEILING", 150))
+    threads = min(50, _ceiling("SCAN_HTTPX_THREADS_CEILING", 50), max(1, rate_limit))
     arguments = [
         "httpx",
         "-silent",
@@ -333,7 +359,7 @@ def _httpx_arguments(selected: dict[str, dict[str, Any]]) -> list[str]:
         "-rate-limit",
         str(rate_limit),
         "-threads",
-        "50",
+        str(threads),
         # Response headers (incl. Set-Cookie) for interesting-header/cookie signals
         # and header/cookie signature rules. Redirects are still not followed.
         "-include-response-header",

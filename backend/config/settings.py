@@ -220,6 +220,15 @@ SCAN_DEFAULT_WINDOW_SECONDS = max(
     int(os.environ.get("SCAN_DEFAULT_WINDOW_SECONDS", "3600") or "3600"),
 )
 
+# Hard safety ceilings for scan intensity (apps/scans/runner.py). A user can
+# never exceed these, whatever they enter in the UI. Defaults are conservative;
+# raise them only for a lab that tolerates heavier scanning.
+SCAN_MAX_RATE_CEILING = int(os.environ.get("SCAN_MAX_RATE_CEILING", "1000"))        # nmap packets/s
+SCAN_VERSION_INTENSITY_CEILING = int(os.environ.get("SCAN_VERSION_INTENSITY_CEILING", "7"))  # nmap -sV (0-9)
+SCAN_HTTPX_RATE_CEILING = int(os.environ.get("SCAN_HTTPX_RATE_CEILING", "150"))     # httpx requests/s
+SCAN_HTTPX_THREADS_CEILING = int(os.environ.get("SCAN_HTTPX_THREADS_CEILING", "50"))
+SCAN_ALLOW_AGGRESSIVE_TIMING = os.environ.get("SCAN_ALLOW_AGGRESSIVE_TIMING", "0") == "1"  # allow nmap -T4
+
 APP_NAME = os.environ.get("APP_NAME", "SurfaceX")
 APP_VERSION = os.environ.get("APP_VERSION", "0.1.0")
 WEB_VERSION = os.environ.get("WEB_VERSION", APP_VERSION)
