@@ -23,10 +23,12 @@ Odczyt grup: każdy zalogowany użytkownik (w zakresie własnych grup; `admin` w
 | `GET`, `POST` | `/api/groups/` | lista (z `target_count` i `schedule`) / utworzenie `{name, description}` |
 | `GET`, `PATCH`, `DELETE` | `/api/groups/<id>/` | szczegóły / zmiana nazwy lub opisu / usunięcie |
 | `POST` | `/api/groups/<id>/targets/` | `{action: "add" | "remove", target_ids: []}`; odpowiedź zawiera `changed_count` |
-| `POST` | `/api/groups/<id>/scan/` | `{modules, client_request_id}` — skan wszystkich hostów grupy (limit 10 000) |
+| `POST` | `/api/groups/<id>/scan/` | `{modules, client_request_id, window_seconds?}` — skan wszystkich hostów grupy (limit 10 000) |
 | `PUT`, `DELETE` | `/api/groups/<id>/schedule/` | zapis / usunięcie harmonogramu |
 
 Każdy cel w odpowiedziach ma `groups: [{id, name}]`, a każdy skan `group_id`, `group_name` i `scheduled`.
+
+`window_seconds` jest opcjonalne, ale sam deadline jest obowiązkowy. Brak pola oznacza globalną wartość domyślną (1 h). Użytkownik inny niż `admin` nie może żądać wartości większej niż 3600 s; UI nie pokazuje mu selektora i zawsze wysyła 1 h. Administrator może wybrać 30 min, 1 h lub 2 h.
 
 ## Harmonogram
 

@@ -12,6 +12,10 @@ Pierwsza wersja skanuje wyłącznie targety zapisane przez użytkownika z rolą 
 
 Hosty można łączyć w grupy (host może należeć do wielu grup): ręcznie na stronie **Targets** (filtr, zaznaczenie, „Add selected to group”), przy imporcie TXT/CSV/JSON albo na stronie **Groups**. Grupę można przeskanować od razu albo zaplanować: co N godzin, codziennie lub co tydzień o wybranej godzinie UTC. Wyniki zaplanowanych skanów trafiają automatycznie do DefectDojo jak każdy zakończony skan. Pojedynczy host do skanu na pulpicie wybiera się wyszukiwarką, która przeszukuje zapisane cele (adres i komentarz) po stronie API. Szczegóły: [Grupy i harmonogramy](docs/groups-schedules.md).
 
+Dashboard pokazuje konsolę aktywności uruchomionego z niego skanu bez przełączania do zakładki **Scans**, podsumowanie lifecycle oraz wykres zmian w wybranym zakresie czasu. Zakładka **Scans** pozostaje pełną historią przebiegów z logiem i Findings / Compare. Słupki wykresu są informacyjne i nie zmieniają widoku.
+
+Każdy skan ma obowiązkowe okno wykonania. Dla użytkowników innych niż `admin` jest ono stałe i wynosi 1 godzinę. Tylko `admin` widzi kontrolkę i może wybrać 30 min, 1 h albo 2 h. Ograniczenie jest egzekwowane również w API.
+
 ## Szybki start
 
 Wymagania: Git oraz Docker Engine/Desktop z Compose (Linux, macOS albo Windows + WSL2).

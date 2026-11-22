@@ -17,13 +17,14 @@ Lab referencyjny: trzy LXC ze stroną statyczną — szczegóły w [`demo/README
 
 ## Przebieg 1
 
-1. Uruchom skan grupy `lab-lxc` (moduł full-pipeline). Opcjonalnie ustaw krótkie okno, żeby pokazać pause/kill.
-2. Pokaż postęp, ETA i tryb nmap (`syn` / `connect`) w konsoli skanu.
+1. Uruchom skan grupy `lab-lxc` (moduł full-pipeline). Jako `admin` opcjonalnie ustaw 30-minutowe okno, żeby pokazać pause/kill; pozostałe role mają stałe 1 h.
+2. Pokaż postęp, ETA i tryb nmap (`syn` / `connect`) w konsoli na Dashboardzie. Start z Dashboardu nie przełącza do zakładki Scans.
 3. Po zakończeniu wskaż:
    - hosty `NEW`;
    - fingerprint / confidence (np. nginx / lab headers);
    - evidence HTTP;
    - **Ciekawość** na dashboardzie (hosty, porty, login paths).
+   - **Changes over time** z wyborem 24 h / 7 dni / 30 dni / całego okresu; wykres jest informacyjny.
 4. Jako `analyst` dodaj notatkę/override do hosta A (`10.99.0.70`).
 
 ## Zmiana środowiska

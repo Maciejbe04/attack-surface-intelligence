@@ -34,9 +34,23 @@ Sieci: `edge`, `backend` (internal), `scanner` — szczegóły w `docs/architect
 docker compose ps
 docker compose logs -f api worker scheduler
 docker compose exec api python manage.py check
+./scripts/smoke-test.sh
 ```
 
 Worker bez tokenu lub API z read-only rootfs zgłosi błędy w logach claim/complete.
+
+Minimalna weryfikacja po przebudowie:
+
+```bash
+docker compose config --quiet
+docker compose up --build -d
+docker compose ps
+./scripts/smoke-test.sh
+docker compose exec -T api python manage.py test \
+  apps.scans.tests.test_groups apps.scans.tests.test_api
+```
+
+Smoke test sprawdza health, bazę, logowanie oraz listy targets/scans/groups. Wszystkie usługi z healthcheckiem powinny mieć status `healthy`.
 
 ## Skalowanie workerów
 

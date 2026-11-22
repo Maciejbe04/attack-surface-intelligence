@@ -25,7 +25,7 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 | GET/POST | `/api/groups/` | odczyt: wszystkie; zapis: admin/operator | grupy |
 | GET/PATCH/DELETE | `/api/groups/{id}/` | j.w. | szczegóły grupy |
 | POST | `/api/groups/{id}/targets/` | admin/operator | dodaj/usuń cele |
-| POST | `/api/groups/{id}/scan/` | admin/operator | skan całej grupy |
+| POST | `/api/groups/{id}/scan/` | admin/operator | skan całej grupy (`modules`, `client_request_id`, opcjonalnie `window_seconds`) |
 | PUT/DELETE | `/api/groups/{id}/schedule/` | admin/operator | harmonogram |
 
 ## Skany i wyniki
@@ -35,12 +35,14 @@ Uwierzytelnianie sesyjne (cookie + opcjonalny nagłówek `X-Sessionid`). CSRF: w
 | GET/POST | `/api/scans/` | odczyt: wszystkie; start: admin/operator | lista / start (`target_ids`, `modules`, opcjonalnie `window_seconds`) |
 | GET | `/api/scans/{id}/` | właściciel | szczegóły, eventy, batche, ETA |
 | POST | `/api/scans/{id}/cancel/` | admin/operator | anulowanie |
-| POST | `/api/scans/{id}/resume/` | admin/operator | wznowienie batchy `PAUSED` |
+| POST | `/api/scans/{id}/resume/` | admin/operator | wznowienie batchy `PAUSED`; opcjonalne `window_seconds` |
 | GET | `/api/scans/{id}/observations/` | właściciel | obserwacje (+ filtry) |
 | GET | `/api/scans/{id}/diff/` | właściciel | porównanie z poprzednim completed run w tym samym scope |
 | GET | `/api/scans/{id}/export/?format=csv\|json` | admin/operator/analyst | eksport |
 | POST | `/api/scans/{id}/export/defectdojo/` | admin/operator/analyst | ręczny eksport do DefectDojo |
 | POST | `/api/observations/import/` | admin/operator/analyst | import wyników CSV/JSON |
+
+Deadline skanu jest obowiązkowy nawet wtedy, gdy klient nie wysyła `window_seconds`: API stosuje wtedy globalne 3600 s. Role inne niż `admin` mogą podać maksymalnie 3600 s; `admin` maksymalnie 86 400 s. UI oferuje administratorowi 30 min / 1 h / 2 h, a pozostałym rolom stosuje stałe 1 h bez selektora.
 
 ## Allowlista, overrides, audit
 

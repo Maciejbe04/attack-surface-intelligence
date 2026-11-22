@@ -23,6 +23,7 @@ Uprawnienia są egzekwowane w API. UI jedynie ukrywa niedozwolone akcje.
 | CRUD celów | tak | tak | nie | nie |
 | CRUD profili i harmonogramów | tak | tak | nie | nie |
 | Start / stop / wznowienie skanu | tak | tak | nie | nie |
+| Konfiguracja okna skanu | tak | nie (stałe 1 h) | nie | nie |
 | CRUD sygnatur | tak | tak | nie | nie |
 | Podgląd dashboardu i historii | tak | tak | tak | tak |
 | Eksport CSV/JSON | tak | tak | tak | tak |

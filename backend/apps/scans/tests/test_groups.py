@@ -187,6 +187,35 @@ class GroupScanTests(GroupTestCase):
         listed = self.client.get(reverse("scan-list")).json()[0]
         self.assertEqual(listed["group_name"], "lab")
 
+    def test_operator_group_scan_uses_request_context_for_window_limit(self) -> None:
+        group = self.group("lab", self.target("192.0.2.1"))
+        url = reverse("group-scan", args=[group.id])
+
+        with patch(PUBLISH), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                url,
+                {
+                    "modules": MODULES,
+                    "client_request_id": "group-window-1h",
+                    "window_seconds": 3600,
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["window_seconds"], 3600)
+
+        response = self.client.post(
+            url,
+            {
+                "modules": MODULES,
+                "client_request_id": "group-window-2h",
+                "window_seconds": 7200,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("window_seconds", response.json())
+
     def test_empty_group_cannot_be_scanned(self) -> None:
         group = self.group("empty")
         response = self.client.post(
