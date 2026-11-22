@@ -1968,6 +1968,21 @@ export function App() {
                     </div>
                   </div>
                 </div>
+                <div className="panel__footer dashboard-probe-actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => void runProbe()}
+                    disabled={
+                      !canMutate ||
+                      scanPending !== null ||
+                      (probeMode === "group" ? !probeGroupId : !probeTarget)
+                    }
+                    aria-busy={scanPending === "dashboard"}
+                  >
+                    {scanPending === "dashboard" ? t("Queueing…") : t("Run selected")}
+                  </button>
+                </div>
               </section>
 
               {consoleScanId !== null && (
@@ -1991,13 +2006,6 @@ export function App() {
                 onToggleEnabled={toggleModuleEnabled}
                 onToggleExpanded={toggleModuleExpanded}
                 onFilterChange={updateModuleFilter}
-                onRun={() => void runProbe()}
-                canRun={
-                  canMutate &&
-                  scanPending === null &&
-                  (probeMode === "group" ? Boolean(probeGroupId) : Boolean(probeTarget))
-                }
-                runPending={scanPending === "dashboard"}
                 t={t}
               />
 

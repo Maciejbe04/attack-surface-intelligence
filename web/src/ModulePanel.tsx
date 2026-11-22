@@ -13,9 +13,6 @@ type Props = {
   onToggleEnabled: (id: string) => void;
   onToggleExpanded: (id: string) => void;
   onFilterChange: (id: string, key: string, value: string | number | boolean) => void;
-  onRun: () => void;
-  canRun: boolean;
-  runPending: boolean;
   t: Translate;
 };
 
@@ -244,9 +241,6 @@ export function ModulePanel({
   onToggleEnabled,
   onToggleExpanded,
   onFilterChange,
-  onRun,
-  canRun,
-  runPending,
   t,
 }: Props) {
   const enabledCount = Object.values(state).filter((s) => s.enabled).length;
@@ -255,17 +249,6 @@ export function ModulePanel({
     <section className="panel">
       <div className="panel__header">
         <h2>{t("Discovery modules")}</h2>
-        <div className="actions">
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={onRun}
-            disabled={!canRun || runPending}
-            aria-busy={runPending}
-          >
-            {runPending ? t("Queueing…") : t("Run selected")}
-          </button>
-        </div>
       </div>
       <div className="module-groups">
         {CATEGORY_ORDER.map((category) => {

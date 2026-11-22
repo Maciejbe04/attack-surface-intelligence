@@ -1253,6 +1253,10 @@ html.theme-high-contrast .module-tile__drawer {
   background: var(--aws-table-header);
 }
 
+.dashboard-probe-actions {
+  justify-content: flex-end;
+}
+
 /* Forms */
 
 .form-row {
